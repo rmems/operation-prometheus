@@ -42,8 +42,10 @@ env/
 # Keep the .gitkeep files tracked, ignore actual data
 datasets/raw/*
 !datasets/raw/.gitkeep
-datasets/jsonl/*.jsonl
-!datasets/jsonl/.gitkeep
+
+# Note: datasets/jsonl/ is for cleaned small example JSONL and cards.
+# Small curated JSONL files are allowed (see datasets/README.md).
+# We do not broadly ignore *.jsonl here so that valid small examples can be committed normally.
 
 # Model weights and large artifacts (never commit)
 models/
