@@ -1,0 +1,78 @@
+# Operation Prometheus - root gitignore
+# Per AGENTS.md: do not commit secrets, raw datasets, model weights, private files.
+
+# Secrets, credentials, tokens
+.env
+.env.*
+*.token
+secrets/
+credentials/
+
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+build/
+develop-eggs/
+dist/
+downloads/
+eggs/
+.eggs/
+lib/
+lib64/
+parts/
+sdist/
+var/
+wheels/
+*.egg-info/
+.installed.cfg
+*.egg
+.venv/
+venv/
+ENV/
+env/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.pytype/
+
+# Datasets (large/raw outputs per issue #1 and AGENTS.md)
+# Keep the .gitkeep files tracked, ignore actual data
+datasets/raw/*
+!datasets/raw/.gitkeep
+datasets/jsonl/*.jsonl
+!datasets/jsonl/.gitkeep
+
+# Model weights and large artifacts (never commit)
+models/
+*.pt
+*.pth
+*.bin
+*.safetensors
+*.onnx
+*.gguf
+*.h5
+*.ckpt
+
+# IDE / editor
+.idea/
+.vscode/
+*.swp
+*.swo
+*~
+.project
+.pydevproject
+
+# OS generated files
+.DS_Store
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
+ehthumbs.db
+Thumbs.db
+
+# Beads (local working state if not using git-tracked db)
+.beads/

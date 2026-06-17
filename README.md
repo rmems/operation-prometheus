@@ -46,10 +46,14 @@ Initial repositories include:
 * magere-brug
 * Future Limen-Neural projects
 
-## Long-Term Vision
+## Repository Layout
 
-Operation Prometheus aims to become a personal engineering memory system capable of teaching future local models how software evolves through review, experimentation, validation, and iteration.
+- [docs/](docs/) — documentation and guides
+- [schemas/](schemas/) — data and trajectory schemas (Pydantic models + JSON Schema)
+- [scripts/](scripts/) — extraction, transformation, and validation scripts
+- [datasets/](datasets/) — local dataset outputs (raw data and large JSONL files are gitignored; commit only small examples and cards)
+- [evals/](evals/) — evaluation assets and prompts
 
-The goal is not merely code generation.
+See [datasets/README.md](datasets/README.md) for rules on what may be committed.
 
-The goal is engineering understanding.
+
