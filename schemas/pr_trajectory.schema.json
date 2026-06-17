@@ -52,7 +52,9 @@
           "comment": { "type": "string" },
           "suggestion": { "type": "string" }
         },
-        "required": ["author", "comment", "suggestion"],
+          "author": { "type": "string", "minLength": 1 },
+          "comment": { "type": "string", "minLength": 1 },
+          "suggestion": { "type": "string", "minLength": 1 }
         "additionalProperties": false
       },
       "description": "Key review comments or suggestions that drove changes."
