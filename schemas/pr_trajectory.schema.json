@@ -18,6 +18,7 @@
     },
     "pr_number": {
       "type": "integer",
+      "minimum": 1,
       "description": "Pull request number within the repo."
     },
     "source_urls": {
@@ -52,13 +53,34 @@
           "comment": { "type": "string", "minLength": 1 },
           "suggestion": { "type": "string", "minLength": 1 }
         },
-        "required": ["author", "comment", "suggestion"],
+        "required": ["comment"],
+        "additionalProperties": false
+      },
+      "description": "Key review comments or suggestions that drove changes."
+    },
+        "required": ["comment"],
+        "additionalProperties": false
+      },
+      "description": "Key review comments or suggestions that drove changes."
+    },
+        "required": ["comment"],
+        "additionalProperties": false
+      },
+      "description": "Key review comments or suggestions that drove changes."
+    },
+        "required": ["comment"],
+        "additionalProperties": false
+      },
+      "description": "Key review comments or suggestions that drove changes."
+    },
+        "required": ["comment"],
         "additionalProperties": false
       },
       "description": "Key review comments or suggestions that drove changes."
     },
     "before_context": {
       "type": "string",
+      "minLength": 1,
       "description": "Relevant code/state before the patch (snippets or file references)."
     },
     "patch": {
@@ -68,6 +90,7 @@
     },
     "validation": {
       "type": "array",
+      "minItems": 1,
       "items": {
         "type": "object",
         "properties": {
@@ -75,6 +98,26 @@
           "result": { "type": "string", "enum": ["pass", "fail", "flaky"] },
           "detail": { "type": "string", "minLength": 1 }
         },
+        "required": ["type", "result", "detail"],
+        "additionalProperties": false
+      },
+      "description": "Validation events (CI runs, test results, manual verification) after the change."
+    },
+        "required": ["type", "result", "detail"],
+        "additionalProperties": false
+      },
+      "description": "Validation events (CI runs, test results, manual verification) after the change."
+    },
+        "required": ["type", "result", "detail"],
+        "additionalProperties": false
+      },
+      "description": "Validation events (CI runs, test results, manual verification) after the change."
+    },
+        "required": ["type", "result", "detail"],
+        "additionalProperties": false
+      },
+      "description": "Validation events (CI runs, test results, manual verification) after the change."
+    },
         "required": ["type", "result", "detail"],
         "additionalProperties": false
       },
