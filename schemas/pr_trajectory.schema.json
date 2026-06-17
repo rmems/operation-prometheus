@@ -4,7 +4,20 @@
   "title": "PR Trajectory v0",
   "description": "Initial JSON schema for a software-engineering trajectory extracted from a public GitHub PR. This is schema v0 (not final). See GitHub issue #2.",
   "type": "object",
-  "required": ["id", "repo", "pr_number", "source_urls", "language", "domain", "task_type", "before_context", "patch", "validation", "outcome", "training_use"],
+  "required": [
+    "id",
+    "repo",
+    "pr_number",
+    "source_urls",
+    "language",
+    "domain",
+    "task_type",
+    "before_context",
+    "patch",
+    "validation",
+    "outcome",
+    "training_use"
+  ],
   "properties": {
     "id": {
       "type": "string",
@@ -24,39 +37,78 @@
     "source_urls": {
       "type": "array",
       "minItems": 1,
-      "items": { "type": "string", "format": "uri" },
-      "description": "Links to the PR, issue, and/or specific review threads that contributed signal."
+      "items": {
+        "type": "string",
+        "format": "uri",
+        "pattern": "^https://github\\.com/[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+/(pull|issues)/[0-9]+(?:#.*)?$"
+      },
+      "description": "Public GitHub PR/issue URLs that contributed provenance or review signal."
     },
     "language": {
       "type": "string",
-      "description": "Primary programming language of the change (e.g. Rust, Python, Julia)."
+      "description": "Primary programming language of the change (e.g. Rust, Python, Julia).",
+      "minLength": 1
     },
     "domain": {
       "type": "string",
-      "description": "Application domain (e.g. ML-infra, systems, data-pipeline, web)."
+      "description": "Application domain (e.g. ML-infra, systems, data-pipeline, web).",
+      "minLength": 1
     },
     "task_type": {
       "type": "string",
-      "enum": ["bugfix", "feature", "refactor", "docs", "test", "perf", "security", "chore", "other"],
+      "enum": [
+        "bugfix",
+        "feature",
+        "refactor",
+        "docs",
+        "test",
+        "perf",
+        "security",
+        "chore",
+        "other"
+      ],
       "description": "High-level classification of the engineering task."
     },
     "issue_context": {
       "type": "string",
-      "description": "Summary of the originating issue or motivation (public text only)."
+      "description": "Summary of the originating issue or motivation (public text only).",
+      "minLength": 1
     },
     "review_signals": {
       "type": "array",
       "items": {
         "type": "object",
         "properties": {
-          "author": { "type": "string", "minLength": 1 },
-          "comment": { "type": "string", "minLength": 1 },
-          "suggestion": { "type": "string", "minLength": 1 }
+          "author": {
+            "type": "string",
+            "minLength": 1
+          },
+          "comment": {
+            "type": "string",
+            "minLength": 1
+          },
+          "suggestion": {
+            "type": "string",
+            "minLength": 1
+          }
         },
-        "required": ["comment"],
-        "additionalProperties": false
+        "required": [],
+        "additionalProperties": false,
+        "anyOf": [
+          {
+            "required": [
+              "comment"
+            ]
+          },
+          {
+            "required": [
+              "suggestion"
+            ]
+          }
+        ]
       },
-      "description": "Key review comments or suggestions that drove changes."
+      "description": "Key review comments or suggestions that drove changes. Each item must include a non-empty comment or suggestion.",
+      "minItems": 1
     },
     "before_context": {
       "type": "string",
@@ -74,23 +126,57 @@
       "items": {
         "type": "object",
         "properties": {
-          "type": { "type": "string", "enum": ["ci", "test", "manual", "review", "other"] },
-          "result": { "type": "string", "enum": ["pass", "fail", "flaky"] },
-          "detail": { "type": "string", "minLength": 1 }
+          "type": {
+            "type": "string",
+            "enum": [
+              "ci",
+              "test",
+              "manual",
+              "review",
+              "other"
+            ]
+          },
+          "result": {
+            "type": "string",
+            "enum": [
+              "pass",
+              "fail",
+              "flaky"
+            ]
+          },
+          "detail": {
+            "type": "string",
+            "minLength": 1
+          }
         },
-        "required": ["type", "result"],
+        "required": [
+          "type",
+          "result"
+        ],
         "additionalProperties": false
       },
       "description": "Validation events (CI runs, test results, manual verification) after the change."
     },
     "outcome": {
       "type": "string",
-      "enum": ["merged", "closed", "superseded", "abandoned"],
+      "enum": [
+        "merged",
+        "closed",
+        "superseded",
+        "abandoned"
+      ],
       "description": "Final state of the PR."
     },
     "training_use": {
       "type": "string",
-      "enum": ["repair", "autocomplete", "review-to-patch", "bug-prediction", "validation", "other"],
+      "enum": [
+        "repair",
+        "autocomplete",
+        "review-to-patch",
+        "bug-prediction",
+        "validation",
+        "other"
+      ],
       "description": "Intended primary training signal this trajectory provides."
     },
     "quality_score": {
@@ -100,5 +186,17 @@
       "description": "Optional human or heuristic quality score for filtering (0-1)."
     }
   },
-  "additionalProperties": false
+  "additionalProperties": false,
+  "anyOf": [
+    {
+      "required": [
+        "issue_context"
+      ]
+    },
+    {
+      "required": [
+        "review_signals"
+      ]
+    }
+  ]
 }
