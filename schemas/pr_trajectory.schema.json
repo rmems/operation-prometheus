@@ -48,13 +48,11 @@
       "items": {
         "type": "object",
         "properties": {
-          "author": { "type": "string" },
-          "comment": { "type": "string" },
-          "suggestion": { "type": "string" }
-        },
           "author": { "type": "string", "minLength": 1 },
           "comment": { "type": "string", "minLength": 1 },
           "suggestion": { "type": "string", "minLength": 1 }
+        },
+        "required": ["author", "comment", "suggestion"],
         "additionalProperties": false
       },
       "description": "Key review comments or suggestions that drove changes."
@@ -75,9 +73,9 @@
         "properties": {
           "type": { "type": "string", "enum": ["ci", "test", "manual", "review", "other"] },
           "result": { "type": "string", "enum": ["pass", "fail", "flaky"] },
-          "detail": { "type": "string" }
-        },
           "detail": { "type": "string", "minLength": 1 }
+        },
+        "required": ["type", "result", "detail"],
         "additionalProperties": false
       },
       "description": "Validation events (CI runs, test results, manual verification) after the change."
