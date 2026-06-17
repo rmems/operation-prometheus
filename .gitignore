@@ -76,3 +76,8 @@ Thumbs.db
 
 # Beads (local working state if not using git-tracked db)
 .beads/
+
+# Beads local state (this project uses the GLOBAL personal DB at ~/.beads with raulmc- prefix)
+# Only the documentation README is tracked here.
+.beads/*
+!.beads/README.md

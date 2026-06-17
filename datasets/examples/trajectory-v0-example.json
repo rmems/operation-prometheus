@@ -1,0 +1,29 @@
+{
+  "id": "corinth-canal-42",
+  "repo": "rmems/corinth-canal",
+  "pr_number": 42,
+  "source_urls": [
+    "https://github.com/rmems/corinth-canal/pull/42",
+    "https://github.com/rmems/corinth-canal/issues/41"
+  ],
+  "language": "Rust",
+  "domain": "infra",
+  "task_type": "bugfix",
+  "issue_context": "CI was flaky on macOS due to missing env var for a native lib.",
+  "review_signals": [
+    {
+      "author": "reviewer-x",
+      "comment": "We should set the var explicitly in the workflow instead of relying on the runner image.",
+      "suggestion": "add `FOO_NATIVE=1` to the macos job env"
+    }
+  ],
+  "before_context": "The workflow file had no explicit FOO_NATIVE for macos runner.",
+  "patch": "--- a/.github/workflows/ci.yml\n+++ b/.github/workflows/ci.yml\n@@\n-      - run: cargo test\n+      - env:\n+          FOO_NATIVE: \"1\"\n+        run: cargo test",
+  "validation": [
+    { "type": "ci", "result": "pass", "detail": "macos job green after 3 runs" },
+    { "type": "test", "result": "pass", "detail": "all tests passing locally" }
+  ],
+  "outcome": "merged",
+  "training_use": "validation",
+  "quality_score": 0.85
+}

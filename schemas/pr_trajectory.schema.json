@@ -1,0 +1,93 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "https://github.com/rmems/operation-prometheus/schemas/pr_trajectory.schema.json",
+  "title": "PR Trajectory v0",
+  "description": "Initial JSON schema for a software-engineering trajectory extracted from a public GitHub PR. This is schema v0 (not final). See GitHub issue #2.",
+  "type": "object",
+  "required": ["id", "repo", "pr_number", "source_urls", "language", "domain", "task_type", "before_context", "patch", "validation", "outcome", "training_use"],
+  "properties": {
+    "id": {
+      "type": "string",
+      "description": "Stable identifier for this trajectory record (e.g. repo-pr-123 or hash)."
+    },
+    "repo": {
+      "type": "string",
+      "description": "GitHub repository in owner/repo form."
+    },
+    "pr_number": {
+      "type": "integer",
+      "description": "Pull request number within the repo."
+    },
+    "source_urls": {
+      "type": "array",
+      "items": { "type": "string", "format": "uri" },
+      "description": "Links to the PR, issue, and/or specific review threads that contributed signal."
+    },
+    "language": {
+      "type": "string",
+      "description": "Primary programming language of the change (e.g. Rust, Python, Julia)."
+    },
+    "domain": {
+      "type": "string",
+      "description": "Application domain (e.g. ML-infra, systems, data-pipeline, web)."
+    },
+    "task_type": {
+      "type": "string",
+      "enum": ["bugfix", "feature", "refactor", "docs", "test", "perf", "security", "chore", "other"],
+      "description": "High-level classification of the engineering task."
+    },
+    "issue_context": {
+      "type": "string",
+      "description": "Summary of the originating issue or motivation (public text only)."
+    },
+    "review_signals": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "author": { "type": "string" },
+          "comment": { "type": "string" },
+          "suggestion": { "type": "string" }
+        }
+      },
+      "description": "Key review comments or suggestions that drove changes."
+    },
+    "before_context": {
+      "type": "string",
+      "description": "Relevant code/state before the patch (snippets or file references)."
+    },
+    "patch": {
+      "type": "string",
+      "description": "Unified diff or structured patch representing the fix/implementation."
+    },
+    "validation": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "type": { "type": "string", "enum": ["ci", "test", "manual", "review", "other"] },
+          "result": { "type": "string", "enum": ["pass", "fail", "flaky"] },
+          "detail": { "type": "string" }
+        }
+      },
+      "description": "Validation events (CI runs, test results, manual verification) after the change."
+    },
+    "outcome": {
+      "type": "string",
+      "enum": ["merged", "closed", "superseded", "abandoned"],
+      "description": "Final state of the PR."
+    },
+    "training_use": {
+      "type": "string",
+      "enum": ["repair", "autocomplete", "review-to-patch", "bug-prediction", "validation", "other"],
+      "description": "Intended primary training signal this trajectory provides."
+    },
+    "quality_score": {
+      "type": "number",
+      "minimum": 0,
+      "maximum": 1,
+      "description": "Optional human or heuristic quality score for filtering (0-1)."
+    }
+  },
+  "additionalProperties": false
+}
