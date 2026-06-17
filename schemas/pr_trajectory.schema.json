@@ -52,7 +52,7 @@
           "comment": { "type": "string" },
           "suggestion": { "type": "string" }
         },
-        "required": ["comment"],
+        "required": ["author", "comment", "suggestion"],
         "additionalProperties": false
       },
       "description": "Key review comments or suggestions that drove changes."
@@ -75,7 +75,7 @@
           "result": { "type": "string", "enum": ["pass", "fail", "flaky"] },
           "detail": { "type": "string" }
         },
-        "required": ["type", "result"],
+        "required": ["type", "result", "detail"],
         "additionalProperties": false
       },
       "description": "Validation events (CI runs, test results, manual verification) after the change."
