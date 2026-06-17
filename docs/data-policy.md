@@ -48,7 +48,7 @@ Before any generated dataset is published or used for training:
 
 This project focuses on the **engineering trajectory** visible in public code review and version control:
 
-```
+```text
 issue/review signal → before state → patch/fix → validation → outcome
 ```
 

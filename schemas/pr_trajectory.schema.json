@@ -8,10 +8,12 @@
   "properties": {
     "id": {
       "type": "string",
+      "minLength": 1,
       "description": "Stable identifier for this trajectory record (e.g. repo-pr-123 or hash)."
     },
     "repo": {
       "type": "string",
+      "pattern": "^[a-zA-Z0-9._-]+/[a-zA-Z0-9._-]+$",
       "description": "GitHub repository in owner/repo form."
     },
     "pr_number": {
@@ -20,6 +22,7 @@
     },
     "source_urls": {
       "type": "array",
+      "minItems": 1,
       "items": { "type": "string", "format": "uri" },
       "description": "Links to the PR, issue, and/or specific review threads that contributed signal."
     },
@@ -48,7 +51,9 @@
           "author": { "type": "string" },
           "comment": { "type": "string" },
           "suggestion": { "type": "string" }
-        }
+        },
+        "required": ["comment"],
+        "additionalProperties": false
       },
       "description": "Key review comments or suggestions that drove changes."
     },
@@ -58,6 +63,7 @@
     },
     "patch": {
       "type": "string",
+      "minLength": 1,
       "description": "Unified diff or structured patch representing the fix/implementation."
     },
     "validation": {
@@ -68,7 +74,9 @@
           "type": { "type": "string", "enum": ["ci", "test", "manual", "review", "other"] },
           "result": { "type": "string", "enum": ["pass", "fail", "flaky"] },
           "detail": { "type": "string" }
-        }
+        },
+        "required": ["type", "result"],
+        "additionalProperties": false
       },
       "description": "Validation events (CI runs, test results, manual verification) after the change."
     },

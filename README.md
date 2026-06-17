@@ -49,7 +49,7 @@ Initial repositories include:
 ## Repository Layout
 
 - [docs/](docs/) — documentation and guides (including [data-policy.md](docs/data-policy.md))
-- [schemas/](schemas/) — data and trajectory schemas (Pydantic models + JSON Schema)
+- [schemas/](schemas/) — data and trajectory schemas (JSON Schema v0 draft)
 - [scripts/](scripts/) — extraction, transformation, and validation scripts
 - [datasets/](datasets/) — local dataset outputs (raw data and large JSONL files are gitignored; commit only small examples and cards)
 - [evals/](evals/) — evaluation assets and prompts
