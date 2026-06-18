@@ -18,7 +18,7 @@
     }
   ],
   "before_context": "The workflow file had no explicit FOO_NATIVE for macos runner.",
-  "patch": "--- a/.github/workflows/ci.yml\n+++ b/.github/workflows/ci.yml\n@@\n-      - run: cargo test\n+      - env:\n+          FOO_NATIVE: \"1\"\n+        run: cargo test",
+  "patch": "--- a/.github/workflows/ci.yml\n+++ b/.github/workflows/ci.yml\n@@ -10,7 +10,9 @@ jobs:\n   test:\n     runs-on: macos-latest\n     steps:\n-      - run: cargo test\n+      - env:\n+          FOO_NATIVE: \"1\"\n+        run: cargo test",
   "validation": [
     { "type": "ci", "result": "pass", "detail": "macos job green after 3 runs" },
     { "type": "test", "result": "pass", "detail": "all tests passing locally" }

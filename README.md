@@ -51,7 +51,7 @@ Initial repositories include:
 - [docs/](docs/) — documentation and guides (including [data-policy.md](docs/data-policy.md))
 - [schemas/](schemas/) — data and trajectory schemas (JSON Schema v0 draft)
 - [scripts/](scripts/) — extraction, transformation, and validation scripts
-- [datasets/](datasets/) — local dataset outputs (raw data and large JSONL files are gitignored; commit only small examples and cards)
+- [datasets/](datasets/) — local dataset outputs (raw data under `datasets/raw/` is gitignored; only small curated examples, cards, and manifests may be committed — see [datasets/README.md](datasets/README.md))
 - [evals/](evals/) — evaluation assets and prompts
 
 See [datasets/README.md](datasets/README.md) for rules on what may be committed.

@@ -42,7 +42,7 @@
         "format": "uri",
         "pattern": "^https://github\\.com/[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+/(pull|issues)/[0-9]+(?:#.*)?$"
       },
-      "description": "Public GitHub PR/issue URLs that contributed provenance or review signal."
+      "description": "Public GitHub PR/issue URLs that contributed provenance or review signal. MUST include the canonical PR URL for the declared repo and pr_number (https://github.com/{repo}/pull/{pr_number}). Cross-repo supplemental links are allowed but the primary trajectory's own PR must be present for auditability."
     },
     "language": {
       "type": "string",
@@ -198,5 +198,16 @@
         "review_signals"
       ]
     }
-  ]
+  ],
+  "if": {
+    "properties": {
+      "training_use": { "const": "review-to-patch" }
+    }
+  },
+  "then": {
+    "required": ["review_signals"],
+    "properties": {
+      "review_signals": { "minItems": 1 }
+    }
+  }
 }
