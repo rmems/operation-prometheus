@@ -1,10 +1,9 @@
 {
-  "id": "corinth-canal-42",
-  "repo": "rmems/corinth-canal",
-  "pr_number": 42,
+  "id": "ci-demo-17",
+  "repo": "rmems/ci-demo",
+  "pr_number": 17,
   "source_urls": [
-    "https://github.com/rmems/corinth-canal/pull/42",
-    "https://github.com/rmems/corinth-canal/issues/41"
+    "https://github.com/rmems/ci-demo/pull/17"
   ],
   "language": "Rust",
   "domain": "infra",
@@ -18,7 +17,7 @@
     }
   ],
   "before_context": "The workflow file had no explicit FOO_NATIVE for macos runner.",
-  "patch": "--- a/.github/workflows/ci.yml\n+++ b/.github/workflows/ci.yml\n@@ -10,7 +10,9 @@ jobs:\n   test:\n     runs-on: macos-latest\n     steps:\n-      - run: cargo test\n+      - env:\n+          FOO_NATIVE: \"1\"\n+        run: cargo test",
+  "patch": "--- a/.github/workflows/ci.yml\n+++ b/.github/workflows/ci.yml\n@@ -5,4 +5,6 @@ jobs:\n     runs-on: macos-latest\n     steps:\n       - uses: actions/checkout@v4\n-      - run: cargo test\n+      - env:\n+          FOO_NATIVE: \"1\"\n+        run: cargo test",
   "validation": [
     { "type": "ci", "result": "pass", "detail": "macos job green after 3 runs" },
     { "type": "test", "result": "pass", "detail": "all tests passing locally" }

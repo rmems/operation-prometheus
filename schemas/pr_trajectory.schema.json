@@ -26,8 +26,8 @@
     },
     "repo": {
       "type": "string",
-      "pattern": "^[a-zA-Z0-9._-]+/[a-zA-Z0-9._-]+$",
-      "description": "GitHub repository in owner/repo form."
+      "pattern": "^[a-zA-Z0-9](?:[a-zA-Z0-9-]{0,37}[a-zA-Z0-9])?/[a-zA-Z0-9][a-zA-Z0-9_.-]{0,99}$",
+      "description": "GitHub repository in owner/repo form. Owner must be a valid GitHub user or organization login (alphanumeric or hyphen, 1-39 chars, cannot start or end with hyphen). Repo name follows GitHub rules."
     },
     "pr_number": {
       "type": "integer",
@@ -200,6 +200,7 @@
     }
   ],
   "if": {
+    "required": ["training_use"],
     "properties": {
       "training_use": { "const": "review-to-patch" }
     }
