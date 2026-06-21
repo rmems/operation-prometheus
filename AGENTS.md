@@ -31,4 +31,9 @@ Before committing, run:
 ```bash
 ruff check scripts/
 pytest -q
-python scripts/validate_jsonl.py datasets/jsonl/*.jsonl
+if ls datasets/jsonl/*.jsonl 1>/dev/null 2>&1; then
+  python scripts/validate_jsonl.py datasets/jsonl/*.jsonl
+else
+  echo "No JSONL files found; skipping schema validation."
+fi
+```

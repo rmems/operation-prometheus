@@ -30,7 +30,7 @@ def load_schema() -> dict:
         return json.load(f)
 
 
-def validate_file(filepath: Path, schema: dict) -> list[str]:
+def validate_file(filepath: Path, validator: jsonschema.Draft7Validator) -> list[str]:
     """Validate a single JSONL file. Returns list of error strings."""
     errors: list[str] = []
     try:
@@ -44,7 +44,6 @@ def validate_file(filepath: Path, schema: dict) -> list[str]:
                 except json.JSONDecodeError as exc:
                     errors.append(f"  {filepath.name}:{lineno} - Invalid JSON: {exc}")
                     continue
-                validator = jsonschema.Draft7Validator(schema)
                 for error in sorted(validator.iter_errors(record), key=lambda e: list(e.path)):
                     path = ".".join(str(p) for p in error.absolute_path) or "(root)"
                     errors.append(f"  {filepath.name}:{lineno} [{path}] - {error.message}")
@@ -59,11 +58,12 @@ def main() -> int:
         return 2
 
     schema = load_schema()
+    validator = jsonschema.Draft7Validator(schema)
     all_errors: list[str] = []
 
     for arg in sys.argv[1:]:
         filepath = Path(arg)
-        file_errors = validate_file(filepath, schema)
+        file_errors = validate_file(filepath, validator)
         all_errors.extend(file_errors)
         if not file_errors:
             print(f"  ✓ {filepath.name}")
