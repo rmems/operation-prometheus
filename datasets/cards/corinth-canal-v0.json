@@ -1,0 +1,26 @@
+{
+  "name": "corinth-canal-v0",
+  "source_repo": "rmems/corinth-canal",
+  "source_repo_url": "https://github.com/rmems/corinth-canal",
+  "source_repo_description": "Turning MOE architecture into SNN quantization",
+  "schema_version": "pr_trajectory_v0",
+  "schema_url": "https://github.com/rmems/operation-prometheus/schemas/pr_trajectory.schema.json",
+  "language": "Rust",
+  "domains": ["gpu-compute", "ml-infra", "tools"],
+  "pr_count": 6,
+  "pr_numbers": [82, 89, 91, 94, 95, 96],
+  "training_use_buckets": {
+    "repair": [82, 94],
+    "validation": [89],
+    "feature": [91, 95, 96]
+  },
+  "extracted_at": null,
+  "status": "shortlist-v0",
+  "created_at": "2026-06-20",
+  "notes": "High-signal merged PRs with meaningful review/fix/validation loops. Extraction not yet performed. Each PR will become one JSONL line in datasets/jsonl/corinth-canal-v0.jsonl.",
+  "source_doc": "docs/source-repos.md",
+  "related_issues": {
+    "operation_prometheus": [4],
+    "corinth_canal": [39, 74, 75, 76, 80, 83, 84, 85, 90, 92]
+  }
+}
