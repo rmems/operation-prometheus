@@ -1,0 +1,45 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+jobs:
+  lint:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - run: pip install --quiet 'ruff==0.11.12'
+      - run: ruff check scripts/
+
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - run: pip install --quiet 'pytest==8.4.1'
+      - run: pytest -q
+
+  validate:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - run: pip install --quiet 'jsonschema==4.25.0'
+      - name: Validate JSONL files against schema
+        run: |
+          if ls datasets/jsonl/*.jsonl 1>/dev/null 2>&1; then
+            python scripts/validate_jsonl.py datasets/jsonl/*.jsonl
+          else
+            echo "No JSONL files to validate yet"
+          fi
+        continue-on-error: true
