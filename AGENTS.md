@@ -29,6 +29,6 @@ issue/review signal → code state → patch/fix → validation → outcome
 Before committing, run:
 
 ```bash
-ruff check scripts || true
-pytest -q || true
-python scripts/validate_jsonl.py datasets/jsonl/*.jsonl || true
+ruff check scripts/
+pytest -q
+python scripts/validate_jsonl.py datasets/jsonl/*.jsonl
