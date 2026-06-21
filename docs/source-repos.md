@@ -53,9 +53,9 @@ All trajectories are extracted as JSONL records conforming to [pr_trajectory.sch
 - **Merged**: 2026-05-27
 - **Commits**: 6
 - **Files changed**: 35
-- **Why high-signal**: Combines 3 issues (#75, #76, #85) into a cohesive feature: safetensors tensor loading with memory-mapped shard access, `ExperimentBundle` schema for downstream Surrogate_Viz.jl ingestion, config/dotenv standardization. Massive scope with clean validation.
+- **Why high-signal**: Combines 3 issues (rmems/corinth-canal#75, rmems/corinth-canal#76, rmems/corinth-canal#85) into a cohesive feature: safetensors tensor loading with memory-mapped shard access, `ExperimentBundle` schema for downstream Surrogate_Viz.jl ingestion, config/dotenv standardization. Massive scope with clean validation.
 - **Dataset bucket**: `feature` — large multi-issue feature with schema design
-- **Closes**: #75, #76, #85
+- **Closes**: rmems/corinth-canal#75, rmems/corinth-canal#76, rmems/corinth-canal#85
 
 #### PR #94 — IQ3_M and Int4 dequantization pathways
 - **URL**: https://github.com/rmems/corinth-canal/pull/94
@@ -73,7 +73,7 @@ All trajectories are extracted as JSONL records conforming to [pr_trajectory.sch
 - **Files changed**: 15
 - **Why high-signal**: Adds 8 new `ModelFamily` variants, `ModelAdapterConfig`/`RunEntry`/`RunMatrix` structs with `validate()`, 20 static adapter entries, multi-model run matrix (21 runs), cloud lineup rewrite. Shows config-driven feature with validation gates.
 - **Dataset bucket**: `feature` — config-driven multi-model infrastructure
-- **Closes**: #80, #83, #84
+- **Closes**: rmems/corinth-canal#80, rmems/corinth-canal#83, rmems/corinth-canal#84
 
 #### PR #96 — Local SAAQ validator and sprint summarizer
 - **URL**: https://github.com/rmems/corinth-canal/pull/96
