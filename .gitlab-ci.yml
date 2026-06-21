@@ -36,4 +36,4 @@ validate:
       else
         echo "No JSONL files to validate yet"
       fi
-  allow_failure: true
+
