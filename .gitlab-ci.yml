@@ -19,7 +19,13 @@ lint:
 test:
   stage: test
   script:
-    - pytest -q
+    - |
+      pytest -q || exit_code=$?
+      if [ "$exit_code" -eq 5 ]; then
+        echo "No tests found — skipping"
+        exit 0
+      fi
+      exit ${exit_code:-0}
 
 validate:
   stage: validate

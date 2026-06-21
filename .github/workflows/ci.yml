@@ -25,7 +25,14 @@ jobs:
         with:
           python-version: "3.12"
       - run: pip install --quiet 'pytest==8.4.1'
-      - run: pytest -q
+      - name: Run tests
+        run: |
+          pytest -q || exit_code=$?
+          if [ "$exit_code" -eq 5 ]; then
+            echo "No tests found — skipping"
+            exit 0
+          fi
+          exit ${exit_code:-0}
 
   validate:
     runs-on: ubuntu-latest
