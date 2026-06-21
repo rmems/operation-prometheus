@@ -1,0 +1,35 @@
+# Operation Prometheus - GitLab CI/CD
+# Validates code quality and JSONL datasets on every push/merge request.
+
+default:
+  image: python:3.12-slim
+  before_script:
+    - pip install --quiet ruff pytest
+
+stages:
+  - lint
+  - test
+  - validate
+
+lint:
+  stage: lint
+  script:
+    - ruff check scripts/
+  allow_failure: true
+
+test:
+  stage: test
+  script:
+    - pytest -q
+  allow_failure: true
+
+validate:
+  stage: validate
+  script:
+    - |
+      if ls datasets/jsonl/*.jsonl 1>/dev/null 2>&1; then
+        python scripts/validate_jsonl.py datasets/jsonl/*.jsonl
+      else
+        echo "No JSONL files to validate yet"
+      fi
+  allow_failure: true
