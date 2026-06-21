@@ -29,6 +29,11 @@ issue/review signal → code state → patch/fix → validation → outcome
 Before committing, run:
 
 ```bash
-ruff check scripts || true
-pytest -q || true
-python scripts/validate_jsonl.py datasets/jsonl/*.jsonl || true
+ruff check scripts/
+pytest -q
+if ls datasets/jsonl/*.jsonl 1>/dev/null 2>&1; then
+  python scripts/validate_jsonl.py datasets/jsonl/*.jsonl
+else
+  echo "No JSONL files found; skipping schema validation."
+fi
+```

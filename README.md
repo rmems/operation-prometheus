@@ -62,6 +62,8 @@ See [datasets/README.md](datasets/README.md) for rules on what may be committed.
 - **Schema v0** (initial draft, not final): [schemas/pr_trajectory.schema.json](schemas/pr_trajectory.schema.json). Implements GitHub [#2](https://github.com/rmems/operation-prometheus/issues/2). See the tiny example in `datasets/examples/`.
 - **Data policy & hygiene**: [docs/data-policy.md](docs/data-policy.md). Implements GitHub [#3](https://github.com/rmems/operation-prometheus/issues/3). Covers allowed public sources, excluded material, manual inspection requirement, and the distinction between public engineering history vs. raw chat log scraping.
 
-These are tracked in the global beads DB (prefix `raulmc-`): `raulmc-vge` and `raulmc-9cq`.
+## Extraction Shortlists
 
+- **corinth-canal v0**: [docs/source-repos.md](docs/source-repos.md). Implements GitHub [#4](https://github.com/rmems/operation-prometheus/issues/4). 6 high-signal merged PRs shortlisted for trajectory extraction. Metadata card: [datasets/cards/corinth-canal-v0.json](datasets/cards/corinth-canal-v0.json).
+- **Format**: JSONL (one trajectory record per line, conforming to schema v0). See [datasets/README.md](datasets/README.md).
 
