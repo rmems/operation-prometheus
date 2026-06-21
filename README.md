@@ -46,10 +46,22 @@ Initial repositories include:
 * magere-brug
 * Future Limen-Neural projects
 
-## Long-Term Vision
+## Repository Layout
 
-Operation Prometheus aims to become a personal engineering memory system capable of teaching future local models how software evolves through review, experimentation, validation, and iteration.
+- [docs/](docs/) — documentation and guides (including [data-policy.md](docs/data-policy.md))
+- [schemas/](schemas/) — data and trajectory schemas (JSON Schema v0 draft)
+- [providers/](providers/) — thin clients, adapters and config for external model / inference providers (no weights or large artifacts)
+- [scripts/](scripts/) — extraction, transformation, and validation scripts
+- [datasets/](datasets/) — local dataset outputs (raw data under `datasets/raw/` is gitignored; only small curated examples, cards, and manifests may be committed — see [datasets/README.md](datasets/README.md))
+- [evals/](evals/) — evaluation assets and prompts
 
-The goal is not merely code generation.
+See [datasets/README.md](datasets/README.md) for rules on what may be committed.
 
-The goal is engineering understanding.
+## Schemas and Data Policy
+
+- **Schema v0** (initial draft, not final): [schemas/pr_trajectory.schema.json](schemas/pr_trajectory.schema.json). Implements GitHub [#2](https://github.com/rmems/operation-prometheus/issues/2). See the tiny example in `datasets/examples/`.
+- **Data policy & hygiene**: [docs/data-policy.md](docs/data-policy.md). Implements GitHub [#3](https://github.com/rmems/operation-prometheus/issues/3). Covers allowed public sources, excluded material, manual inspection requirement, and the distinction between public engineering history vs. raw chat log scraping.
+
+These are tracked in the global beads DB (prefix `raulmc-`): `raulmc-vge` and `raulmc-9cq`.
+
+
