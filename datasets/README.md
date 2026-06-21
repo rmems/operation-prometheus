@@ -16,4 +16,5 @@ This keeps the repository small, inspectable, and compliant with the project's p
 
 See:
 - [AGENTS.md](../AGENTS.md) for overall rules
-- `schemas/` (when populated) for the canonical data shapes
+- [schemas/pr_trajectory.schema.json](../schemas/pr_trajectory.schema.json) for the canonical trajectory data shape (schema v0)
+- [docs/source-repos.md](../docs/source-repos.md) for extraction shortlists and source repo tracking

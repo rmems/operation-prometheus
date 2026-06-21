@@ -19,13 +19,8 @@ See:
 - [docs/data-policy.md](../docs/data-policy.md)
 - Root [.gitignore](../.gitignore)
 
-## Example layout (future)
-```
-providers/
-  xai/
-  openai/
-  anthropic/
-  local/
-```
+## Current status
+
+This directory is populated with this README. Provider-specific subdirectories (e.g. `xai/`, `openai/`, `anthropic/`, `local/`) will be added as extraction agents and eval harnesses are built.
 
 Keep this directory small and focused on integration, not assets.
