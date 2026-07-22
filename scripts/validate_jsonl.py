@@ -27,7 +27,8 @@ except ImportError:
 SCHEMA_PATH = Path(__file__).resolve().parent.parent / "schemas" / "pr_trajectory.schema.json"
 HOME_PATH_RE = re.compile(r"/home/[A-Za-z0-9._-]+")
 SECRET_HINT_RE = re.compile(
-    r"\b(gh[pousr]_|github_pat_|sk-|AKIA|-----BEGIN [A-Z ]*PRIVATE KEY-----)[A-Za-z0-9_]*"
+    r"(?:\b(?:gh[pousr]_|github_pat_|sk-|AKIA)[A-Za-z0-9_]*|"
+    r"-----BEGIN [A-Z ]*PRIVATE KEY-----)"
 )
 
 

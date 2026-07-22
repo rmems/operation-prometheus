@@ -10,12 +10,12 @@ _SECRET_PATTERNS: list[tuple[str, re.Pattern[str]]] = [
     ("github_pat", re.compile(r"\bgh[pousr]_[A-Za-z0-9_]{20,}\b")),
     ("github_fine_grained", re.compile(r"\bgithub_pat_[A-Za-z0-9_]{20,}\b")),
     ("aws_access_key", re.compile(r"\bAKIA[0-9A-Z]{16}\b")),
-    # Full PEM when END present; also BEGIN-only for truncated diffs.
+    # Full PEM when END present; when truncated, consume base64 body after BEGIN.
     (
         "private_key",
         re.compile(
             r"-----BEGIN [A-Z ]*PRIVATE KEY-----"
-            r"(?:[\s\S]*?-----END [A-Z ]*PRIVATE KEY-----)?"
+            r"(?:[\s\S]*?-----END [A-Z ]*PRIVATE KEY-----|[A-Za-z0-9+/=\n\r\t ]+)"
         ),
     ),
     ("openai_key", re.compile(r"\bsk-[A-Za-z0-9]{20,}\b")),
