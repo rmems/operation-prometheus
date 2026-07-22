@@ -13,20 +13,22 @@ from .github_client import GitHubClient, GitHubError, _parse_next_link, parse_re
 from .secrets import scan_and_sanitize_obj
 
 # GitHub closing keywords (present + past tense + singular).
+# Optional colon form is documented by GitHub: "Closes: #10".
 _CLOSE_KW = r"(?:close[sd]?|fix(?:e[sd])?|resolve[sd]?)"
-CLOSES_RE = re.compile(rf"(?i)\b{_CLOSE_KW}\s+#(\d+)\b")
+_CLOSE_SEP = r":?\s+"
+CLOSES_RE = re.compile(rf"(?i)\b{_CLOSE_KW}{_CLOSE_SEP}#(\d+)\b")
 CLOSES_FULL_RE = re.compile(
-    rf"(?i)\b{_CLOSE_KW}\s+"
+    rf"(?i)\b{_CLOSE_KW}{_CLOSE_SEP}"
     r"https://github\.com/([\w.-]+)/([\w.-]+)/issues/(\d+)\b"
 )
 CLOSES_CROSS_RE = re.compile(
-    rf"(?i)\b{_CLOSE_KW}\s+([\w.-]+)/([\w.-]+)#(\d+)\b"
+    rf"(?i)\b{_CLOSE_KW}{_CLOSE_SEP}([\w.-]+)/([\w.-]+)#(\d+)\b"
 )
 
 DEFAULT_MAX_INLINE_DIFF = 256 * 1024
 
-# Cross-repository issue fetching allowlist (owner/repo format)
-# Only repositories in this list may be fetched for cross-repo linked issues
+# Default cross-repository issue fetching allowlist (owner/repo format).
+# Runtime allowlist is the union of this constant and collect_pr(..., cross_repo_allowlist=...).
 CROSS_REPO_ALLOWLIST: tuple[str, ...] = (
     # Add approved cross-repo references here, e.g.:
     # "rmems/operation-prometheus",
@@ -135,12 +137,23 @@ def collect_pr(
     *,
     include_checks: bool = True,
     include_diff: bool = True,
+    cross_repo_allowlist: tuple[str, ...] | list[str] | None = None,
 ) -> dict[str, Any]:
-    """Fetch a full raw trajectory-oriented PR record (read-only)."""
+    """Fetch a full raw trajectory-oriented PR record (read-only).
+
+    ``cross_repo_allowlist`` extends (does not replace) ``CROSS_REPO_ALLOWLIST``
+    with additional ``owner/repo`` entries that may be fetched for linked issues.
+    """
     owner, name = parse_repo(repo)
     full = f"{owner}/{name}"
     warnings: list[str] = []
     endpoints: list[str] = []
+    allowlist = set(CROSS_REPO_ALLOWLIST)
+    if cross_repo_allowlist:
+        for entry in cross_repo_allowlist:
+            entry = str(entry).strip()
+            if entry:
+                allowlist.add(entry)
 
     pull = client.get_json(f"/repos/{full}/pulls/{pr_number}")
     endpoints.append("pulls")
@@ -228,9 +241,12 @@ def collect_pr(
         target_repo = f"{i_owner}/{i_repo}"
         source_repo = f"{owner}/{name}"
         if target_repo != source_repo:
-            # Cross-repo reference - check allowlist
-            if target_repo not in CROSS_REPO_ALLOWLIST:
-                warnings.append(f"linked_issue_{num}_skipped: cross-repo {target_repo} not in allowlist")
+            # Cross-repo reference - require allowlist entry (CLI or module default).
+            if target_repo not in allowlist:
+                warnings.append(
+                    f"linked_issue_{num}_skipped: cross-repo {target_repo} not in allowlist "
+                    f"(pass --allow-cross-repo {target_repo})"
+                )
                 continue
         try:
             issue = client.get_json(f"/repos/{i_owner}/{i_repo}/issues/{num}")

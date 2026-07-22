@@ -9,7 +9,7 @@ ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "scripts"))
 
 from lib.bots import is_bot_user, strip_bot_boilerplate  # noqa: E402
-from lib.secrets import redact_home_paths, redact_secrets, sanitize_text  # noqa: E402
+from lib.secrets import find_secrets, redact_home_paths, redact_secrets, sanitize_text  # noqa: E402
 
 
 def test_is_bot_user_by_type_and_login():
@@ -72,3 +72,11 @@ def test_redact_diff_prefixed_truncated_pem():
     cleaned, _ = sanitize_text(text)
     assert "A" * 20 not in cleaned
     assert "[REDACTED]" in cleaned
+
+
+def test_find_secrets_covers_slack_and_password_assignment():
+    slack = "https://hooks.slack.com/services/T000/B000/XXXXXXXXXXXXXXXXXXXXXXXX"
+    password = "password=abcdefghijklmnop"
+    assert "slack_webhook" in find_secrets(slack)
+    assert "generic_api_assignment" in find_secrets(password)
+    assert find_secrets("harmless text without credentials") == []

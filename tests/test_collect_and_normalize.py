@@ -13,8 +13,12 @@ import pytest
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "scripts"))
 
-from lib.normalize import normalize_record  # noqa: E402
-from lib.raw_record import collect_pr, write_raw_record  # noqa: E402
+from lib.normalize import normalize_record, outcome_for  # noqa: E402
+from lib.raw_record import (  # noqa: E402
+    collect_pr,
+    parse_linked_issue_numbers,
+    write_raw_record,
+)
 
 FIXTURES = ROOT / "tests" / "fixtures" / "github"
 SCHEMA = ROOT / "schemas" / "pr_trajectory.schema.json"
@@ -104,3 +108,18 @@ def test_feature_bucket_maps_to_other_training_use():
     traj = normalize_record(raw, card)
     assert traj["training_use"] == "other"
     assert traj["task_type"] in ("feature", "test", "other")
+
+
+def test_parse_closes_colon_syntax():
+    body = "Closes: #10\nFixes: https://github.com/acme/widgets/issues/3\nResolves: other/proj#7"
+    found = parse_linked_issue_numbers(body, "rmems", "corinth-canal")
+    assert ("rmems", "corinth-canal", 10) in found
+    assert ("acme", "widgets", 3) in found
+    assert ("other", "proj", 7) in found
+
+
+def test_open_draft_outcome_is_open():
+    assert outcome_for({"pull": {"state": "open", "draft": True, "merged": False}}) == "open"
+    assert outcome_for({"pull": {"state": "open", "draft": False, "merged": False}}) == "open"
+    assert outcome_for({"pull": {"state": "closed", "draft": True, "merged": False}}) == "closed"
+    assert outcome_for({"pull": {"merged": True, "draft": True, "state": "closed"}}) == "merged"

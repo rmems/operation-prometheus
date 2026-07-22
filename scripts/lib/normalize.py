@@ -397,11 +397,10 @@ def outcome_for(raw: dict[str, Any]) -> str:
         return "merged"
     state = str(pull.get("state") or "").lower()
     if state == "closed":
+        # Closed without merge (includes abandoned drafts that were closed).
         return "closed"
-    # Drafts report state=open; check draft before open.
-    if pull.get("draft"):
-        return "abandoned"
     if state == "open":
+        # Active drafts remain open; do not map draft=true → abandoned.
         return "open"
     # Unknown/missing state: conservative non-merged terminal-ish label.
     return "abandoned"

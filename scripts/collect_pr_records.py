@@ -76,6 +76,16 @@ def build_parser() -> argparse.ArgumentParser:
     p.add_argument("--skip-checks", action="store_true", help="Skip check-runs API")
     p.add_argument("--skip-diff", action="store_true", help="Skip full unified diff fetch")
     p.add_argument(
+        "--allow-cross-repo",
+        action="append",
+        default=[],
+        metavar="OWNER/REPO",
+        help=(
+            "Allow fetching linked issues from this owner/repo (repeatable). "
+            "Cross-repo Closes/Fixes references are skipped unless allowlisted."
+        ),
+    )
+    p.add_argument(
         "--continue-on-error",
         action="store_true",
         help="Continue batch if one PR fails",
@@ -118,6 +128,7 @@ def main(argv: list[str] | None = None) -> int:
                 pr,
                 include_checks=not args.skip_checks,
                 include_diff=not args.skip_diff,
+                cross_repo_allowlist=tuple(args.allow_cross_repo or ()),
             )
             path = write_raw_record(
                 record,
