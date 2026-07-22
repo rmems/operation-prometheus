@@ -83,11 +83,14 @@ class GitHubClient:
         accept: str = "application/vnd.github+json",
     ) -> tuple[bytes, dict[str, str]]:
         url = self._resolve_url(path_or_url)
+        # Bandit/Codacy: only permit HTTPS (never file:/ or custom schemes).
+        if not url.startswith("https://"):
+            raise GitHubError(f"Refusing non-HTTPS URL: {url[:80]}")
         last_err: Exception | None = None
         for attempt in range(self.max_retries + 1):
             req = urllib.request.Request(url, headers=self._headers(accept), method="GET")
             try:
-                with urllib.request.urlopen(req, timeout=60) as resp:
+                with urllib.request.urlopen(req, timeout=60) as resp:  # noqa: S310
                     body = resp.read()
                     headers = {k.lower(): v for k, v in resp.headers.items()}
                     self._maybe_throttle(headers)
