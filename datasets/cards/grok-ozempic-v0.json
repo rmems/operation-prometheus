@@ -4,7 +4,7 @@
   "source_repo_url": "https://github.com/rmems/grok-ozempic",
   "source_repo_description": "SNN-logic ternary quantization pipeline for Grok-1 MoE with xai-dissect manifests and SAAQ artifact validation",
   "schema_version": "pr_trajectory_v0",
-  "schema_url": "https://github.com/rmems/operation-prometheus/schemas/pr_trajectory.schema.json",
+  "schema_url": "https://github.com/rmems/operation-prometheus/blob/main/schemas/pr_trajectory.schema.json",
   "language": "Rust",
   "domains": ["ml-infra", "quantization", "validation"],
   "pr_count": 6,

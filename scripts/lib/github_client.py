@@ -93,7 +93,15 @@ class GitHubClient:
                 last_err = exc
                 status = exc.code
                 retry_after = exc.headers.get("Retry-After") if exc.headers else None
-                if status in (403, 429, 500, 502, 503, 504) and attempt < self.max_retries:
+                # Determine if 403 is rate-limit related
+                should_retry = False
+                if status == 403:
+                    is_rate_limit = self._is_rate_limit_403(exc)
+                    should_retry = is_rate_limit and attempt < self.max_retries
+                elif status in (429, 500, 502, 503, 504):
+                    should_retry = attempt < self.max_retries
+
+                if should_retry:
                     delay = self._backoff_seconds(attempt, retry_after, exc)
                     logger.warning(
                         "GitHub %s on %s; retry %s/%s after %.1fs",
@@ -119,6 +127,27 @@ class GitHubClient:
                     continue
                 raise GitHubError(f"GET {url} network error: {exc}") from exc
         raise GitHubError(f"GET {url} failed after retries: {last_err}")
+
+    def _is_rate_limit_403(self, exc: urllib.error.HTTPError) -> bool:
+        """Check if a 403 error is rate-limit related."""
+        # Check headers for rate limit signal
+        if exc.headers:
+            remaining = exc.headers.get("X-RateLimit-Remaining")
+            if remaining is not None:
+                try:
+                    if int(remaining) == 0:
+                        return True
+                except ValueError:
+                    pass
+        # Check response body for rate limit message
+        try:
+            body = exc.read()
+            text = body.decode("utf-8", errors="replace").lower()
+            if "rate limit" in text or "abuse detection" in text:
+                return True
+        except Exception:
+            pass
+        return False
 
     def _backoff_seconds(
         self,

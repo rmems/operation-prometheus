@@ -17,13 +17,20 @@ CLOSES_RE = re.compile(
 )
 CLOSES_FULL_RE = re.compile(
     r"(?i)\b(?:closes|fixes|resolves)\s+"
-    r"https://github\.com/[\w.-]+/[\w.-]+/issues/(\d+)\b"
+    r"https://github\.com/([\w.-]+)/([\w.-]+)/issues/(\d+)\b"
 )
 CLOSES_CROSS_RE = re.compile(
     r"(?i)\b(?:closes|fixes|resolves)\s+([\w.-]+)/([\w.-]+)#(\d+)\b"
 )
 
 DEFAULT_MAX_INLINE_DIFF = 256 * 1024
+
+# Cross-repository issue fetching allowlist (owner/repo format)
+# Only repositories in this list may be fetched for cross-repo linked issues
+CROSS_REPO_ALLOWLIST: tuple[str, ...] = (
+    # Add approved cross-repo references here, e.g.:
+    # "rmems/operation-prometheus",
+)
 
 
 def _user_login(obj: dict | None) -> str | None:
@@ -108,8 +115,8 @@ def parse_linked_issue_numbers(body: str | None, default_owner: str, default_rep
             seen.add(key)
             found.append(key)
     for m in CLOSES_FULL_RE.finditer(body):
-        # full URL without owner/repo capture — keep default repo
-        key = (default_owner, default_repo, int(m.group(1)))
+        # full URL with owner/repo capture
+        key = (m.group(1), m.group(2), int(m.group(3)))
         if key not in seen:
             seen.add(key)
             found.append(key)
@@ -209,6 +216,14 @@ def collect_pr(
     for i_owner, i_repo, num in parse_linked_issue_numbers(
         pull.get("body"), owner, name
     ):
+        # Check if cross-repo fetch is allowed
+        target_repo = f"{i_owner}/{i_repo}"
+        source_repo = f"{owner}/{name}"
+        if target_repo != source_repo:
+            # Cross-repo reference - check allowlist
+            if target_repo not in CROSS_REPO_ALLOWLIST:
+                warnings.append(f"linked_issue_{num}_skipped: cross-repo {target_repo} not in allowlist")
+                continue
         try:
             issue = client.get_json(f"/repos/{i_owner}/{i_repo}/issues/{num}")
             endpoints.append(f"issue_{num}")

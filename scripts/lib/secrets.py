@@ -10,7 +10,7 @@ _SECRET_PATTERNS: list[tuple[str, re.Pattern[str]]] = [
     ("github_pat", re.compile(r"\bgh[pousr]_[A-Za-z0-9_]{20,}\b")),
     ("github_fine_grained", re.compile(r"\bgithub_pat_[A-Za-z0-9_]{20,}\b")),
     ("aws_access_key", re.compile(r"\bAKIA[0-9A-Z]{16}\b")),
-    ("private_key", re.compile(r"-----BEGIN [A-Z ]*PRIVATE KEY-----")),
+    ("private_key", re.compile(r"-----BEGIN [A-Z ]*PRIVATE KEY-----[\s\S]*?-----END [A-Z ]*PRIVATE KEY-----")),
     ("openai_key", re.compile(r"\bsk-[A-Za-z0-9]{20,}\b")),
     ("slack_webhook", re.compile(r"https://hooks\.slack\.com/services/[A-Za-z0-9/_-]+")),
     ("generic_api_assignment", re.compile(

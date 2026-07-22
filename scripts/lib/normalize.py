@@ -165,38 +165,40 @@ def extract_issue_context(raw: dict[str, Any]) -> str | None:
 
 def extract_review_signals(raw: dict[str, Any], *, max_items: int = 8) -> list[dict[str, str]]:
     signals: list[dict[str, str]] = []
-    for c in raw.get("review_comments") or []:
-        if is_bot_user(c.get("user_login"), c.get("user_type")):
+    # Process reviews first to preserve maintainer approve/request-changes signals
+    for r in raw.get("reviews") or []:
+        if is_bot_user(r.get("user_login"), r.get("user_type")):
             continue
-        body = (c.get("body") or "").strip()
+        body = (r.get("body") or "").strip()
+        if not body or len(body) < 20:
+            continue
+        body, _ = sanitize_text(strip_bot_boilerplate(body))
         if not body:
             continue
-        body, _ = sanitize_text(body)
-        item: dict[str, str] = {
-            "author": c.get("user_login") or "unknown",
-            "comment": body[:2000],
-        }
-        if "```suggestion" in body:
-            item["suggestion"] = body[:2000]
-        signals.append(item)
+        signals.append(
+            {
+                "author": r.get("user_login") or "unknown",
+                "comment": body[:2000],
+            }
+        )
         if len(signals) >= max_items:
             break
+    # Then add review_comments if space remains
     if len(signals) < max_items:
-        for r in raw.get("reviews") or []:
-            if is_bot_user(r.get("user_login"), r.get("user_type")):
+        for c in raw.get("review_comments") or []:
+            if is_bot_user(c.get("user_login"), c.get("user_type")):
                 continue
-            body = (r.get("body") or "").strip()
-            if not body or len(body) < 20:
-                continue
-            body, _ = sanitize_text(strip_bot_boilerplate(body))
+            body = (c.get("body") or "").strip()
             if not body:
                 continue
-            signals.append(
-                {
-                    "author": r.get("user_login") or "unknown",
-                    "comment": body[:2000],
-                }
-            )
+            body, _ = sanitize_text(body)
+            item: dict[str, str] = {
+                "author": c.get("user_login") or "unknown",
+                "comment": body[:2000],
+            }
+            if "```suggestion" in body:
+                item["suggestion"] = body[:2000]
+            signals.append(item)
             if len(signals) >= max_items:
                 break
     return signals
@@ -221,10 +223,9 @@ def extract_validation(raw: dict[str, Any]) -> list[dict[str, str]]:
     if conclusions:
         if all(c in ("success", "neutral", "skipped") for c in conclusions):
             result = "pass"
-        elif any(c == "failure" for c in conclusions):
-            result = "fail"
         else:
-            result = "pass"
+            # Any non-success conclusion (failure, cancelled, timed_out, action_required, stale, etc.) = fail
+            result = "fail"
         names = ", ".join(
             f"{c.get('name')}={c.get('conclusion')}" for c in checks[:12] if c.get("name")
         )
