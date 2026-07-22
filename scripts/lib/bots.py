@@ -93,27 +93,35 @@ def strip_bot_boilerplate(markdown: str) -> str:
     return text
 
 
+def _heading_level(line: str) -> int:
+    """Return the markdown heading level of a line, or 0 if it is not a heading."""
+    n = len(line) - len(line.lstrip("#"))
+    return n if line[n : n + 1] == " " else 0
+
+
 def extract_section(markdown: str, heading_keywords: tuple[str, ...]) -> str | None:
     """Extract a markdown section whose heading contains any keyword (case-insensitive)."""
     if not markdown:
         return None
     lines = markdown.splitlines()
     start: int | None = None
+    start_level = 0
     for i, line in enumerate(lines):
         if not line.startswith("#"):
             continue
         low = line.lower()
         if any(k in low for k in heading_keywords):
             start = i + 1
+            start_level = _heading_level(line)
             break
     if start is None:
         return None
     end = len(lines)
     for j in range(start, len(lines)):
-        if lines[j].startswith("#") and not lines[j].startswith("####"):
-            # stop at next same-or-higher level heading (## or #)
-            if lines[j].startswith("##") or lines[j].startswith("# "):
-                end = j
-                break
+        lvl = _heading_level(lines[j])
+        # stop only at a heading of equal or higher level (fewer/equal '#')
+        if lvl and lvl <= start_level:
+            end = j
+            break
     body = "\n".join(lines[start:end]).strip()
     return body or None
