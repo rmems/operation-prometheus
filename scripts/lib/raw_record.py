@@ -9,7 +9,7 @@ from pathlib import Path
 from typing import Any
 
 from . import __version__
-from .github_client import GitHubClient, GitHubError, parse_repo
+from .github_client import GitHubClient, GitHubError, _parse_next_link, parse_repo
 from .secrets import scan_and_sanitize_obj
 
 CLOSES_RE = re.compile(
@@ -163,11 +163,20 @@ def collect_pr(
     head_sha = (pull.get("head") or {}).get("sha")
     if include_checks and head_sha:
         try:
-            cr = client.get_json(
-                f"/repos/{full}/commits/{head_sha}/check-runs?per_page=100"
-            )
+            runs: list[dict[str, Any]] = []
+            total_count: int | None = None
+            next_url: str | None = f"/repos/{full}/commits/{head_sha}/check-runs?per_page=100"
+            while next_url:
+                cr, headers = client.get_json_with_headers(next_url)
+                if total_count is None:
+                    total_count = (cr or {}).get("total_count")
+                runs.extend((cr or {}).get("check_runs") or [])
+                next_url = _parse_next_link(headers.get("link", ""))
             endpoints.append("check_runs")
-            runs = (cr or {}).get("check_runs") or []
+            if total_count is not None and total_count > len(runs):
+                warnings.append(
+                    f"check_runs_truncated: total_count={total_count} collected={len(runs)}"
+                )
             checks["check_runs"] = [
                 {
                     "name": r.get("name"),

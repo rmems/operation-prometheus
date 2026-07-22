@@ -101,7 +101,11 @@ def main(argv: list[str] | None = None) -> int:
         return 2
 
     card = load_card(args.card)
-    pr_filter = _parse_prs(args.pr)
+    try:
+        pr_filter = _parse_prs(args.pr)
+    except ValueError as exc:
+        logger.error("Invalid --pr value: %s", exc)
+        return 2
     paths = sorted(raw_dir.glob("pr-*.json"))
     if not paths:
         logger.error("No pr-*.json files in %s", raw_dir)

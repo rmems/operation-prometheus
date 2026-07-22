@@ -39,6 +39,9 @@ class FakeClient:
             return json.loads((FIXTURES / "issue_74.json").read_text())
         raise AssertionError(f"unexpected get_json path: {path_or_url}")
 
+    def get_json_with_headers(self, path_or_url: str) -> tuple[Any, dict[str, str]]:
+        return self.get_json(path_or_url), {}
+
     def get_text(self, path_or_url: str, *, accept: str = "") -> str:
         return (FIXTURES / "diff_89.diff").read_text()
 

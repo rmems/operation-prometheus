@@ -175,6 +175,11 @@ class GitHubClient:
             return None
         return json.loads(body.decode("utf-8"))
 
+    def get_json_with_headers(self, path_or_url: str) -> tuple[Any, dict[str, str]]:
+        body, headers = self._request(path_or_url)
+        data = json.loads(body.decode("utf-8")) if body else None
+        return data, headers
+
     def get_text(
         self,
         path_or_url: str,

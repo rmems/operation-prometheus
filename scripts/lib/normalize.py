@@ -383,6 +383,11 @@ def normalize_record(
 
     issue_context = extract_issue_context(raw)
     review_signals = extract_review_signals(raw)
+    training_use = training_use_for(repo, pr, card)
+    if training_use == "review-to-patch" and not review_signals:
+        # Schema requires non-empty review_signals for review-to-patch; fall back
+        # to "other" when there are no retained (non-bot) review comments.
+        training_use = "other"
     traj: dict[str, Any] = {
         "id": traj_id,
         "repo": repo,
@@ -395,7 +400,7 @@ def normalize_record(
         "patch": extract_patch(raw, raw_path=raw_path, max_bytes=max_patch_bytes),
         "validation": extract_validation(raw),
         "outcome": outcome_for(raw),
-        "training_use": training_use_for(repo, pr, card),
+        "training_use": training_use,
     }
     if issue_context:
         traj["issue_context"] = issue_context
