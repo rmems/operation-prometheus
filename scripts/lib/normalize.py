@@ -241,23 +241,22 @@ def extract_validation(raw: dict[str, Any]) -> list[dict[str, str]]:
     if val_section:
         low = val_section.lower()
         result = "pass"
-        # Explicit non-pass language / unchecked templates.
-        non_pass_markers = (
-            "not run",
-            "not executed",
-            "skipped",
-            "n/a",
-            "unchecked",
-            "[ ]",
-            "todo",
-            "pending",
-            "untested",
+        # Anchored/non-pass cues — avoid loose substrings ("not running…").
+        non_pass_res = (
+            re.compile(r"(?m)^\s*[-*]\s*\[\s\]"),  # unchecked checkbox lines
+            re.compile(r"\bnot\s+run\b(?!ning)"),
+            re.compile(r"\bnot\s+executed\b"),
+            re.compile(r"\buntested\b"),
+            re.compile(r"\bunchecked\b"),
+            re.compile(r"\bn/?a\b"),
+            re.compile(r"\btodo\b"),
+            re.compile(r"\bpending\b"),
+            re.compile(r"\bskipped\b"),
         )
-        if any(m in low for m in non_pass_markers):
+        if any(rx.search(low) for rx in non_pass_res):
             result = "fail"
-        if "fail" in low and "0 failed" not in low and "no fail" not in low:
-            if re.search(r"\bfailed\b", low) and "0 failed" not in low:
-                result = "fail"
+        if re.search(r"\bfailed\b", low) and "0 failed" not in low and "no fail" not in low:
+            result = "fail"
         detail, _ = sanitize_text(val_section[:1500])
         events.append({"type": "test", "result": result, "detail": detail})
 
@@ -399,11 +398,13 @@ def outcome_for(raw: dict[str, Any]) -> str:
     state = str(pull.get("state") or "").lower()
     if state == "closed":
         return "closed"
-    if state == "open":
-        return "open"
+    # Drafts report state=open; check draft before open.
     if pull.get("draft"):
         return "abandoned"
-    return "open"
+    if state == "open":
+        return "open"
+    # Unknown/missing state: conservative non-merged terminal-ish label.
+    return "abandoned"
 
 
 def language_for(card: dict[str, Any], raw: dict[str, Any]) -> str:
