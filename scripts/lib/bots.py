@@ -99,20 +99,25 @@ def extract_section(markdown: str, heading_keywords: tuple[str, ...]) -> str | N
         return None
     lines = markdown.splitlines()
     start: int | None = None
+    start_level: int | None = None
     for i, line in enumerate(lines):
         if not line.startswith("#"):
             continue
         low = line.lower()
         if any(k in low for k in heading_keywords):
             start = i + 1
+            # Determine heading level
+            start_level = len(line) - len(line.lstrip("#"))
             break
-    if start is None:
+    if start is None or start_level is None:
         return None
     end = len(lines)
     for j in range(start, len(lines)):
-        if lines[j].startswith("#") and not lines[j].startswith("####"):
-            # stop at next same-or-higher level heading (## or #)
-            if lines[j].startswith("##") or lines[j].startswith("# "):
+        if lines[j].startswith("#"):
+            # Determine current heading level
+            current_level = len(lines[j]) - len(lines[j].lstrip("#"))
+            # Stop at same or higher level (fewer #s)
+            if current_level <= start_level:
                 end = j
                 break
     body = "\n".join(lines[start:end]).strip()

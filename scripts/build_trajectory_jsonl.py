@@ -83,13 +83,9 @@ def _parse_prs(values: list[str] | None) -> set[int] | None:
     return out
 
 
-def _validate(record: dict) -> list[str]:
-    try:
-        import jsonschema
-    except ImportError:
+def _validate(record: dict, validator) -> list[str]:
+    if validator is None:
         return ["jsonschema not installed"]
-    schema = json.loads(SCHEMA_PATH.read_text(encoding="utf-8"))
-    validator = jsonschema.Draft7Validator(schema)
     return [e.message for e in sorted(validator.iter_errors(record), key=lambda e: list(e.path))]
 
 
@@ -99,6 +95,15 @@ def main(argv: list[str] | None = None) -> int:
     if not raw_dir.is_dir():
         logger.error("raw-dir not found: %s", raw_dir)
         return 2
+
+    # Load schema once if jsonschema available
+    validator = None
+    try:
+        import jsonschema
+        schema = json.loads(SCHEMA_PATH.read_text(encoding="utf-8"))
+        validator = jsonschema.Draft7Validator(schema)
+    except ImportError:
+        pass
 
     card = load_card(args.card)
     pr_filter = _parse_prs(args.pr)
@@ -121,7 +126,7 @@ def main(argv: list[str] | None = None) -> int:
                 raw_path=path,
                 max_patch_bytes=args.max_patch_bytes,
             )
-            schema_errors = _validate(traj)
+            schema_errors = _validate(traj, validator)
             if schema_errors:
                 errors += 1
                 logger.error("%s schema errors:", path.name)

@@ -21,7 +21,7 @@ See:
 - [cards/corinth-canal-trajectories-v0.md](cards/corinth-canal-trajectories-v0.md) for the first extracted dataset card
 - [../STATUS.md](../STATUS.md) for current extraction status
 
-### Layout notes
+## Layout notes
 
 - `jsonl/` — curated, schema-valid trajectories (small; commit OK)
 - `cards/` — lightweight metadata + human dataset cards
