@@ -166,12 +166,19 @@ def extract_issue_context(raw: dict[str, Any]) -> str | None:
 def extract_review_signals(raw: dict[str, Any], *, max_items: int = 8) -> list[dict[str, str]]:
     signals: list[dict[str, str]] = []
     # Process reviews first to preserve maintainer approve/request-changes signals
+    # (including short LGTM / Approved bodies that still carry decision state).
     for r in raw.get("reviews") or []:
         if is_bot_user(r.get("user_login"), r.get("user_type")):
             continue
         body = (r.get("body") or "").strip()
+        state = str(r.get("state") or "").upper()
         if not body or len(body) < 20:
-            continue
+            if state in ("APPROVED", "CHANGES_REQUESTED", "DISMISSED"):
+                body = (body or f"Review {state}").strip()
+                if len(body) < 12:
+                    body = f"Review state: {state}"
+            else:
+                continue
         body, _ = sanitize_text(strip_bot_boilerplate(body))
         if not body:
             continue
