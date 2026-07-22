@@ -10,23 +10,35 @@ _SECRET_PATTERNS: list[tuple[str, re.Pattern[str]]] = [
     ("github_pat", re.compile(r"\bgh[pousr]_[A-Za-z0-9_]{20,}\b")),
     ("github_fine_grained", re.compile(r"\bgithub_pat_[A-Za-z0-9_]{20,}\b")),
     ("aws_access_key", re.compile(r"\bAKIA[0-9A-Z]{16}\b")),
-    # Full PEM when END present; when truncated, consume base64 body after BEGIN.
+    # Full PEM when END present; truncated / unified-diff lines after BEGIN.
     (
         "private_key",
         re.compile(
             r"-----BEGIN [A-Z ]*PRIVATE KEY-----"
-            r"(?:[\s\S]*?-----END [A-Z ]*PRIVATE KEY-----|[A-Za-z0-9+/=\n\r\t ]+)"
+            r"(?:"
+            r"[\s\S]*?-----END [A-Z ]*PRIVATE KEY-----"
+            r"|"
+            # Base64 body, optional unified-diff +/- prefixes per line
+            r"(?:[ \t]*[+-]?[A-Za-z0-9+/= \t]*\r?\n?){1,400}"
+            r")"
         ),
     ),
-    ("openai_key", re.compile(r"\bsk-[A-Za-z0-9]{20,}\b")),
+    # OpenAI-style keys including sk-proj-..., sk-svcacct-..., etc.
+    ("openai_key", re.compile(r"\bsk-[A-Za-z0-9_-]{16,}\b")),
     ("slack_webhook", re.compile(r"https://hooks\.slack\.com/services/[A-Za-z0-9/_-]+")),
     ("generic_api_assignment", re.compile(
-        r"(?i)\b(api[_-]?key|secret|password|token)\s*[=:]\s*['\"][^'\"]{12,}['\"]"
+        r"(?i)\b(api[_-]?key|secret|password|token)\s*[=:]\s*['\"]?[^'\"\s]{12,}"
     )),
 ]
 
-# Local absolute paths that should not enter training records.
-_HOME_PATH = re.compile(r"/home/[A-Za-z0-9._-]+(?:/[^\s\"']+)?")
+# Local absolute user-home paths (Linux, macOS, Windows) — must not enter training data.
+_HOME_PATH = re.compile(
+    r"(?:"
+    r"/home/[A-Za-z0-9._-]+(?:/[^\s\"']+)?"
+    r"|/Users/[A-Za-z0-9._-]+(?:/[^\s\"']+)?"
+    r"|(?:[A-Za-z]:\\Users\\|[A-Za-z]:/Users/)[A-Za-z0-9._-]+(?:[\\/][^\s\"']+)?"
+    r")"
+)
 
 
 def find_secrets(text: str) -> list[str]:
@@ -49,7 +61,7 @@ def redact_secrets(text: str) -> tuple[str, int]:
 
 
 def redact_home_paths(text: str) -> tuple[str, int]:
-    """Replace absolute /home/... paths with a placeholder."""
+    """Replace absolute user-home paths (/home, /Users, C:\\Users) with a placeholder."""
     out, n = _HOME_PATH.subn("[HOME_PATH]", text)
     return out, n
 

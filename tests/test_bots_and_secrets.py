@@ -41,3 +41,28 @@ def test_redact_github_token_and_home_path():
     assert "[REDACTED]" in cleaned
     assert "[HOME_PATH]" in cleaned
     assert warnings
+
+
+def test_redact_macos_windows_paths_and_sk_proj():
+    # Synthetic fixture only — not a real credential.
+    fake_key = "sk-proj-" + ("x" * 24)
+    text = f"key={fake_key} mac=/Users/alice/.ssh/id_rsa win=C:\\Users\\Alice\\.env"
+    cleaned, warnings = sanitize_text(text)
+    assert fake_key not in cleaned
+    assert "/Users/alice" not in cleaned
+    assert "Users\\Alice" not in cleaned and "Users/Alice" not in cleaned
+    assert "[REDACTED]" in cleaned
+    assert "[HOME_PATH]" in cleaned
+    assert warnings
+
+
+def test_redact_diff_prefixed_truncated_pem():
+    # Synthetic PEM-like body for redaction coverage only.
+    text = (
+        "- -----BEGIN PRIVATE KEY-----\n"
+        "-" + ("A" * 40) + "\n"
+        "-" + ("B" * 40) + "\n"
+    )
+    cleaned, _ = sanitize_text(text)
+    assert "A" * 20 not in cleaned
+    assert "[REDACTED]" in cleaned

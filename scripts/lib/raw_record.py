@@ -12,15 +12,15 @@ from . import __version__
 from .github_client import GitHubClient, GitHubError, _parse_next_link, parse_repo
 from .secrets import scan_and_sanitize_obj
 
-CLOSES_RE = re.compile(
-    r"(?i)\b(?:closes|fixes|resolves)\s+#(\d+)\b"
-)
+# GitHub closing keywords (present + past tense + singular).
+_CLOSE_KW = r"(?:close[sd]?|fix(?:e[sd])?|resolve[sd]?)"
+CLOSES_RE = re.compile(rf"(?i)\b{_CLOSE_KW}\s+#(\d+)\b")
 CLOSES_FULL_RE = re.compile(
-    r"(?i)\b(?:closes|fixes|resolves)\s+"
+    rf"(?i)\b{_CLOSE_KW}\s+"
     r"https://github\.com/([\w.-]+)/([\w.-]+)/issues/(\d+)\b"
 )
 CLOSES_CROSS_RE = re.compile(
-    r"(?i)\b(?:closes|fixes|resolves)\s+([\w.-]+)/([\w.-]+)#(\d+)\b"
+    rf"(?i)\b{_CLOSE_KW}\s+([\w.-]+)/([\w.-]+)#(\d+)\b"
 )
 
 DEFAULT_MAX_INLINE_DIFF = 256 * 1024

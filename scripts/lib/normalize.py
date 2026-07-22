@@ -192,7 +192,7 @@ def extract_review_signals(raw: dict[str, Any], *, max_items: int = 8) -> list[d
         )
         if len(signals) >= max_items:
             break
-    # Then add review_comments if space remains
+    # Then add inline review_comments if space remains
     if len(signals) < max_items:
         for c in raw.get("review_comments") or []:
             if is_bot_user(c.get("user_login"), c.get("user_type")):
@@ -210,6 +210,25 @@ def extract_review_signals(raw: dict[str, Any], *, max_items: int = 8) -> list[d
                 if m:
                     item["suggestion"] = m.group(1).strip()[:2000]
             signals.append(item)
+            if len(signals) >= max_items:
+                break
+    # Finally non-bot PR conversation comments (often carry review signal)
+    if len(signals) < max_items:
+        for c in raw.get("issue_comments") or []:
+            if is_bot_user(c.get("user_login"), c.get("user_type")):
+                continue
+            body = strip_bot_boilerplate((c.get("body") or "").strip())
+            if not body or len(body) < 20:
+                continue
+            body, _ = sanitize_text(body)
+            if not body:
+                continue
+            signals.append(
+                {
+                    "author": c.get("user_login") or "unknown",
+                    "comment": body[:2000],
+                }
+            )
             if len(signals) >= max_items:
                 break
     return signals
@@ -230,32 +249,42 @@ def extract_validation(raw: dict[str, Any]) -> list[dict[str, str]]:
         events.append({"type": "test", "result": result, "detail": detail})
 
     checks = (raw.get("checks") or {}).get("check_runs") or []
-    conclusions = [c.get("conclusion") for c in checks if c.get("conclusion")]
-    if conclusions:
-        if all(c in ("success", "neutral", "skipped") for c in conclusions):
+    if checks:
+        incomplete = any(
+            (c.get("status") or "completed")
+            not in ("completed", "neutral", "skipped")
+            or (
+                (c.get("status") or "completed") == "completed"
+                and not c.get("conclusion")
+            )
+            for c in checks
+        )
+        conclusions = [c.get("conclusion") for c in checks if c.get("conclusion")]
+        if incomplete or not conclusions:
+            result = "fail"
+        elif all(c in ("success", "neutral", "skipped") for c in conclusions):
             result = "pass"
         else:
-            # Any non-success conclusion (failure, cancelled, timed_out, action_required, stale, etc.) = fail
             result = "fail"
         names = ", ".join(
-            f"{c.get('name')}={c.get('conclusion')}" for c in checks[:12] if c.get("name")
+            f"{c.get('name')}={c.get('conclusion') or c.get('status')}"
+            for c in checks[:12]
+            if c.get("name")
         )
         events.append(
             {
                 "type": "ci",
                 "result": result,
-                "detail": names or "check runs completed",
+                "detail": names or "check runs collected",
             }
         )
     combined = (raw.get("checks") or {}).get("combined_status") or {}
-    if combined.get("state") and not conclusions:
+    if combined.get("state") and not checks:
         state = str(combined.get("state") or "")
         if state == "success":
             c_result = "pass"
-        elif state in ("failure", "error"):
-            c_result = "fail"
         else:
-            # pending / unknown — do not claim success
+            # pending / error / failure / unknown — do not claim success
             c_result = "fail"
         events.append(
             {
@@ -266,20 +295,21 @@ def extract_validation(raw: dict[str, Any]) -> list[dict[str, str]]:
         )
 
     if not events:
+        # Schema requires ≥1 validation event; never invent "pass" without evidence.
         if (raw.get("pull") or {}).get("merged"):
             events.append(
                 {
                     "type": "review",
                     "result": "pass",
-                    "detail": "PR merged; explicit CI summary not collected",
+                    "detail": "PR merged; explicit CI/test summary not collected",
                 }
             )
         else:
             events.append(
                 {
                     "type": "other",
-                    "result": "pass",
-                    "detail": "No structured validation found; defaulting for schema completeness",
+                    "result": "fail",
+                    "detail": "No structured validation evidence collected",
                 }
             )
     return events
