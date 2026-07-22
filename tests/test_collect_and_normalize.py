@@ -247,6 +247,43 @@ def test_empty_suggestion_block_omits_field():
     assert "suggestion" not in signals[0]
 
 
+def test_resolved_failed_prose_is_pass():
+    from lib.normalize import extract_validation
+
+    raw = {
+        "pull": {
+            "body": "## Validation\n\nPreviously failed tests are now passing.\n"
+        },
+        "checks": {},
+    }
+    events = extract_validation(raw)
+    assert events[0]["result"] == "pass"
+
+
+def test_review_app_checks_separated_from_ci():
+    from lib.normalize import extract_validation
+
+    raw = {
+        "pull": {"body": ""},
+        "checks": {
+            "check_runs": [
+                {"name": "CPU Tests", "status": "completed", "conclusion": "success"},
+                {
+                    "name": "Kilo Code Review",
+                    "status": "completed",
+                    "conclusion": "failure",
+                },
+            ],
+            "combined_status": {"state": "success", "statuses": [{"context": "ci"}]},
+        },
+    }
+    events = extract_validation(raw)
+    ci = [e for e in events if e["type"] == "ci" and not e["detail"].startswith("combined")]
+    rev = [e for e in events if e["type"] == "other" and e["detail"].startswith("review_apps")]
+    assert ci and ci[0]["result"] == "pass"
+    assert rev and rev[0]["result"] == "fail"
+
+
 def test_load_card_missing_path_raises(tmp_path: Path):
     from lib.normalize import load_card
 

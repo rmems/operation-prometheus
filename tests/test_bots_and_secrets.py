@@ -80,3 +80,16 @@ def test_find_secrets_covers_slack_and_password_assignment():
     assert "slack_webhook" in find_secrets(slack)
     assert "generic_api_assignment" in find_secrets(password)
     assert find_secrets("harmless text without credentials") == []
+
+
+def test_generic_secret_does_not_redact_code_expressions():
+    code = 'let api_key = std::env::var("NR_INSERT_KEY").ok();'
+    cleaned, n = redact_secrets(code)
+    assert n == 0
+    assert "std::env::var" in cleaned
+    assert "api_key" in cleaned
+    # Real-looking env-file literal still redacted (synthetic, not a live key).
+    lit = "api_key=" + ("x" * 24)
+    cleaned2, n2 = redact_secrets(lit)
+    assert n2 >= 1
+    assert ("x" * 24) not in cleaned2

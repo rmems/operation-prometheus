@@ -20,6 +20,36 @@ _CODEX_REVIEW_WRAPPER = re.compile(
     r"|Your team has set up Codex to review"
 )
 
+# Check-run names that are review bots, not build/test validation.
+_REVIEW_APP_CHECK_MARKERS: tuple[str, ...] = (
+    "code review",
+    "coderabbit",
+    "kilo code",
+    "kilo",
+    "gitar",
+    "codacy",
+    "codeant",
+    "macroscope",
+    "devin",
+    "semgrep",
+    "sonar",
+    "cursor bugbot",
+    "bugbot",
+    "greptile",
+    "qodo",
+    "codeql",
+    "snyk",
+    "chatgpt-codex",
+    "codex",
+)
+
+
+def _is_review_app_check(name: str | None) -> bool:
+    low = (name or "").lower()
+    if not low:
+        return False
+    return any(m in low for m in _REVIEW_APP_CHECK_MARKERS)
+
 FEATURE_BUCKET_TO_TRAINING = {
     "repair": "repair",
     "validation": "validation",
@@ -290,7 +320,23 @@ def extract_validation(raw: dict[str, Any]) -> list[dict[str, str]]:
         zero_failures = re.search(
             r"\b(?:0|no)\s+(?:tests?\s+)?fail(?:ed|ures?)\b", low
         )
-        if re.search(r"\bfailed\b", low) and not zero_failures and "no fail" not in low:
+        # Resolved/negated "failed" prose should not invert a passing summary.
+        resolved_failed = re.search(
+            r"(?:"
+            r"\b(?:previously|formerly|no longer)\s+failed\b"
+            r"|\bfailed\s+(?:tests?\s+)?(?:are\s+)?now\s+pass"
+            r"|\bhas\s+not\s+failed\b"
+            r"|\bnot\s+failed\b"
+            r"|\bnever\s+failed\b"
+            r")",
+            low,
+        )
+        if (
+            re.search(r"\bfailed\b", low)
+            and not zero_failures
+            and "no fail" not in low
+            and not resolved_failed
+        ):
             result = "fail"
         # Non-zero error/failure counts (sanitizer / pytest style): "1 error", "2 failures".
         if re.search(r"\b[1-9]\d*\s+(?:tests?\s+)?(?:errors?|failures?)\b", low):
@@ -299,7 +345,10 @@ def extract_validation(raw: dict[str, Any]) -> list[dict[str, str]]:
         events.append({"type": "test", "result": result, "detail": detail})
 
     checks = (raw.get("checks") or {}).get("check_runs") or []
-    if checks:
+    # Split build/test CI from review-app checks (CodeRabbit, Kilo, Codacy, …).
+    ci_checks = [c for c in checks if not _is_review_app_check(c.get("name"))]
+    review_checks = [c for c in checks if _is_review_app_check(c.get("name"))]
+    if ci_checks:
         incomplete = any(
             (c.get("status") or "completed")
             not in ("completed", "neutral", "skipped")
@@ -307,9 +356,9 @@ def extract_validation(raw: dict[str, Any]) -> list[dict[str, str]]:
                 (c.get("status") or "completed") == "completed"
                 and not c.get("conclusion")
             )
-            for c in checks
+            for c in ci_checks
         )
-        conclusions = [c.get("conclusion") for c in checks if c.get("conclusion")]
+        conclusions = [c.get("conclusion") for c in ci_checks if c.get("conclusion")]
         if incomplete or not conclusions:
             result = "fail"
         elif all(c in ("success", "neutral", "skipped") for c in conclusions):
@@ -318,7 +367,7 @@ def extract_validation(raw: dict[str, Any]) -> list[dict[str, str]]:
             result = "fail"
         names = ", ".join(
             f"{c.get('name')}={c.get('conclusion') or c.get('status')}"
-            for c in checks[:12]
+            for c in ci_checks[:12]
             if c.get("name")
         )
         events.append(
@@ -326,6 +375,26 @@ def extract_validation(raw: dict[str, Any]) -> list[dict[str, str]]:
                 "type": "ci",
                 "result": result,
                 "detail": names or "check runs collected",
+            }
+        )
+    if review_checks:
+        r_conclusions = [c.get("conclusion") for c in review_checks if c.get("conclusion")]
+        if r_conclusions and all(
+            c in ("success", "neutral", "skipped") for c in r_conclusions
+        ):
+            r_result = "pass"
+        else:
+            r_result = "fail" if r_conclusions else "fail"
+        r_names = ", ".join(
+            f"{c.get('name')}={c.get('conclusion') or c.get('status')}"
+            for c in review_checks[:12]
+            if c.get("name")
+        )
+        events.append(
+            {
+                "type": "other",
+                "result": r_result,
+                "detail": f"review_apps: {r_names}" if r_names else "review_apps",
             }
         )
     # Combined commit status: GitHub returns state=pending with empty statuses[] when

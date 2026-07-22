@@ -6,8 +6,8 @@
   "source_repo": "rmems/corinth-canal",
   "jsonl_path": "datasets/jsonl/corinth-canal-v0.jsonl",
   "record_count": 6,
-  "sha256": "32b4e979a6515fd57a53bb048a12fae16fb4ae792de6ef06a14f1ae37f78218a",
-  "bytes": 411739,
+  "sha256": "23342ecb438e7e622ba8bd3151c83d628bd6ef1c025475e2d06c7dc6f605061e",
+  "bytes": 412089,
   "records": [
     {
       "id": "corinth-canal-82",
@@ -20,7 +20,7 @@
       "has_issue_context": true,
       "review_signal_count": 8,
       "patch_chars": 85314,
-      "validation_count": 2
+      "validation_count": 3
     },
     {
       "id": "corinth-canal-89",
@@ -32,8 +32,8 @@
       "outcome": "merged",
       "has_issue_context": true,
       "review_signal_count": 8,
-      "patch_chars": 30401,
-      "validation_count": 2
+      "patch_chars": 30415,
+      "validation_count": 3
     },
     {
       "id": "corinth-canal-91",
@@ -46,7 +46,7 @@
       "has_issue_context": true,
       "review_signal_count": 8,
       "patch_chars": 97961,
-      "validation_count": 2
+      "validation_count": 3
     },
     {
       "id": "corinth-canal-94",
@@ -59,7 +59,7 @@
       "has_issue_context": true,
       "review_signal_count": 8,
       "patch_chars": 44520,
-      "validation_count": 2
+      "validation_count": 3
     },
     {
       "id": "corinth-canal-95",
@@ -72,7 +72,7 @@
       "has_issue_context": true,
       "review_signal_count": 8,
       "patch_chars": 63256,
-      "validation_count": 2
+      "validation_count": 3
     },
     {
       "id": "corinth-canal-96",
@@ -85,7 +85,7 @@
       "has_issue_context": true,
       "review_signal_count": 8,
       "patch_chars": 11132,
-      "validation_count": 2
+      "validation_count": 3
     }
   ],
   "notes": "Manually shortlisted, machine-collected, schema-validated v0 trajectories. feature bucket maps to training_use=other per schema v0 enum."

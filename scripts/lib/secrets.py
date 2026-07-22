@@ -26,13 +26,16 @@ _SECRET_PATTERNS: list[tuple[str, re.Pattern[str]]] = [
     # OpenAI-style keys including sk-proj-..., sk-svcacct-..., etc.
     ("openai_key", re.compile(r"\bsk-[A-Za-z0-9_-]{16,}\b")),
     ("slack_webhook", re.compile(r"https://hooks\.slack\.com/services/[A-Za-z0-9/_-]+")),
-    # Quoted values (may contain spaces) OR unquoted tokens.
+    # Quoted values (may contain spaces) OR unquoted env-file-like tokens.
+    # Unquoted branch rejects code expressions (std::env::var, fn calls, etc.).
     ("generic_api_assignment", re.compile(
         r"(?i)\b(api[_-]?key|secret|password|token)\s*[=:]\s*"
         r"(?:"
         r"['\"][^'\"]{12,}['\"]"
         r"|"
-        r"[^'\"\s]{12,}"
+        # High-entropy-ish literals only — no (), ::, {}, $, or spaces.
+        r"(?!std::|os\.environ|process\.env|env::)"
+        r"[A-Za-z0-9_./+=@-]{12,}"
         r")"
     )),
 ]
