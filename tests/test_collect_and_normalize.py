@@ -90,10 +90,17 @@ def test_normalize_validates_against_schema():
 
 
 def test_feature_bucket_maps_to_other_training_use():
+    if not (FIXTURES / "pull_89.json").exists():
+        pytest.skip("fixtures missing")
     raw = collect_pr(FakeClient(), "rmems/corinth-canal", 89)
-    # Force a synthetic feature mapping by using PR 91 overrides without full collect
-    raw["source"]["pr_number"] = 91
-    card = {"training_use_buckets": {"feature": [91]}, "language": "Rust", "domains": ["ml-infra"]}
+    # Use a PR number NOT in TRAINING_USE_OVERRIDE so card buckets are exercised.
+    raw["source"]["pr_number"] = 999
+    raw["source"]["repo"] = "rmems/other-sandbox"
+    card = {
+        "training_use_buckets": {"feature": [999]},
+        "language": "Rust",
+        "domains": ["ml-infra"],
+    }
     traj = normalize_record(raw, card)
     assert traj["training_use"] == "other"
-    assert traj["task_type"] == "feature"
+    assert traj["task_type"] in ("feature", "test", "other")

@@ -197,7 +197,9 @@ def extract_review_signals(raw: dict[str, Any], *, max_items: int = 8) -> list[d
                 "comment": body[:2000],
             }
             if "```suggestion" in body:
-                item["suggestion"] = body[:2000]
+                m = re.search(r"```suggestion\s*\n(.*?)```", body, re.DOTALL)
+                if m:
+                    item["suggestion"] = m.group(1).strip()[:2000]
             signals.append(item)
             if len(signals) >= max_items:
                 break
@@ -238,11 +240,18 @@ def extract_validation(raw: dict[str, Any]) -> list[dict[str, str]]:
         )
     combined = (raw.get("checks") or {}).get("combined_status") or {}
     if combined.get("state") and not conclusions:
-        state = combined.get("state")
+        state = str(combined.get("state") or "")
+        if state == "success":
+            c_result = "pass"
+        elif state in ("failure", "error"):
+            c_result = "fail"
+        else:
+            # pending / unknown — do not claim success
+            c_result = "fail"
         events.append(
             {
                 "type": "ci",
-                "result": "pass" if state == "success" else ("fail" if state == "failure" else "pass"),
+                "result": c_result,
                 "detail": f"combined_status={state}",
             }
         )

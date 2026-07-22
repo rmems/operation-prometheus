@@ -93,16 +93,22 @@ class GitHubClient:
                 last_err = exc
                 status = exc.code
                 retry_after = exc.headers.get("Retry-After") if exc.headers else None
-                # Determine if 403 is rate-limit related
+                # HTTPError body can only be read once — cache for rate-limit + error detail.
+                try:
+                    err_body = exc.read()
+                except Exception:
+                    err_body = b""
+                err_text = err_body.decode("utf-8", errors="replace")
+
                 should_retry = False
                 if status == 403:
-                    is_rate_limit = self._is_rate_limit_403(exc)
+                    is_rate_limit = self._is_rate_limit_403(exc, err_text)
                     should_retry = is_rate_limit and attempt < self.max_retries
                 elif status in (429, 500, 502, 503, 504):
                     should_retry = attempt < self.max_retries
 
                 if should_retry:
-                    delay = self._backoff_seconds(attempt, retry_after, exc)
+                    delay = self._backoff_seconds(attempt, retry_after, exc, err_text)
                     logger.warning(
                         "GitHub %s on %s; retry %s/%s after %.1fs",
                         status,
@@ -113,7 +119,7 @@ class GitHubClient:
                     )
                     self._sleep(delay)
                     continue
-                detail = exc.read().decode("utf-8", errors="replace")[:500]
+                detail = err_text[:500]
                 raise GitHubError(
                     f"GET {url} failed with {status}: {detail}",
                     status=status,
@@ -128,9 +134,8 @@ class GitHubClient:
                 raise GitHubError(f"GET {url} network error: {exc}") from exc
         raise GitHubError(f"GET {url} failed after retries: {last_err}")
 
-    def _is_rate_limit_403(self, exc: urllib.error.HTTPError) -> bool:
-        """Check if a 403 error is rate-limit related."""
-        # Check headers for rate limit signal
+    def _is_rate_limit_403(self, exc: urllib.error.HTTPError, body_text: str = "") -> bool:
+        """Check if a 403 error is rate-limit related (headers + cached body)."""
         if exc.headers:
             remaining = exc.headers.get("X-RateLimit-Remaining")
             if remaining is not None:
@@ -139,35 +144,23 @@ class GitHubClient:
                         return True
                 except ValueError:
                     pass
-        # Check response body for rate limit message
-        try:
-            body = exc.read()
-            text = body.decode("utf-8", errors="replace").lower()
-            if "rate limit" in text or "abuse detection" in text:
-                return True
-        except Exception:
-            pass
-        return False
+        text = (body_text or "").lower()
+        return "rate limit" in text or "abuse detection" in text
 
     def _backoff_seconds(
         self,
         attempt: int,
         retry_after: str | None,
         exc: urllib.error.HTTPError,
+        body_text: str = "",
     ) -> float:
         if retry_after:
             try:
                 return float(retry_after) + 0.5
             except ValueError:
                 pass
-        # Secondary rate limit hint
-        try:
-            body = exc.read()
-            text = body.decode("utf-8", errors="replace").lower()
-            if "secondary rate limit" in text:
-                return 60.0
-        except Exception:
-            pass
+        if "secondary rate limit" in (body_text or "").lower():
+            return 60.0
         reset = exc.headers.get("X-RateLimit-Reset") if exc.headers else None
         if reset:
             try:
@@ -269,5 +262,6 @@ def parse_repo(repo: str) -> tuple[str, str]:
 
 
 def repo_slug(repo: str) -> str:
-    _owner, name = parse_repo(repo)
-    return name
+    """Filesystem-safe slug including owner to avoid cross-org collisions."""
+    owner, name = parse_repo(repo)
+    return f"{owner}_{name}"

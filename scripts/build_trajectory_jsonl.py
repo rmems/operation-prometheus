@@ -96,14 +96,14 @@ def main(argv: list[str] | None = None) -> int:
         logger.error("raw-dir not found: %s", raw_dir)
         return 2
 
-    # Load schema once if jsonschema available
-    validator = None
+    # Load schema once; missing jsonschema is a hard startup failure (avoid silent skips).
     try:
         import jsonschema
         schema = json.loads(SCHEMA_PATH.read_text(encoding="utf-8"))
         validator = jsonschema.Draft7Validator(schema)
     except ImportError:
-        pass
+        logger.error("jsonschema is required. Install with: pip install jsonschema")
+        return 2
 
     card = load_card(args.card)
     try:
@@ -119,11 +119,11 @@ def main(argv: list[str] | None = None) -> int:
     lines: list[str] = []
     errors = 0
     for path in paths:
-        raw = load_raw_record(path)
-        pr = int((raw.get("source") or {}).get("pr_number") or 0)
-        if pr_filter is not None and pr not in pr_filter:
-            continue
         try:
+            raw = load_raw_record(path)
+            pr = int((raw.get("source") or {}).get("pr_number") or 0)
+            if pr_filter is not None and pr not in pr_filter:
+                continue
             traj = normalize_record(
                 raw,
                 card,
@@ -140,7 +140,12 @@ def main(argv: list[str] | None = None) -> int:
                     return 1
                 continue
             lines.append(json.dumps(traj, ensure_ascii=False, separators=(",", ":")))
-            logger.info("OK %s (quality=%.2f training_use=%s)", path.name, traj.get("quality_score", 0), traj.get("training_use"))
+            logger.info(
+                "OK %s (quality=%.2f training_use=%s)",
+                path.name,
+                traj.get("quality_score", 0),
+                traj.get("training_use"),
+            )
         except Exception as exc:
             errors += 1
             logger.error("Failed %s: %s", path.name, exc)

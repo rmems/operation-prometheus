@@ -38,5 +38,6 @@ def test_redact_github_token_and_home_path():
     assert n2 >= 1
     assert "/home/raulmc" not in out2
     cleaned, warnings = sanitize_text(text)
-    assert "[REDACTED]" in cleaned or "[HOME_PATH]" in cleaned
+    assert "[REDACTED]" in cleaned
+    assert "[HOME_PATH]" in cleaned
     assert warnings
