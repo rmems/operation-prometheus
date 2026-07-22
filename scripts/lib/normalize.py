@@ -13,6 +13,13 @@ from .secrets import sanitize_text
 
 DEFAULT_MAX_TRAJECTORY_PATCH = 96 * 1024
 
+# Product wrappers from allowlisted engineering bots that are not actionable.
+_CODEX_REVIEW_WRAPPER = re.compile(
+    r"(?is)^\s*###\s*(?:💡\s*)?Codex Review\b"
+    r"|About Codex in GitHub"
+    r"|Your team has set up Codex to review"
+)
+
 FEATURE_BUCKET_TO_TRAINING = {
     "repair": "repair",
     "validation": "validation",
@@ -64,8 +71,15 @@ TITLE_TASK_HINTS: list[tuple[re.Pattern[str], str]] = [
 
 
 def load_card(path: Path | None) -> dict[str, Any]:
-    if path is None or not path.exists():
+    """Load a dataset card JSON.
+
+    ``path is None`` means no card (optional). A supplied path that does not
+    exist raises ``FileNotFoundError`` so typos fail fast.
+    """
+    if path is None:
         return {}
+    if not path.exists():
+        raise FileNotFoundError(f"dataset card not found: {path}")
     return json.loads(path.read_text(encoding="utf-8"))
 
 
@@ -163,6 +177,13 @@ def extract_issue_context(raw: dict[str, Any]) -> str | None:
     return text or None
 
 
+def _is_non_actionable_review_body(body: str) -> bool:
+    """True for product review wrappers (e.g. Codex summary shell) without signal."""
+    if not body or not body.strip():
+        return True
+    return bool(_CODEX_REVIEW_WRAPPER.search(body))
+
+
 def extract_review_signals(raw: dict[str, Any], *, max_items: int = 8) -> list[dict[str, str]]:
     signals: list[dict[str, str]] = []
     # Process reviews first to preserve maintainer approve/request-changes signals
@@ -182,7 +203,7 @@ def extract_review_signals(raw: dict[str, Any], *, max_items: int = 8) -> list[d
             else:
                 continue
         body, _ = sanitize_text(strip_bot_boilerplate(body))
-        if not body:
+        if not body or _is_non_actionable_review_body(body):
             continue
         signals.append(
             {
@@ -198,9 +219,11 @@ def extract_review_signals(raw: dict[str, Any], *, max_items: int = 8) -> list[d
             if is_bot_user(c.get("user_login"), c.get("user_type")):
                 continue
             body = (c.get("body") or "").strip()
-            if not body:
+            if not body or _is_non_actionable_review_body(body):
                 continue
             body, _ = sanitize_text(body)
+            if not body or _is_non_actionable_review_body(body):
+                continue
             item: dict[str, str] = {
                 "author": c.get("user_login") or "unknown",
                 "comment": body[:2000],
@@ -218,10 +241,10 @@ def extract_review_signals(raw: dict[str, Any], *, max_items: int = 8) -> list[d
             if is_bot_user(c.get("user_login"), c.get("user_type")):
                 continue
             body = strip_bot_boilerplate((c.get("body") or "").strip())
-            if not body or len(body) < 20:
+            if not body or len(body) < 20 or _is_non_actionable_review_body(body):
                 continue
             body, _ = sanitize_text(body)
-            if not body:
+            if not body or _is_non_actionable_review_body(body):
                 continue
             signals.append(
                 {
@@ -237,7 +260,10 @@ def extract_review_signals(raw: dict[str, Any], *, max_items: int = 8) -> list[d
 def extract_validation(raw: dict[str, Any]) -> list[dict[str, str]]:
     events: list[dict[str, str]] = []
     pull_body = strip_bot_boilerplate((raw.get("pull") or {}).get("body") or "")
-    val_section = extract_section(pull_body, ("validation", "test plan", "verification"))
+    val_section = extract_section(
+        pull_body,
+        ("validation", "test plan", "verification", "testing", "tests"),
+    )
     if val_section:
         low = val_section.lower()
         result = "pass"
@@ -251,14 +277,19 @@ def extract_validation(raw: dict[str, Any]) -> list[dict[str, str]]:
             re.compile(r"\bn/?a\b"),
             re.compile(r"\btodo\b"),
             re.compile(r"\bpending\b"),
-            re.compile(r"\bskipped\b"),
         )
         if any(rx.search(low) for rx in non_pass_res):
+            result = "fail"
+        # "skipped" is non-pass only when not explicitly zero (e.g. "0 skipped").
+        if re.search(r"\bskipped\b", low) and not re.search(r"\b0\s+skipped\b", low):
             result = "fail"
         zero_failures = re.search(
             r"\b(?:0|no)\s+(?:tests?\s+)?fail(?:ed|ures?)\b", low
         )
         if re.search(r"\bfailed\b", low) and not zero_failures and "no fail" not in low:
+            result = "fail"
+        # Non-zero error/failure counts (sanitizer / pytest style): "1 error", "2 failures".
+        if re.search(r"\b[1-9]\d*\s+(?:tests?\s+)?(?:errors?|failures?)\b", low):
             result = "fail"
         detail, _ = sanitize_text(val_section[:1500])
         events.append({"type": "test", "result": result, "detail": detail})
@@ -293,11 +324,13 @@ def extract_validation(raw: dict[str, Any]) -> list[dict[str, str]]:
                 "detail": names or "check runs collected",
             }
         )
-    # Always surface combined status when present (legacy status can fail while
-    # Checks API shows green).
+    # Combined commit status: GitHub returns state=pending with empty statuses[] when
+    # only Checks API is used. Surface combined status only when there are real status
+    # contexts, or when there is no Checks API evidence at all.
     combined = (raw.get("checks") or {}).get("combined_status") or {}
-    if combined.get("state"):
-        state = str(combined.get("state") or "")
+    state = str(combined.get("state") or "")
+    status_contexts = combined.get("statuses") or []
+    if state and (status_contexts or not checks):
         c_result = "pass" if state == "success" else "fail"
         events.append(
             {
@@ -337,6 +370,25 @@ def extract_before_context(raw: dict[str, Any]) -> str:
     return text
 
 
+def _safe_sidecar_path(raw_path: Path, sidecar: str) -> Path | None:
+    """Return sidecar path only if it resolves under the raw-record directory."""
+    if not sidecar or not str(sidecar).strip():
+        return None
+    # Reject absolute paths and empty components before join.
+    side_raw = Path(str(sidecar))
+    if side_raw.is_absolute() or ".." in side_raw.parts:
+        return None
+    base = raw_path.parent.resolve()
+    side = (raw_path.parent / side_raw).resolve()
+    try:
+        side.relative_to(base)
+    except ValueError:
+        return None
+    if side.is_file():
+        return side
+    return None
+
+
 def _load_diff_text(raw: dict[str, Any], raw_path: Path | None) -> str:
     diff = raw.get("diff") or {}
     inline = diff.get("inline")
@@ -344,8 +396,8 @@ def _load_diff_text(raw: dict[str, Any], raw_path: Path | None) -> str:
         return inline
     sidecar = diff.get("sidecar_path")
     if sidecar and raw_path is not None:
-        side = raw_path.parent / sidecar
-        if side.exists():
+        side = _safe_sidecar_path(raw_path, str(sidecar))
+        if side is not None:
             return side.read_text(encoding="utf-8", errors="replace")
     # Fall back to concatenating file patches
     chunks: list[str] = []

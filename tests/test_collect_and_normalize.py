@@ -141,3 +141,122 @@ def test_allowlist_case_insensitive_same_repo():
     from lib.raw_record import _norm_repo
 
     assert _norm_repo("Rmems/Corinth-Canal") == _norm_repo("rmems/corinth-canal")
+
+
+def test_empty_combined_status_pending_ignored_when_checks_pass():
+    from lib.normalize import extract_validation
+
+    raw = {
+        "pull": {"body": "## Validation\n\nAll good.\n"},
+        "checks": {
+            "check_runs": [
+                {"name": "test", "status": "completed", "conclusion": "success"},
+            ],
+            "combined_status": {"state": "pending", "statuses": []},
+        },
+    }
+    events = extract_validation(raw)
+    assert not any(
+        e.get("detail", "").startswith("combined_status=") for e in events
+    )
+    assert any(e["type"] == "ci" and e["result"] == "pass" for e in events)
+
+
+def test_nonzero_error_count_fails_validation():
+    from lib.normalize import extract_validation
+
+    raw = {
+        "pull": {"body": "## Testing\n\nERROR SUMMARY: 1 error\n"},
+        "checks": {},
+    }
+    events = extract_validation(raw)
+    assert events[0]["type"] == "test"
+    assert events[0]["result"] == "fail"
+
+
+def test_zero_skipped_is_pass():
+    from lib.normalize import extract_validation
+
+    raw = {
+        "pull": {"body": "## Validation\n\n100 passed, 0 skipped\n"},
+        "checks": {},
+    }
+    events = extract_validation(raw)
+    assert events[0]["result"] == "pass"
+
+
+def test_testing_heading_is_validation_evidence():
+    from lib.normalize import extract_validation
+
+    raw = {
+        "pull": {"body": "## Testing\n\nAll unit tests passed.\n"},
+        "checks": {},
+    }
+    events = extract_validation(raw)
+    assert events[0]["type"] == "test"
+    assert "unit tests" in events[0]["detail"].lower()
+
+
+def test_codex_review_wrapper_not_in_signals():
+    from lib.normalize import extract_review_signals
+
+    raw = {
+        "reviews": [
+            {
+                "user_login": "chatgpt-codex-connector",
+                "user_type": "Bot",
+                "state": "COMMENTED",
+                "body": (
+                    "### 💡 Codex Review\n\nHere are some automated review suggestions.\n"
+                    "Your team has set up Codex to review pull requests in this repo.\n"
+                    "About Codex in GitHub\n"
+                ),
+            },
+            {
+                "user_login": "reviewer-x",
+                "user_type": "User",
+                "state": "CHANGES_REQUESTED",
+                "body": "Please fix the rate limit double-read bug in github_client.",
+            },
+        ],
+        "review_comments": [],
+        "issue_comments": [],
+    }
+    signals = extract_review_signals(raw)
+    assert len(signals) == 1
+    assert signals[0]["author"] == "reviewer-x"
+    assert not any("Codex Review" in (s.get("comment") or "") for s in signals)
+
+
+def test_load_card_missing_path_raises(tmp_path: Path):
+    from lib.normalize import load_card
+
+    assert load_card(None) == {}
+    missing = tmp_path / "nope.json"
+    try:
+        load_card(missing)
+        raise AssertionError("expected FileNotFoundError")
+    except FileNotFoundError:
+        pass
+
+
+def test_sidecar_path_must_stay_under_raw_dir(tmp_path: Path):
+    from lib.normalize import _load_diff_text
+
+    secret = tmp_path / "secret.txt"
+    secret.write_text("PRIVATE", encoding="utf-8")
+    raw_dir = tmp_path / "raw"
+    raw_dir.mkdir()
+    raw_path = raw_dir / "pr-1.json"
+    raw_path.write_text("{}", encoding="utf-8")
+    # Escape via ..
+    raw = {"diff": {"sidecar_path": "../secret.txt", "inline": None}, "files": []}
+    assert "PRIVATE" not in _load_diff_text(raw, raw_path)
+    # Absolute path rejected
+    raw2 = {"diff": {"sidecar_path": str(secret), "inline": None}, "files": []}
+    assert "PRIVATE" not in _load_diff_text(raw2, raw_path)
+    # Basename inside raw dir ok
+    side = raw_dir / "pr-1.diff"
+    side.write_text("DIFF_OK", encoding="utf-8")
+    raw3 = {"diff": {"sidecar_path": "pr-1.diff", "inline": None}, "files": []}
+    assert _load_diff_text(raw3, raw_path) == "DIFF_OK"

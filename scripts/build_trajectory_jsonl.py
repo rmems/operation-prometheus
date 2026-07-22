@@ -110,7 +110,14 @@ def main(argv: list[str] | None = None) -> int:
         logger.error("jsonschema is required. Install with: pip install jsonschema")
         return 2
 
-    card = load_card(args.card)
+    try:
+        card = load_card(args.card)
+    except FileNotFoundError as exc:
+        logger.error("%s", exc)
+        return 2
+    except (OSError, json.JSONDecodeError) as exc:
+        logger.error("Failed to load card %s: %s", args.card, exc)
+        return 2
     out_path: Path | None = args.out
     if out_path is None:
         # Derive from card name when possible; never silently default to corinth-canal.
