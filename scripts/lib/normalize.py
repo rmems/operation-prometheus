@@ -279,7 +279,7 @@ def extract_validation(raw: dict[str, Any]) -> list[dict[str, str]]:
             }
         )
     combined = (raw.get("checks") or {}).get("combined_status") or {}
-    if combined.get("state") and not checks:
+    if combined.get("state"):
         state = str(combined.get("state") or "")
         if state == "success":
             c_result = "pass"
@@ -296,22 +296,13 @@ def extract_validation(raw: dict[str, Any]) -> list[dict[str, str]]:
 
     if not events:
         # Schema requires ≥1 validation event; never invent "pass" without evidence.
-        if (raw.get("pull") or {}).get("merged"):
-            events.append(
-                {
-                    "type": "review",
-                    "result": "pass",
-                    "detail": "PR merged; explicit CI/test summary not collected",
-                }
-            )
-        else:
-            events.append(
-                {
-                    "type": "other",
-                    "result": "fail",
-                    "detail": "No structured validation evidence collected",
-                }
-            )
+        events.append(
+            {
+                "type": "other",
+                "result": "fail",
+                "detail": "No structured validation evidence collected",
+            }
+        )
     return events
 
 
