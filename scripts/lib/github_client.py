@@ -90,7 +90,8 @@ class GitHubClient:
         for attempt in range(self.max_retries + 1):
             req = urllib.request.Request(url, headers=self._headers(accept), method="GET")
             try:
-                with urllib.request.urlopen(req, timeout=60) as resp:  # noqa: S310
+                # Scheme already restricted to https:// above (Bandit B310).
+                with urllib.request.urlopen(req, timeout=60) as resp:  # nosec B310
                     body = resp.read()
                     headers = {k.lower(): v for k, v in resp.headers.items()}
                     self._maybe_throttle(headers)
