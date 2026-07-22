@@ -174,8 +174,10 @@ def extract_review_signals(raw: dict[str, Any], *, max_items: int = 8) -> list[d
         state = str(r.get("state") or "").upper()
         if not body or len(body) < 20:
             if state in ("APPROVED", "CHANGES_REQUESTED", "DISMISSED"):
-                body = (body or f"Review {state}").strip()
-                if len(body) < 12:
+                if body:
+                    # Keep short human wording (e.g. LGTM) and annotate state.
+                    body = f"{body} (review state: {state})"
+                else:
                     body = f"Review state: {state}"
             else:
                 continue
