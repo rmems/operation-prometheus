@@ -35,6 +35,11 @@ CROSS_REPO_ALLOWLIST: tuple[str, ...] = (
 )
 
 
+def _norm_repo(repo: str) -> str:
+    """Case-fold owner/repo for allowlist and same-repo comparisons."""
+    return str(repo).strip().lower()
+
+
 def _user_login(obj: dict | None) -> str | None:
     if not obj:
         return None
@@ -148,12 +153,12 @@ def collect_pr(
     full = f"{owner}/{name}"
     warnings: list[str] = []
     endpoints: list[str] = []
-    allowlist = set(CROSS_REPO_ALLOWLIST)
+    allowlist = {_norm_repo(x) for x in CROSS_REPO_ALLOWLIST if str(x).strip()}
     if cross_repo_allowlist:
         for entry in cross_repo_allowlist:
             entry = str(entry).strip()
             if entry:
-                allowlist.add(entry)
+                allowlist.add(_norm_repo(entry))
 
     pull = client.get_json(f"/repos/{full}/pulls/{pr_number}")
     endpoints.append("pulls")
@@ -237,12 +242,12 @@ def collect_pr(
 
     linked: list[dict[str, Any]] = []
     for i_owner, i_repo, num in parse_linked_issue_numbers(link_blob, owner, name):
-        # Check if cross-repo fetch is allowed
+        # Check if cross-repo fetch is allowed (case-insensitive owner/repo).
         target_repo = f"{i_owner}/{i_repo}"
         source_repo = f"{owner}/{name}"
-        if target_repo != source_repo:
+        if _norm_repo(target_repo) != _norm_repo(source_repo):
             # Cross-repo reference - require allowlist entry (CLI or module default).
-            if target_repo not in allowlist:
+            if _norm_repo(target_repo) not in allowlist:
                 warnings.append(
                     f"linked_issue_{num}_skipped: cross-repo {target_repo} not in allowlist "
                     f"(pass --allow-cross-repo {target_repo})"

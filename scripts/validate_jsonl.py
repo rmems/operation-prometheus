@@ -49,6 +49,18 @@ def load_schema() -> dict:
         return json.load(f)
 
 
+def _iter_strings(obj: object):
+    """Yield raw string values from a nested JSON structure (pre-serialization)."""
+    if isinstance(obj, str):
+        yield obj
+    elif isinstance(obj, dict):
+        for value in obj.values():
+            yield from _iter_strings(value)
+    elif isinstance(obj, list):
+        for value in obj:
+            yield from _iter_strings(value)
+
+
 def policy_errors(record: dict, lineno: int, filename: str) -> list[str]:
     """Extra policy checks beyond JSON Schema."""
     errors: list[str] = []
@@ -61,16 +73,24 @@ def policy_errors(record: dict, lineno: int, filename: str) -> list[str]:
             errors.append(
                 f"  {filename}:{lineno} [source_urls] - missing canonical PR URL {canonical}"
             )
-    blob = json.dumps(record, ensure_ascii=False)
-    if HOME_PATH_RE.search(blob):
+    # Scan raw strings so Windows paths (C:\\Users\\...) are not missed via json.dumps escapes.
+    home_hit = False
+    secret_families: list[str] = []
+    seen_families: set[str] = set()
+    for text in _iter_strings(record):
+        if not home_hit and HOME_PATH_RE.search(text):
+            home_hit = True
+        for family in find_secrets(text):
+            if family not in seen_families:
+                seen_families.add(family)
+                secret_families.append(family)
+    if home_hit:
         errors.append(
             f"  {filename}:{lineno} [policy] - absolute user-home path present "
             f"(/home, /Users, or Windows Users)"
         )
-    # Mirror sanitizer families (GitHub/OpenAI/AWS/PEM/Slack/generic assignments).
-    secret_hits = find_secrets(blob)
-    if secret_hits:
-        families = ", ".join(secret_hits)
+    if secret_families:
+        families = ", ".join(secret_families)
         errors.append(
             f"  {filename}:{lineno} [policy] - secret-like token pattern present "
             f"({families})"

@@ -1,10 +1,8 @@
 # Codacy configuration for Operation Prometheus.
-# Collector/normalizer modules are intentionally branching (GitHub edge cases).
-# Exclude them from static quality gates so Codacy does not block the PR on
-# complexity while still scanning docs/schemas for real issues.
+# Keep production pipeline scripts under analysis. Exclude generated data,
+# fixtures, caches, and local tooling only.
 ---
 exclude_paths:
-  - "scripts/**"
   - "tests/**"
   - "datasets/**"
   - ".kilo/**"

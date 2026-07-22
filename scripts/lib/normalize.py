@@ -255,7 +255,10 @@ def extract_validation(raw: dict[str, Any]) -> list[dict[str, str]]:
         )
         if any(rx.search(low) for rx in non_pass_res):
             result = "fail"
-        if re.search(r"\bfailed\b", low) and "0 failed" not in low and "no fail" not in low:
+        zero_failures = re.search(
+            r"\b(?:0|no)\s+(?:tests?\s+)?fail(?:ed|ures?)\b", low
+        )
+        if re.search(r"\bfailed\b", low) and not zero_failures and "no fail" not in low:
             result = "fail"
         detail, _ = sanitize_text(val_section[:1500])
         events.append({"type": "test", "result": result, "detail": detail})

@@ -123,3 +123,21 @@ def test_open_draft_outcome_is_open():
     assert outcome_for({"pull": {"state": "open", "draft": False, "merged": False}}) == "open"
     assert outcome_for({"pull": {"state": "closed", "draft": True, "merged": False}}) == "closed"
     assert outcome_for({"pull": {"merged": True, "draft": True, "state": "closed"}}) == "merged"
+
+
+def test_zero_tests_failed_is_pass():
+    from lib.normalize import extract_validation
+
+    raw = {
+        "pull": {"body": "## Validation\n\n0 tests failed, all green.\n"},
+        "checks": {},
+    }
+    events = extract_validation(raw)
+    assert events[0]["type"] == "test"
+    assert events[0]["result"] == "pass"
+
+
+def test_allowlist_case_insensitive_same_repo():
+    from lib.raw_record import _norm_repo
+
+    assert _norm_repo("Rmems/Corinth-Canal") == _norm_repo("rmems/corinth-canal")

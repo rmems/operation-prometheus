@@ -15,8 +15,12 @@ from __future__ import annotations
 import argparse
 import json
 import logging
+import re
 import sys
 from pathlib import Path
+
+# Safe dataset id for deriving datasets/jsonl/<name>.jsonl (no path separators).
+_SAFE_CARD_NAME = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$")
 
 _SCRIPTS = Path(__file__).resolve().parent
 if str(_SCRIPTS) not in sys.path:
@@ -111,13 +115,22 @@ def main(argv: list[str] | None = None) -> int:
     if out_path is None:
         # Derive from card name when possible; never silently default to corinth-canal.
         card_name = card.get("name") if isinstance(card, dict) else None
-        if card_name:
-            out_path = ROOT / "datasets" / "jsonl" / f"{card_name}.jsonl"
+        name = str(card_name).strip() if card_name is not None else ""
+        if name and _SAFE_CARD_NAME.fullmatch(name) and ".." not in name:
+            out_path = ROOT / "datasets" / "jsonl" / f"{name}.jsonl"
         else:
-            logger.error(
-                "Refusing to write without --out (or a --card with a name field). "
-                "This prevents overwriting curated JSONL by accident."
-            )
+            if name:
+                logger.error(
+                    "Card name %r is not a safe dataset id (must match %s). "
+                    "Pass --out explicitly.",
+                    name,
+                    _SAFE_CARD_NAME.pattern,
+                )
+            else:
+                logger.error(
+                    "Refusing to write without --out (or a --card with a safe name field). "
+                    "This prevents overwriting curated JSONL by accident."
+                )
             return 2
     try:
         pr_filter = _parse_prs(args.pr)
