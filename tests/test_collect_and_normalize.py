@@ -24,7 +24,7 @@ CARD = ROOT / "datasets" / "cards" / "corinth-canal-v0.json"
 class FakeClient:
     """Map GitHub REST paths to fixture payloads."""
 
-    token = "test"
+    token = "fixture-token"
     base_url = "https://api.github.com"
 
     def get_json(self, path_or_url: str) -> Any:

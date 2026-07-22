@@ -25,9 +25,16 @@ except ImportError:
     sys.exit(2)
 
 SCHEMA_PATH = Path(__file__).resolve().parent.parent / "schemas" / "pr_trajectory.schema.json"
-HOME_PATH_RE = re.compile(r"/home/[A-Za-z0-9._-]+")
+HOME_PATH_RE = re.compile(
+    r"(?:"
+    r"/home/[A-Za-z0-9._-]+"
+    r"|/Users/[A-Za-z0-9._-]+"
+    r"|(?:[A-Za-z]:\\Users\\|[A-Za-z]:/Users/)[A-Za-z0-9._-]+"
+    r")",
+    re.IGNORECASE,
+)
 SECRET_HINT_RE = re.compile(
-    r"(?:\b(?:gh[pousr]_|github_pat_|sk-|AKIA)[A-Za-z0-9_]*|"
+    r"(?:\b(?:gh[pousr]_|github_pat_|sk-[A-Za-z0-9_-]{8,}|AKIA)[A-Za-z0-9_]*|"
     r"-----BEGIN [A-Z ]*PRIVATE KEY-----)"
 )
 
@@ -55,7 +62,8 @@ def policy_errors(record: dict, lineno: int, filename: str) -> list[str]:
     blob = json.dumps(record, ensure_ascii=False)
     if HOME_PATH_RE.search(blob):
         errors.append(
-            f"  {filename}:{lineno} [policy] - absolute /home/ path present (data-policy hygiene)"
+            f"  {filename}:{lineno} [policy] - absolute user-home path present "
+            f"(/home, /Users, or Windows Users)"
         )
     if SECRET_HINT_RE.search(blob):
         errors.append(

@@ -67,8 +67,11 @@ class GitHubClient:
         return headers
 
     def _resolve_url(self, path_or_url: str) -> str:
-        if path_or_url.startswith("http://") or path_or_url.startswith("https://"):
+        if path_or_url.startswith("https://"):
             return path_or_url
+        if path_or_url.startswith("http://"):
+            # Never use cleartext HTTP for API calls.
+            return "https://" + path_or_url.removeprefix("http://")
         if not path_or_url.startswith("/"):
             path_or_url = "/" + path_or_url
         return self.base_url + path_or_url

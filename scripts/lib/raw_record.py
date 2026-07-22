@@ -212,10 +212,18 @@ def collect_pr(
         except GitHubError as exc:
             warnings.append(f"combined_status_failed: {exc}")
 
+    # Closing keywords from PR body AND commit messages (GitHub also closes from commits).
+    link_text_parts = [pull.get("body") or ""]
+    for c in commits:
+        msg = ((c.get("commit") or {}).get("message") if isinstance(c, dict) else None)
+        if not msg and isinstance(c, dict):
+            msg = c.get("message")
+        if msg:
+            link_text_parts.append(str(msg))
+    link_blob = "\n".join(link_text_parts)
+
     linked: list[dict[str, Any]] = []
-    for i_owner, i_repo, num in parse_linked_issue_numbers(
-        pull.get("body"), owner, name
-    ):
+    for i_owner, i_repo, num in parse_linked_issue_numbers(link_blob, owner, name):
         # Check if cross-repo fetch is allowed
         target_repo = f"{i_owner}/{i_repo}"
         source_repo = f"{owner}/{name}"

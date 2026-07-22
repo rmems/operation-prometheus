@@ -239,9 +239,22 @@ def extract_validation(raw: dict[str, Any]) -> list[dict[str, str]]:
     pull_body = strip_bot_boilerplate((raw.get("pull") or {}).get("body") or "")
     val_section = extract_section(pull_body, ("validation", "test plan", "verification"))
     if val_section:
-        # Capture pass/fail cues
-        result = "pass"
         low = val_section.lower()
+        result = "pass"
+        # Explicit non-pass language / unchecked templates.
+        non_pass_markers = (
+            "not run",
+            "not executed",
+            "skipped",
+            "n/a",
+            "unchecked",
+            "[ ]",
+            "todo",
+            "pending",
+            "untested",
+        )
+        if any(m in low for m in non_pass_markers):
+            result = "fail"
         if "fail" in low and "0 failed" not in low and "no fail" not in low:
             if re.search(r"\bfailed\b", low) and "0 failed" not in low:
                 result = "fail"
@@ -278,14 +291,12 @@ def extract_validation(raw: dict[str, Any]) -> list[dict[str, str]]:
                 "detail": names or "check runs collected",
             }
         )
+    # Always surface combined status when present (legacy status can fail while
+    # Checks API shows green).
     combined = (raw.get("checks") or {}).get("combined_status") or {}
     if combined.get("state"):
         state = str(combined.get("state") or "")
-        if state == "success":
-            c_result = "pass"
-        else:
-            # pending / error / failure / unknown — do not claim success
-            c_result = "fail"
+        c_result = "pass" if state == "success" else "fail"
         events.append(
             {
                 "type": "ci",
@@ -385,9 +396,14 @@ def outcome_for(raw: dict[str, Any]) -> str:
     pull = raw.get("pull") or {}
     if pull.get("merged"):
         return "merged"
-    if pull.get("state") == "closed":
+    state = str(pull.get("state") or "").lower()
+    if state == "closed":
         return "closed"
-    return "abandoned"
+    if state == "open":
+        return "open"
+    if pull.get("draft"):
+        return "abandoned"
+    return "open"
 
 
 def language_for(card: dict[str, Any], raw: dict[str, Any]) -> str:

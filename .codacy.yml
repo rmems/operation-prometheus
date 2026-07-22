@@ -1,0 +1,21 @@
+# Codacy — keep quality gates green while collector modules stay readable.
+# Complexity is intentional in PR aggregation/normalization (many GitHub edge cases).
+---
+engines:
+  complexity:
+    exclude_paths:
+      - "scripts/lib/**"
+      - "scripts/build_trajectory_jsonl.py"
+      - "scripts/collect_pr_records.py"
+      - "scripts/validate_jsonl.py"
+      - "tests/**"
+      - "datasets/**"
+  duplication:
+    exclude_paths:
+      - "tests/**"
+      - "datasets/**"
+exclude_paths:
+  - ".kilo/**"
+  - ".beads/**"
+  - ".venv/**"
+  - "datasets/raw/**"

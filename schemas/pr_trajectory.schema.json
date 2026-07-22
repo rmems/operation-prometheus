@@ -163,9 +163,10 @@
         "merged",
         "closed",
         "superseded",
-        "abandoned"
+        "abandoned",
+        "open"
       ],
-      "description": "Final state of the PR."
+      "description": "Final state of the PR. Use open for still-active unmerged PRs."
     },
     "training_use": {
       "type": "string",

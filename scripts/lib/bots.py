@@ -47,6 +47,15 @@ _BOILERPLATE_MARKERS = (
     "Open in Devin Review",
 )
 
+# Strip full marker-delimited bot blocks (content between markers), not only tags.
+_CURSOR_BLOCK = re.compile(
+    r"<!--\s*CURSOR_SUMMARY\s*-->.*?<!--\s*/CURSOR_SUMMARY\s*-->",
+    re.DOTALL | re.IGNORECASE,
+)
+_DEVIN_BLOCK = re.compile(
+    r"<!--\s*devin-review-badge-begin\s*-->.*?<!--\s*devin-review-badge-end\s*-->",
+    re.DOTALL | re.IGNORECASE,
+)
 _HTML_COMMENT = re.compile(r"<!--.*?-->", re.DOTALL)
 _CODEANT_BLOCK = re.compile(
     r"##\s*\*\*CodeAnt-AI Description\*\*.*",
@@ -76,7 +85,10 @@ def strip_bot_boilerplate(markdown: str) -> str:
     """Remove common automated PR description footers."""
     if not markdown:
         return ""
-    text = _HTML_COMMENT.sub("", markdown)
+    # Remove full bot blocks first (so inner content does not leak).
+    text = _CURSOR_BLOCK.sub("", markdown)
+    text = _DEVIN_BLOCK.sub("", text)
+    text = _HTML_COMMENT.sub("", text)
     text = _CODEANT_BLOCK.sub("", text)
     text = _MACROSCOPE_NOTE.sub("", text)
 

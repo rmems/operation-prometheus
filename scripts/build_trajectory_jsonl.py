@@ -48,8 +48,9 @@ def build_parser() -> argparse.ArgumentParser:
     p.add_argument(
         "--out",
         type=Path,
-        default=ROOT / "datasets" / "jsonl" / "corinth-canal-v0.jsonl",
-        help="Output JSONL path",
+        default=None,
+        help="Output JSONL path (required unless --card provides a name, "
+        "e.g. datasets/cards/foo-v0.json → datasets/jsonl/foo-v0.jsonl)",
     )
     p.add_argument(
         "--pr",
@@ -106,6 +107,18 @@ def main(argv: list[str] | None = None) -> int:
         return 2
 
     card = load_card(args.card)
+    out_path: Path | None = args.out
+    if out_path is None:
+        # Derive from card name when possible; never silently default to corinth-canal.
+        card_name = card.get("name") if isinstance(card, dict) else None
+        if card_name:
+            out_path = ROOT / "datasets" / "jsonl" / f"{card_name}.jsonl"
+        else:
+            logger.error(
+                "Refusing to write without --out (or a --card with a name field). "
+                "This prevents overwriting curated JSONL by accident."
+            )
+            return 2
     try:
         pr_filter = _parse_prs(args.pr)
     except ValueError as exc:
@@ -156,9 +169,10 @@ def main(argv: list[str] | None = None) -> int:
         logger.error("No trajectories produced")
         return 1
 
-    args.out.parent.mkdir(parents=True, exist_ok=True)
-    args.out.write_text("\n".join(lines) + "\n", encoding="utf-8")
-    logger.info("Wrote %s trajectories → %s", len(lines), args.out)
+    assert out_path is not None
+    out_path.parent.mkdir(parents=True, exist_ok=True)
+    out_path.write_text("\n".join(lines) + "\n", encoding="utf-8")
+    logger.info("Wrote %s trajectories → %s", len(lines), out_path)
     return 1 if errors else 0
 
 

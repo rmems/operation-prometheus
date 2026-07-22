@@ -94,7 +94,7 @@ All trajectories are extracted as JSONL records conforming to [pr_trajectory.sch
 **Status**: v0 shortlist (not yet extracted)  
 **Metadata card**: [datasets/cards/grok-ozempic-v0.json](../datasets/cards/grok-ozempic-v0.json)
 
-### Shortlisted PRs
+### Shortlisted PRs (grok-ozempic)
 
 | PR | Title | Domain | Bucket | Signal |
 |----|-------|--------|--------|--------|
