@@ -231,7 +231,11 @@ def extract_review_signals(raw: dict[str, Any], *, max_items: int = 8) -> list[d
             if "```suggestion" in body:
                 m = re.search(r"```suggestion\s*\n(.*?)```", body, re.DOTALL)
                 if m:
-                    item["suggestion"] = m.group(1).strip()[:2000]
+                    suggestion = m.group(1).strip()[:2000]
+                    # Empty suggestion blocks (delete-line) must not set the field —
+                    # schema requires minLength 1 on suggestion when present.
+                    if suggestion:
+                        item["suggestion"] = suggestion
             signals.append(item)
             if len(signals) >= max_items:
                 break

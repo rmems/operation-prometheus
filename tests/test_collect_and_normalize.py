@@ -228,6 +228,25 @@ def test_codex_review_wrapper_not_in_signals():
     assert not any("Codex Review" in (s.get("comment") or "") for s in signals)
 
 
+def test_empty_suggestion_block_omits_field():
+    from lib.normalize import extract_review_signals
+
+    raw = {
+        "reviews": [],
+        "review_comments": [
+            {
+                "user_login": "reviewer-x",
+                "user_type": "User",
+                "body": "Delete this line:\n```suggestion\n\n```\n",
+            }
+        ],
+        "issue_comments": [],
+    }
+    signals = extract_review_signals(raw)
+    assert len(signals) == 1
+    assert "suggestion" not in signals[0]
+
+
 def test_load_card_missing_path_raises(tmp_path: Path):
     from lib.normalize import load_card
 
