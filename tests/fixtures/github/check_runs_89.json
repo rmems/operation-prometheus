@@ -1,0 +1,16 @@
+{
+  "check_runs": [
+    {
+      "name": "CUDA Build",
+      "status": "completed",
+      "conclusion": "success",
+      "html_url": "https://github.com/rmems/corinth-canal/actions"
+    },
+    {
+      "name": "CPU tests",
+      "status": "completed",
+      "conclusion": "success",
+      "html_url": "https://github.com/rmems/corinth-canal/actions"
+    }
+  ]
+}

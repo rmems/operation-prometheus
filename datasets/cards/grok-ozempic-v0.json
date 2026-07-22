@@ -1,0 +1,26 @@
+{
+  "name": "grok-ozempic-v0",
+  "source_repo": "rmems/grok-ozempic",
+  "source_repo_url": "https://github.com/rmems/grok-ozempic",
+  "source_repo_description": "SNN-logic ternary quantization pipeline for Grok-1 MoE with xai-dissect manifests and SAAQ artifact validation",
+  "schema_version": "pr_trajectory_v0",
+  "schema_url": "https://github.com/rmems/operation-prometheus/schemas/pr_trajectory.schema.json",
+  "language": "Rust",
+  "domains": ["ml-infra", "quantization", "validation"],
+  "pr_count": 6,
+  "pr_numbers": [29, 26, 24, 25, 11, 8],
+  "training_use_buckets": {
+    "validation": [29, 26, 24],
+    "feature": [25, 11, 8]
+  },
+  "extracted_at": null,
+  "status": "shortlist-v0",
+  "created_at": "2026-07-21",
+  "created_by": "Grok Build Agent: Grok 4.5",
+  "notes": "High-signal merged PRs for ternary quantization, alignment inventory, SAAQ artifact ladder, myelin CUDA backend boundary, and xai-dissect pipeline wiring. Extraction not yet performed. Schema maps feature → training_use other.",
+  "source_doc": "docs/source-repos.md",
+  "related_issues": {
+    "operation_prometheus": [],
+    "grok_ozempic": [16, 22, 27, 13, 14, 15, 17, 18, 19, 21, 10, 6, 5]
+  }
+}

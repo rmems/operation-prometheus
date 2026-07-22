@@ -1,0 +1,152 @@
+#!/usr/bin/env python3
+"""Normalize raw PR records into schema-compliant trajectory JSONL.
+
+Examples:
+    python scripts/build_trajectory_jsonl.py \\
+      --raw-dir datasets/raw/corinth-canal \\
+      --card datasets/cards/corinth-canal-v0.json \\
+      --out datasets/jsonl/corinth-canal-v0.jsonl
+
+    python scripts/validate_jsonl.py datasets/jsonl/corinth-canal-v0.jsonl
+"""
+
+from __future__ import annotations
+
+import argparse
+import json
+import logging
+import sys
+from pathlib import Path
+
+_SCRIPTS = Path(__file__).resolve().parent
+if str(_SCRIPTS) not in sys.path:
+    sys.path.insert(0, str(_SCRIPTS))
+
+from lib.normalize import load_card, load_raw_record, normalize_record  # noqa: E402
+
+logging.basicConfig(level=logging.INFO, format="%(levelname)s: %(message)s")
+logger = logging.getLogger("build_trajectory_jsonl")
+
+ROOT = Path(__file__).resolve().parent.parent
+SCHEMA_PATH = ROOT / "schemas" / "pr_trajectory.schema.json"
+
+
+def build_parser() -> argparse.ArgumentParser:
+    p = argparse.ArgumentParser(description=__doc__)
+    p.add_argument(
+        "--raw-dir",
+        type=Path,
+        required=True,
+        help="Directory containing pr-*.json raw records",
+    )
+    p.add_argument(
+        "--card",
+        type=Path,
+        default=None,
+        help="Dataset card JSON for language/domain/bucket overlay",
+    )
+    p.add_argument(
+        "--out",
+        type=Path,
+        default=ROOT / "datasets" / "jsonl" / "corinth-canal-v0.jsonl",
+        help="Output JSONL path",
+    )
+    p.add_argument(
+        "--pr",
+        action="append",
+        default=None,
+        help="Optional PR filter (repeatable or comma-separated)",
+    )
+    p.add_argument(
+        "--max-patch-bytes",
+        type=int,
+        default=96 * 1024,
+        help="Max bytes for trajectory patch field (default 96KiB)",
+    )
+    p.add_argument(
+        "--strict",
+        action="store_true",
+        help="Fail if any record fails schema validation",
+    )
+    return p
+
+
+def _parse_prs(values: list[str] | None) -> set[int] | None:
+    if not values:
+        return None
+    out: set[int] = set()
+    for v in values:
+        for part in v.split(","):
+            part = part.strip()
+            if part:
+                out.add(int(part))
+    return out
+
+
+def _validate(record: dict) -> list[str]:
+    try:
+        import jsonschema
+    except ImportError:
+        return ["jsonschema not installed"]
+    schema = json.loads(SCHEMA_PATH.read_text(encoding="utf-8"))
+    validator = jsonschema.Draft7Validator(schema)
+    return [e.message for e in sorted(validator.iter_errors(record), key=lambda e: list(e.path))]
+
+
+def main(argv: list[str] | None = None) -> int:
+    args = build_parser().parse_args(argv)
+    raw_dir: Path = args.raw_dir
+    if not raw_dir.is_dir():
+        logger.error("raw-dir not found: %s", raw_dir)
+        return 2
+
+    card = load_card(args.card)
+    pr_filter = _parse_prs(args.pr)
+    paths = sorted(raw_dir.glob("pr-*.json"))
+    if not paths:
+        logger.error("No pr-*.json files in %s", raw_dir)
+        return 1
+
+    lines: list[str] = []
+    errors = 0
+    for path in paths:
+        raw = load_raw_record(path)
+        pr = int((raw.get("source") or {}).get("pr_number") or 0)
+        if pr_filter is not None and pr not in pr_filter:
+            continue
+        try:
+            traj = normalize_record(
+                raw,
+                card,
+                raw_path=path,
+                max_patch_bytes=args.max_patch_bytes,
+            )
+            schema_errors = _validate(traj)
+            if schema_errors:
+                errors += 1
+                logger.error("%s schema errors:", path.name)
+                for err in schema_errors:
+                    logger.error("  - %s", err)
+                if args.strict:
+                    return 1
+                continue
+            lines.append(json.dumps(traj, ensure_ascii=False, separators=(",", ":")))
+            logger.info("OK %s (quality=%.2f training_use=%s)", path.name, traj.get("quality_score", 0), traj.get("training_use"))
+        except Exception as exc:
+            errors += 1
+            logger.error("Failed %s: %s", path.name, exc)
+            if args.strict:
+                return 1
+
+    if not lines:
+        logger.error("No trajectories produced")
+        return 1
+
+    args.out.parent.mkdir(parents=True, exist_ok=True)
+    args.out.write_text("\n".join(lines) + "\n", encoding="utf-8")
+    logger.info("Wrote %s trajectories → %s", len(lines), args.out)
+    return 1 if errors else 0
+
+
+if __name__ == "__main__":
+    sys.exit(main())

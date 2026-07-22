@@ -1,0 +1,10 @@
+{
+  "state": "success",
+  "statuses": [
+    {
+      "context": "ci",
+      "state": "success",
+      "description": "ok"
+    }
+  ]
+}

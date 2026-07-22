@@ -18,3 +18,13 @@ See:
 - [AGENTS.md](../AGENTS.md) for overall rules
 - [schemas/pr_trajectory.schema.json](../schemas/pr_trajectory.schema.json) for the canonical trajectory data shape (schema v0)
 - [docs/source-repos.md](../docs/source-repos.md) for extraction shortlists and source repo tracking
+- [cards/corinth-canal-trajectories-v0.md](cards/corinth-canal-trajectories-v0.md) for the first extracted dataset card
+- [../STATUS.md](../STATUS.md) for current extraction status
+
+### Layout notes
+
+- `jsonl/` — curated, schema-valid trajectories (small; commit OK)
+- `cards/` — lightweight metadata + human dataset cards
+- `manifests/` — per-dataset hashes and per-record quality summary
+- `raw/` — local collector output only (gitignored)
+- `examples/` — tiny synthetic samples for schema demos
