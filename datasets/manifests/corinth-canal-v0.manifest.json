@@ -6,11 +6,11 @@
   "source_repo": "rmems/corinth-canal",
   "jsonl_path": "datasets/jsonl/corinth-canal-v0.jsonl",
   "record_count": 6,
-  "sha256": "23342ecb438e7e622ba8bd3151c83d628bd6ef1c025475e2d06c7dc6f605061e",
-  "bytes": 412089,
+  "sha256": "3e735db7a51447532afc603818fa4f6384d6a8abf132656efe63895e0911eb1e",
+  "bytes": 412125,
   "records": [
     {
-      "id": "corinth-canal-82",
+      "id": "rmems-corinth-canal-82",
       "pr_number": 82,
       "training_use": "repair",
       "task_type": "feature",
@@ -23,7 +23,7 @@
       "validation_count": 3
     },
     {
-      "id": "corinth-canal-89",
+      "id": "rmems-corinth-canal-89",
       "pr_number": 89,
       "training_use": "validation",
       "task_type": "test",
@@ -36,7 +36,7 @@
       "validation_count": 3
     },
     {
-      "id": "corinth-canal-91",
+      "id": "rmems-corinth-canal-91",
       "pr_number": 91,
       "training_use": "other",
       "task_type": "feature",
@@ -49,7 +49,7 @@
       "validation_count": 3
     },
     {
-      "id": "corinth-canal-94",
+      "id": "rmems-corinth-canal-94",
       "pr_number": 94,
       "training_use": "repair",
       "task_type": "feature",
@@ -62,7 +62,7 @@
       "validation_count": 3
     },
     {
-      "id": "corinth-canal-95",
+      "id": "rmems-corinth-canal-95",
       "pr_number": 95,
       "training_use": "other",
       "task_type": "feature",
@@ -75,7 +75,7 @@
       "validation_count": 3
     },
     {
-      "id": "corinth-canal-96",
+      "id": "rmems-corinth-canal-96",
       "pr_number": 96,
       "training_use": "validation",
       "task_type": "feature",
@@ -88,5 +88,5 @@
       "validation_count": 3
     }
   ],
-  "notes": "Manually shortlisted, machine-collected, schema-validated v0 trajectories. feature bucket maps to training_use=other per schema v0 enum."
+  "notes": "Manually shortlisted, machine-collected, schema-validated v0 trajectories. feature bucket maps to training_use=other per schema v0 enum. Trajectory ids include owner (rmems-corinth-canal-N)."
 }

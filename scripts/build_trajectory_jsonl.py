@@ -189,11 +189,22 @@ def main(argv: list[str] | None = None) -> int:
         logger.error("No trajectories produced")
         return 1
 
+    # Never overwrite a curated JSONL with a partial batch after errors.
+    if errors:
+        logger.error(
+            "Aborting write: %s record error(s); leaving %s unchanged",
+            errors,
+            out_path,
+        )
+        return 1
+
     assert out_path is not None
     out_path.parent.mkdir(parents=True, exist_ok=True)
-    out_path.write_text("\n".join(lines) + "\n", encoding="utf-8")
+    tmp_path = out_path.with_suffix(out_path.suffix + ".tmp")
+    tmp_path.write_text("\n".join(lines) + "\n", encoding="utf-8")
+    tmp_path.replace(out_path)
     logger.info("Wrote %s trajectories → %s", len(lines), out_path)
-    return 1 if errors else 0
+    return 0
 
 
 if __name__ == "__main__":

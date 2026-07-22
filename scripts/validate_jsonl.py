@@ -35,6 +35,7 @@ HOME_PATH_RE = re.compile(
     r"(?:"
     r"/home/[A-Za-z0-9._-]+"
     r"|/Users/[A-Za-z0-9._-]+"
+    r"|/root(?:/[^\s\"']+)?"
     r"|(?:[A-Za-z]:\\Users\\|[A-Za-z]:/Users/)[A-Za-z0-9._-]+"
     r")",
     re.IGNORECASE,
@@ -87,7 +88,7 @@ def policy_errors(record: dict, lineno: int, filename: str) -> list[str]:
     if home_hit:
         errors.append(
             f"  {filename}:{lineno} [policy] - absolute user-home path present "
-            f"(/home, /Users, or Windows Users)"
+            f"(/home, /Users, /root, or Windows Users)"
         )
     if secret_families:
         families = ", ".join(secret_families)

@@ -40,12 +40,14 @@ _SECRET_PATTERNS: list[tuple[str, re.Pattern[str]]] = [
     )),
 ]
 
-# Local absolute user-home paths (Linux, macOS, Windows) — must not enter training data.
+# Local absolute user-home paths (Linux, macOS, Windows, container root) —
+# must not enter training data.
 _HOME_PATH = re.compile(
     r"(?i)"
     r"(?:"
     r"/home/[A-Za-z0-9._-]+(?:/[^\s\"']+)?"
     r"|/Users/[A-Za-z0-9._-]+(?:/[^\s\"']+)?"
+    r"|/root(?:/[^\s\"']+)?"
     r"|(?:[A-Za-z]:\\Users\\|[A-Za-z]:/Users/)[A-Za-z0-9._-]+(?:[\\/][^\s\"']+)?"
     r")",
     re.IGNORECASE,

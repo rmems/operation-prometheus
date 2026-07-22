@@ -85,7 +85,7 @@ def test_normalize_validates_against_schema():
     traj = normalize_record(raw, card)
     schema = json.loads(SCHEMA.read_text())
     jsonschema.Draft7Validator(schema).validate(traj)
-    assert traj["id"] == "corinth-canal-89"
+    assert traj["id"] == "rmems-corinth-canal-89"
     assert traj["training_use"] == "validation"
     assert traj["outcome"] == "merged"
     assert any(s["author"] == "reviewer-x" for s in traj.get("review_signals", []))
@@ -282,6 +282,53 @@ def test_review_app_checks_separated_from_ci():
     rev = [e for e in events if e["type"] == "other" and e["detail"].startswith("review_apps")]
     assert ci and ci[0]["result"] == "pass"
     assert rev and rev[0]["result"] == "fail"
+
+
+def test_review_apps_alone_do_not_count_as_validation():
+    from lib.normalize import extract_validation
+
+    raw = {
+        "pull": {"body": ""},
+        "checks": {
+            "check_runs": [
+                {
+                    "name": "Kilo Code Review",
+                    "status": "completed",
+                    "conclusion": "success",
+                },
+            ],
+            "combined_status": {"state": "pending", "statuses": []},
+        },
+    }
+    events = extract_validation(raw)
+    assert any(
+        e["detail"] == "No structured validation evidence collected" for e in events
+    )
+    assert any(e["detail"].startswith("review_apps:") for e in events)
+
+
+def test_traj_id_includes_owner():
+    from lib.normalize import normalize_record
+
+    raw = {
+        "source": {"repo": "alice/widget", "pr_number": 12},
+        "pull": {
+            "title": "x",
+            "body": "",
+            "state": "closed",
+            "merged": True,
+            "draft": False,
+        },
+        "linked_issues": [],
+        "reviews": [],
+        "review_comments": [],
+        "issue_comments": [],
+        "files": [],
+        "checks": {},
+        "commits": [],
+    }
+    traj = normalize_record(raw, {"language": "Python", "domains": ["tools"]})
+    assert traj["id"] == "alice-widget-12"
 
 
 def test_load_card_missing_path_raises(tmp_path: Path):

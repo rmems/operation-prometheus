@@ -50,12 +50,14 @@ def test_redact_macos_windows_paths_and_sk_proj():
         f"key={fake_key} "
         f'mac=/Users/alice/.ssh/id_rsa '
         f'win=C:\\Users\\Alice\\.env '
+        f'root=/root/.ssh/id_rsa '
         f'password="correct horse battery staple"'
     )
     cleaned, warnings = sanitize_text(text)
     assert fake_key not in cleaned
     assert "/Users/alice" not in cleaned
     assert "Users\\Alice" not in cleaned and "Users/Alice" not in cleaned
+    assert "/root/" not in cleaned
     assert "correct horse" not in cleaned
     assert "[REDACTED]" in cleaned
     assert "[HOME_PATH]" in cleaned

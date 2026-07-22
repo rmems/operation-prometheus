@@ -377,26 +377,6 @@ def extract_validation(raw: dict[str, Any]) -> list[dict[str, str]]:
                 "detail": names or "check runs collected",
             }
         )
-    if review_checks:
-        r_conclusions = [c.get("conclusion") for c in review_checks if c.get("conclusion")]
-        if r_conclusions and all(
-            c in ("success", "neutral", "skipped") for c in r_conclusions
-        ):
-            r_result = "pass"
-        else:
-            r_result = "fail" if r_conclusions else "fail"
-        r_names = ", ".join(
-            f"{c.get('name')}={c.get('conclusion') or c.get('status')}"
-            for c in review_checks[:12]
-            if c.get("name")
-        )
-        events.append(
-            {
-                "type": "other",
-                "result": r_result,
-                "detail": f"review_apps: {r_names}" if r_names else "review_apps",
-            }
-        )
     # Combined commit status: GitHub returns state=pending with empty statuses[] when
     # only Checks API is used. Surface combined status only when there are real status
     # contexts, or when there is no Checks API evidence at all.
@@ -413,13 +393,35 @@ def extract_validation(raw: dict[str, Any]) -> list[dict[str, str]]:
             }
         )
 
-    if not events:
+    # Review apps are supplemental only — never the sole "validation" evidence.
+    has_primary = any(e.get("type") in ("test", "ci") for e in events)
+    if not has_primary:
         # Schema requires ≥1 validation event; never invent "pass" without evidence.
         events.append(
             {
                 "type": "other",
                 "result": "fail",
                 "detail": "No structured validation evidence collected",
+            }
+        )
+    if review_checks:
+        r_conclusions = [c.get("conclusion") for c in review_checks if c.get("conclusion")]
+        if r_conclusions and all(
+            c in ("success", "neutral", "skipped") for c in r_conclusions
+        ):
+            r_result = "pass"
+        else:
+            r_result = "fail"
+        r_names = ", ".join(
+            f"{c.get('name')}={c.get('conclusion') or c.get('status')}"
+            for c in review_checks[:12]
+            if c.get("name")
+        )
+        events.append(
+            {
+                "type": "other",
+                "result": r_result,
+                "detail": f"review_apps: {r_names}" if r_names else "review_apps",
             }
         )
     return events
@@ -562,8 +564,9 @@ def normalize_record(
     source = raw.get("source") or {}
     repo = source.get("repo") or card.get("source_repo") or "unknown/unknown"
     pr = int(source.get("pr_number") or 0)
-    slug = repo.split("/")[-1]
-    traj_id = f"{slug}-{pr}"
+    # Include owner so multi-repo extracts never collide (alice/widget#12 vs bob/widget#12).
+    owner_repo = repo.replace("/", "-") if "/" in repo else repo
+    traj_id = f"{owner_repo}-{pr}"
 
     issue_context = extract_issue_context(raw)
     review_signals = extract_review_signals(raw)
