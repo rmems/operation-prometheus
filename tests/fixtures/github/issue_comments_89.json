@@ -1,0 +1,12 @@
+[
+  {
+    "id": 100,
+    "user": {
+      "login": "codeant-ai[bot]",
+      "type": "Bot"
+    },
+    "body": "Usage guide spam",
+    "created_at": "2026-05-27T01:00:00Z",
+    "author_association": "NONE"
+  }
+]

@@ -64,6 +64,36 @@ See [datasets/README.md](datasets/README.md) for rules on what may be committed.
 
 ## Extraction Shortlists
 
-- **corinth-canal v0**: [docs/source-repos.md](docs/source-repos.md). Implements GitHub [#4](https://github.com/rmems/operation-prometheus/issues/4). 6 high-signal merged PRs shortlisted for trajectory extraction. Metadata card: [datasets/cards/corinth-canal-v0.json](datasets/cards/corinth-canal-v0.json).
+- **corinth-canal v0** (extracted): [docs/source-repos.md](docs/source-repos.md). 6 high-signal merged PRs → [datasets/jsonl/corinth-canal-v0.jsonl](datasets/jsonl/corinth-canal-v0.jsonl). Cards: [JSON](datasets/cards/corinth-canal-v0.json), [markdown](datasets/cards/corinth-canal-trajectories-v0.md). Manifest: [corinth-canal-v0.manifest.json](datasets/manifests/corinth-canal-v0.manifest.json).
+- **grok-ozempic v0** (shortlist only): documented in [docs/source-repos.md](docs/source-repos.md); card [datasets/cards/grok-ozempic-v0.json](datasets/cards/grok-ozempic-v0.json).
 - **Format**: JSONL (one trajectory record per line, conforming to schema v0). See [datasets/README.md](datasets/README.md).
+- **Sprint status**: [STATUS.md](STATUS.md)
+
+## Collect and normalize (read-only)
+
+Requires public GitHub access. A token is optional but strongly recommended for rate limits.
+
+```bash
+python -m venv .venv && source .venv/bin/activate
+pip install -r requirements.txt
+
+export GITHUB_TOKEN=...   # optional; higher rate limits
+
+# Issue #5 — collect raw PR records (gitignored under datasets/raw/)
+python scripts/collect_pr_records.py \
+  --repo rmems/corinth-canal \
+  --pr 82,89,91,94,95,96 \
+  --out-dir datasets/raw/corinth-canal
+
+# Issue #6 — normalize to schema-compliant JSONL
+python scripts/build_trajectory_jsonl.py \
+  --raw-dir datasets/raw/corinth-canal \
+  --card datasets/cards/corinth-canal-v0.json \
+  --out datasets/jsonl/corinth-canal-v0.jsonl
+
+# Validate (schema + optional policy hygiene)
+python scripts/validate_jsonl.py --strict-policy datasets/jsonl/corinth-canal-v0.jsonl
+```
+
+The collector performs **no write operations** to GitHub. Raw dumps must stay out of git (`datasets/raw/` is ignored).
 

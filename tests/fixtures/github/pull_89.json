@@ -1,0 +1,34 @@
+{
+  "title": "feat(gpu): add CUDA validation ladder",
+  "body": "## Summary\nFix CUDA teardown and document Tier 0-5 ladder.\n\nCloses #74\n\n## Validation\n- cargo test --no-default-features passed\n- compute-sanitizer memcheck: ERROR SUMMARY: 0 errors\n",
+  "state": "closed",
+  "merged": true,
+  "merged_at": "2026-05-27T06:13:36Z",
+  "user": {
+    "login": "rmems",
+    "type": "User"
+  },
+  "labels": [
+    {
+      "name": "CUDA"
+    },
+    {
+      "name": "testing"
+    }
+  ],
+  "base": {
+    "sha": "abc"
+  },
+  "head": {
+    "sha": "def"
+  },
+  "merge_commit_sha": "ghi",
+  "additions": 362,
+  "deletions": 143,
+  "changed_files": 3,
+  "draft": false,
+  "commits": 3,
+  "comments": 2,
+  "review_comments": 1,
+  "html_url": "https://github.com/rmems/corinth-canal/pull/89"
+}

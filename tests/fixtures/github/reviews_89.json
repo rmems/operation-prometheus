@@ -1,0 +1,12 @@
+[
+  {
+    "id": 10,
+    "user": {
+      "login": "reviewer-x",
+      "type": "User"
+    },
+    "state": "COMMENTED",
+    "body": "Looks good after the observability quieting fix.",
+    "submitted_at": "2026-05-27T02:00:00Z"
+  }
+]

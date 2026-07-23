@@ -15,7 +15,7 @@ All trajectories are extracted as JSONL records conforming to [pr_trajectory.sch
 **Repo**: [rmems/corinth-canal](https://github.com/rmems/corinth-canal)
 **Description**: Turning MOE architecture into SNN quantization
 **Language**: Rust
-**Status**: v0 shortlist (not yet extracted)
+**Status**: v0 **extracted** (2026-07-21) — see [datasets/jsonl/corinth-canal-v0.jsonl](../datasets/jsonl/corinth-canal-v0.jsonl)
 
 ### Shortlisted PRs
 
@@ -86,6 +86,45 @@ All trajectories are extracted as JSONL records conforming to [pr_trajectory.sch
 
 ---
 
+## grok-ozempic
+
+**Repo**: [rmems/grok-ozempic](https://github.com/rmems/grok-ozempic)  
+**Description**: SNN-logic ternary quantization for Grok-1 MoE (xai-dissect manifests, GOZ1 packs, SAAQ artifact validation)  
+**Language**: Rust  
+**Status**: v0 shortlist (not yet extracted)  
+**Metadata card**: [datasets/cards/grok-ozempic-v0.json](../datasets/cards/grok-ozempic-v0.json)
+
+### Shortlisted PRs (grok-ozempic)
+
+| PR | Title | Domain | Bucket | Signal |
+|----|-------|--------|--------|--------|
+| [#29](https://github.com/rmems/grok-ozempic/pull/29) | Full test coverage, alignment verification, Docker CI | validation, CI | validation | BackendKernel becomes fallible; Local/Myelin parity tests; dry-run alignment guards; Docker + cargo audit. Closes #16, #22, #27. |
+| [#26](https://github.com/rmems/grok-ozempic/pull/26) | Align with xai-dissect inventory | validation | validation | 770-tensor inventory + structural manifest; replaces heuristic dry-run counts. Closes #22. |
+| [#24](https://github.com/rmems/grok-ozempic/pull/24) | SAAQ artifact validation flow | validation | validation | Multi-step convert/validate ladder with path/symlink hardening. Closes #13–#15, #17–#19. |
+| [#25](https://github.com/rmems/grok-ozempic/pull/25) | myelin-accelerator as CUDA backend | ml-infra | feature | CUDA ownership boundary via BackendKernel + DryRunPlanner. Closes #21. |
+| [#11](https://github.com/rmems/grok-ozempic/pull/11) | xai-dissect compatible artifact generation | ml-infra | feature | Artifact IR, detector/validator, CLI generate/validate. Closes #10. |
+| [#8](https://github.com/rmems/grok-ozempic/pull/8) | Wire xai-dissect manifest into quantization pipeline | ml-infra | feature | Real pipeline consumption + parity/divergence tests. Advances #6. |
+
+### Why these (and not others)
+
+- Prefer issue-linked validation ladders and contract-hardening over pure docs (`#12`, `#23`) or early scaffold (`#1`, `#2`).
+- `#33` is review-noise heavy (test dedupe after #29); optional secondary only.
+- Large diffs (#26, #11, #24) will need hunk truncation at extract time.
+
+### Candidate next: myelin-accelerator
+
+[rmems/myelin-accelerator](https://github.com/rmems/myelin-accelerator) is thinner (8 merged PRs) but high CUDA/SNN fit. Prefer after grok-ozempic extraction:
+
+| PR | Notes |
+|----|-------|
+| [#18](https://github.com/rmems/myelin-accelerator/pull/18) | Bitpacking + GPU CI + 62 tests + benches (best overall) |
+| [#2](https://github.com/rmems/myelin-accelerator/pull/2) | Kernel routing/SAT reduce (filter `target/` noise) |
+| [#6](https://github.com/rmems/myelin-accelerator/pull/6) / [#7](https://github.com/rmems/myelin-accelerator/pull/7) | Feature-gated CUDA + review→patch hardening chain |
+| [#4](https://github.com/rmems/myelin-accelerator/pull/4) | SAT cust launchers |
+| watch [#22](https://github.com/rmems/myelin-accelerator/pull/22) | Open CUDA quality gate when merged |
+
+---
+
 ## Adding New Source Repos
 
 To add a new source repository:
@@ -96,3 +135,5 @@ To add a new source repository:
 5. Reference this doc from the card
 
 See [data-policy.md](data-policy.md) for allowed sources and exclusions.
+
+**Schema note:** card buckets may say `feature`, but schema v0 `training_use` has no `feature` value — normalizer maps `feature` → `other` and keeps `task_type: feature`.

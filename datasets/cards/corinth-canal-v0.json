@@ -14,13 +14,17 @@
     "validation": [89],
     "feature": [91, 95, 96]
   },
-  "extracted_at": null,
-  "status": "shortlist-v0",
+  "extracted_at": "2026-07-21",
+  "status": "extracted-v0",
   "created_at": "2026-06-20",
-  "notes": "High-signal merged PRs with meaningful review/fix/validation loops. Extraction not yet performed. Each PR will become one JSONL line in datasets/jsonl/corinth-canal-v0.jsonl.",
+  "extracted_by": "Grok Build Agent: Grok 4.5",
+  "jsonl_path": "datasets/jsonl/corinth-canal-v0.jsonl",
+  "markdown_card": "datasets/cards/corinth-canal-trajectories-v0.md",
+  "manifest_path": "datasets/manifests/corinth-canal-v0.manifest.json",
+  "notes": "High-signal merged PRs with meaningful review/fix/validation loops. Extracted to datasets/jsonl/corinth-canal-v0.jsonl (6 lines). Schema training_use maps feature→other; #96 mapped to validation. Absolute home paths and secrets redacted. See markdown card for limitations.",
   "source_doc": "docs/source-repos.md",
   "related_issues": {
-    "operation_prometheus": [4],
+    "operation_prometheus": [4, 5, 6, 7],
     "corinth_canal": [39, 74, 75, 76, 80, 83, 84, 85, 90, 92]
   }
 }

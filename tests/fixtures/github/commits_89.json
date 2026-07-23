@@ -1,0 +1,14 @@
+[
+  {
+    "sha": "c1",
+    "commit": {
+      "message": "feat: cuda ladder",
+      "author": {
+        "date": "2026-05-27T00:00:00Z"
+      }
+    },
+    "author": {
+      "login": "rmems"
+    }
+  }
+]

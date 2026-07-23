@@ -1,0 +1,7 @@
+{
+  "number": 74,
+  "title": "Verify CUDA kernel validation path for SAAQ runs",
+  "body": "Need a documented CUDA validation ladder.",
+  "state": "closed",
+  "html_url": "https://github.com/rmems/corinth-canal/issues/74"
+}

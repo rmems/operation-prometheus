@@ -1,0 +1,3 @@
+# Runtime deps for Operation Prometheus collectors and validators.
+# CI also pins these for lint/test/validate stages.
+jsonschema==4.25.0
