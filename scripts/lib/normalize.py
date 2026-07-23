@@ -20,7 +20,8 @@ _CODEX_REVIEW_WRAPPER = re.compile(
     r"|Your team has set up Codex to review"
 )
 
-# Check-run names that are review bots, not build/test validation.
+# Check-run names that are review bots, not build/test/security validation.
+# Security scanners (CodeQL, Snyk, …) stay in CI — they are validation signals.
 _REVIEW_APP_CHECK_MARKERS: tuple[str, ...] = (
     "code review",
     "coderabbit",
@@ -37,8 +38,6 @@ _REVIEW_APP_CHECK_MARKERS: tuple[str, ...] = (
     "bugbot",
     "greptile",
     "qodo",
-    "codeql",
-    "snyk",
     "chatgpt-codex",
     "codex",
 )
@@ -181,6 +180,57 @@ def build_source_urls(repo: str, pr: int, linked_issues: list[dict[str, Any]]) -
     return urls
 
 
+def enrich_linked_issues(raw: dict[str, Any]) -> list[dict[str, Any]]:
+    """Merge API-fetched linked issues with close-keyword refs from PR/commits.
+
+    Older raw records may have empty ``linked_issues`` when bodies used multi-issue
+    lists (``Closes: #75, #76``) or gerunds (``closing #80``). Reconstruct stubs so
+    ``source_urls`` keeps issue→patch provenance without re-collecting.
+    """
+    from .raw_record import parse_linked_issue_numbers, parse_repo
+
+    linked = list(raw.get("linked_issues") or [])
+    seen: set[tuple[str, int]] = set()
+    for issue in linked:
+        repo_i = str(issue.get("repo") or "")
+        num = issue.get("number")
+        if repo_i and num is not None:
+            seen.add((repo_i.lower(), int(num)))
+
+    source = raw.get("source") or {}
+    repo = str(source.get("repo") or "")
+    try:
+        owner, name = parse_repo(repo)
+    except Exception:
+        return linked
+
+    parts = [(raw.get("pull") or {}).get("body") or ""]
+    for c in raw.get("commits") or []:
+        msg = c.get("message") if isinstance(c, dict) else None
+        if msg:
+            parts.append(str(msg))
+    for i_owner, i_repo, num in parse_linked_issue_numbers(
+        "\n".join(parts), owner, name
+    ):
+        key = (f"{i_owner}/{i_repo}".lower(), num)
+        if key in seen:
+            continue
+        seen.add(key)
+        linked.append(
+            {
+                "number": num,
+                "repo": f"{i_owner}/{i_repo}",
+                "title": "",
+                "body": "",
+                "state": "unknown",
+                "html_url": f"https://github.com/{i_owner}/{i_repo}/issues/{num}",
+                "closed_by_pr": True,
+                "synthetic": True,
+            }
+        )
+    return linked
+
+
 def extract_issue_context(raw: dict[str, Any]) -> str | None:
     parts: list[str] = []
     for issue in raw.get("linked_issues") or []:
@@ -318,26 +368,29 @@ def extract_validation(raw: dict[str, Any]) -> list[dict[str, str]]:
         if re.search(r"\bskipped\b", low) and not re.search(r"\b0\s+skipped\b", low):
             result = "fail"
         zero_failures = re.search(
-            r"\b(?:0|no)\s+(?:tests?\s+)?fail(?:ed|ures?)\b", low
+            r"\b(?:0|no)\s+(?:tests?\s+)?fail(?:ed|ing|ures?)\b", low
         )
-        # Resolved/negated "failed" prose should not invert a passing summary.
+        # Resolved/negated fail* prose should not invert a passing summary.
         resolved_failed = re.search(
             r"(?:"
-            r"\b(?:previously|formerly|no longer)\s+failed\b"
-            r"|\bfailed\s+(?:tests?\s+)?(?:are\s+)?now\s+pass"
-            r"|\bhas\s+not\s+failed\b"
-            r"|\bnot\s+failed\b"
-            r"|\bnever\s+failed\b"
+            r"\b(?:previously|formerly|no longer)\s+fail(?:ed|ing|ures?)?\b"
+            r"|\bfail(?:ed|ing)\s+(?:tests?\s+)?(?:are\s+)?now\s+pass"
+            r"|\bhas\s+not\s+fail(?:ed|ing)\b"
+            r"|\bnot\s+fail(?:ed|ing)\b"
+            r"|\bnever\s+fail(?:ed|ing)\b"
             r")",
             low,
         )
+        # Past-tense failed, active failing, or "failure" wording.
         if (
-            re.search(r"\bfailed\b", low)
+            re.search(r"\bfail(?:ed|ing|ures?)?\b", low)
             and not zero_failures
             and "no fail" not in low
             and not resolved_failed
         ):
-            result = "fail"
+            # Avoid matching "fail" inside unrelated words; require fail/failed/failing/failure.
+            if re.search(r"\b(?:failed|failing|failures?)\b", low):
+                result = "fail"
         # Non-zero error/failure counts (sanitizer / pytest style): "1 error", "2 failures".
         if re.search(r"\b[1-9]\d*\s+(?:tests?\s+)?(?:errors?|failures?)\b", low):
             result = "fail"
@@ -359,9 +412,12 @@ def extract_validation(raw: dict[str, Any]) -> list[dict[str, str]]:
             for c in ci_checks
         )
         conclusions = [c.get("conclusion") for c in ci_checks if c.get("conclusion")]
+        # Require at least one real success. All-skipped / all-neutral is not pass.
         if incomplete or not conclusions:
             result = "fail"
-        elif all(c in ("success", "neutral", "skipped") for c in conclusions):
+        elif any(c == "success" for c in conclusions) and all(
+            c in ("success", "neutral", "skipped") for c in conclusions
+        ):
             result = "pass"
         else:
             result = "fail"
@@ -474,13 +530,19 @@ def _load_diff_text(raw: dict[str, Any], raw_path: Path | None) -> str:
         side = _safe_sidecar_path(raw_path, str(sidecar))
         if side is not None:
             return side.read_text(encoding="utf-8", errors="replace")
-    # Fall back to concatenating file patches
+    # Fall back to concatenating file patches; mark omitted/truncated files explicitly.
     chunks: list[str] = []
     for f in raw.get("files") or []:
         name = f.get("filename") or "unknown"
         patch = f.get("patch")
         if patch:
             chunks.append(f"--- a/{name}\n+++ b/{name}\n{patch}")
+        elif f.get("patch_truncated") or (
+            f.get("status") not in (None, "removed") and not patch
+        ):
+            # Files API often drops large/binary patches — do not pretend they are absent.
+            reason = "patch unavailable / truncated from files API"
+            chunks.append(f"# omitted: {name} ({reason})")
     return "\n".join(chunks)
 
 
@@ -568,7 +630,10 @@ def normalize_record(
     owner_repo = repo.replace("/", "-") if "/" in repo else repo
     traj_id = f"{owner_repo}-{pr}"
 
-    issue_context = extract_issue_context(raw)
+    linked_issues = enrich_linked_issues(raw)
+    # Prefer enriched list for context/URLs without mutating caller's raw dict.
+    raw_for_ctx = {**raw, "linked_issues": linked_issues}
+    issue_context = extract_issue_context(raw_for_ctx)
     review_signals = extract_review_signals(raw)
     training_use = training_use_for(repo, pr, card)
     if training_use == "review-to-patch" and not review_signals:
@@ -579,7 +644,7 @@ def normalize_record(
         "id": traj_id,
         "repo": repo,
         "pr_number": pr,
-        "source_urls": build_source_urls(repo, pr, raw.get("linked_issues") or []),
+        "source_urls": build_source_urls(repo, pr, linked_issues),
         "language": language_for(card, raw),
         "domain": domain_for(repo, pr, card, raw),
         "task_type": task_type_for(repo, pr, raw),

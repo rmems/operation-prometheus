@@ -118,6 +118,16 @@ def test_parse_closes_colon_syntax():
     assert ("other", "proj", 7) in found
 
 
+def test_parse_multi_issue_close_list_and_closing_gerund():
+    body = (
+        "**Closes:** #75, #76, #85\n"
+        "Combined PR closing #80, #83, #84.\n"
+    )
+    found = parse_linked_issue_numbers(body, "rmems", "corinth-canal")
+    for n in (75, 76, 85, 80, 83, 84):
+        assert ("rmems", "corinth-canal", n) in found
+
+
 def test_open_draft_outcome_is_open():
     assert outcome_for({"pull": {"state": "open", "draft": True, "merged": False}}) == "open"
     assert outcome_for({"pull": {"state": "open", "draft": False, "merged": False}}) == "open"
@@ -305,6 +315,153 @@ def test_review_apps_alone_do_not_count_as_validation():
         e["detail"] == "No structured validation evidence collected" for e in events
     )
     assert any(e["detail"].startswith("review_apps:") for e in events)
+
+
+def test_codeql_and_snyk_stay_in_ci_validation():
+    from lib.normalize import extract_validation
+
+    raw = {
+        "pull": {"body": ""},
+        "checks": {
+            "check_runs": [
+                {"name": "CodeQL", "status": "completed", "conclusion": "failure"},
+                {"name": "Snyk", "status": "completed", "conclusion": "success"},
+            ],
+            "combined_status": {"state": "failure", "statuses": []},
+        },
+    }
+    events = extract_validation(raw)
+    ci = [e for e in events if e["type"] == "ci" and "CodeQL" in e["detail"]]
+    assert ci and ci[0]["result"] == "fail"
+    assert not any(
+        e["type"] == "other" and "CodeQL" in e.get("detail", "") for e in events
+    )
+
+
+def test_all_skipped_ci_is_not_pass():
+    from lib.normalize import extract_validation
+
+    raw = {
+        "pull": {"body": ""},
+        "checks": {
+            "check_runs": [
+                {"name": "test", "status": "completed", "conclusion": "skipped"},
+                {"name": "lint", "status": "completed", "conclusion": "neutral"},
+            ],
+            "combined_status": {"state": "success", "statuses": []},
+        },
+    }
+    events = extract_validation(raw)
+    ci = [e for e in events if e["type"] == "ci" and "test=" in e["detail"]]
+    assert ci and ci[0]["result"] == "fail"
+
+
+def test_success_plus_skipped_ci_is_pass():
+    from lib.normalize import extract_validation
+
+    raw = {
+        "pull": {"body": ""},
+        "checks": {
+            "check_runs": [
+                {"name": "test", "status": "completed", "conclusion": "success"},
+                {"name": "optional", "status": "completed", "conclusion": "skipped"},
+            ],
+            "combined_status": {"state": "success", "statuses": []},
+        },
+    }
+    events = extract_validation(raw)
+    ci = [e for e in events if e["type"] == "ci" and "test=" in e["detail"]]
+    assert ci and ci[0]["result"] == "pass"
+
+
+def test_failing_prose_is_fail():
+    from lib.normalize import extract_validation
+
+    raw = {
+        "pull": {"body": "## Validation\n\nCI is failing on main.\n"},
+        "checks": {},
+    }
+    events = extract_validation(raw)
+    assert events[0]["type"] == "test"
+    assert events[0]["result"] == "fail"
+
+
+def test_omitted_truncated_file_marked_in_fallback_patch():
+    from lib.normalize import extract_patch
+
+    raw = {
+        "diff": {"inline": None, "sidecar_path": None},
+        "files": [
+            {
+                "filename": "src/ok.rs",
+                "status": "modified",
+                "patch": "@@ -1 +1 @@\n-a\n+b\n",
+            },
+            {
+                "filename": "weights.bin",
+                "status": "added",
+                "patch": None,
+                "patch_truncated": True,
+            },
+        ],
+    }
+    patch = extract_patch(raw)
+    assert "src/ok.rs" in patch
+    assert "# omitted: weights.bin" in patch
+
+
+def test_private_repo_rejected():
+    from lib.github_client import GitHubError
+
+    class PrivateClient(FakeClient):
+        def get_json(self, path_or_url: str) -> Any:
+            path = path_or_url.replace(self.base_url, "")
+            if "/pulls/89" in path and "comments" not in path and "reviews" not in path:
+                pull = json.loads((FIXTURES / "pull_89.json").read_text())
+                pull = {
+                    **pull,
+                    "base": {
+                        **(pull.get("base") or {}),
+                        "repo": {
+                            "private": True,
+                            "full_name": "rmems/secret-repo",
+                        },
+                    },
+                }
+                return pull
+            return super().get_json(path_or_url)
+
+    if not (FIXTURES / "pull_89.json").exists():
+        pytest.skip("fixtures missing")
+    with pytest.raises(GitHubError, match="private"):
+        collect_pr(PrivateClient(), "rmems/corinth-canal", 89)
+
+
+def test_enrich_linked_issues_from_body_multi_list():
+    from lib.normalize import normalize_record
+
+    raw = {
+        "source": {"repo": "rmems/corinth-canal", "pr_number": 91},
+        "pull": {
+            "title": "feature",
+            "body": "**Closes:** #75, #76, #85\n\n## Summary\nMulti-issue PR.\n",
+            "state": "closed",
+            "merged": True,
+            "draft": False,
+        },
+        "linked_issues": [],
+        "reviews": [],
+        "review_comments": [],
+        "issue_comments": [],
+        "files": [{"filename": "a.rs", "status": "modified", "patch": "+x\n"}],
+        "checks": {},
+        "commits": [],
+    }
+    traj = normalize_record(raw, {})
+    urls = traj["source_urls"]
+    assert "https://github.com/rmems/corinth-canal/pull/91" in urls
+    for n in (75, 76, 85):
+        assert f"https://github.com/rmems/corinth-canal/issues/{n}" in urls
 
 
 def test_traj_id_includes_owner():

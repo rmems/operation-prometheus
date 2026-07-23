@@ -12,11 +12,19 @@ from . import __version__
 from .github_client import GitHubClient, GitHubError, _parse_next_link, parse_repo
 from .secrets import scan_and_sanitize_obj
 
-# GitHub closing keywords (present + past tense + singular).
+# GitHub closing keywords (present + past tense + gerund + singular).
 # Optional colon form is documented by GitHub: "Closes: #10".
-_CLOSE_KW = r"(?:close[sd]?|fix(?:e[sd])?|resolve[sd]?)"
-_CLOSE_SEP = r":?\s+"
+# Also accept markdown emphasis: **Closes:** #10
+_CLOSE_KW = r"(?:close[sd]?|closing|fix(?:e[sd])?|fixing|resolve[sd]?|resolving)"
+_CLOSE_SEP = r"(?:\*+)?(?::\*+|:)?\**\s+"
+# Single "#N" after a close keyword.
 CLOSES_RE = re.compile(rf"(?i)\b{_CLOSE_KW}{_CLOSE_SEP}#(\d+)\b")
+# Multi-issue lists: "Closes: #75, #76, and #85" or "closing #80, #83, #84"
+CLOSES_LIST_RE = re.compile(
+    rf"(?i)\b{_CLOSE_KW}{_CLOSE_SEP}"
+    r"#(\d+)(?:\s*[,/]\s*(?:and\s+)?#(\d+))*"
+    r"(?:\s+and\s+#(\d+))?"
+)
 CLOSES_FULL_RE = re.compile(
     rf"(?i)\b{_CLOSE_KW}{_CLOSE_SEP}"
     r"https://github\.com/([\w.-]+)/([\w.-]+)/issues/(\d+)\b"
@@ -116,22 +124,27 @@ def parse_linked_issue_numbers(body: str | None, default_owner: str, default_rep
         return []
     found: list[tuple[str, str, int]] = []
     seen: set[tuple[str, str, int]] = set()
+
+    def _add(owner: str, repo: str, num: int) -> None:
+        key = (owner, repo, num)
+        if key not in seen:
+            seen.add(key)
+            found.append(key)
+
+    # Prefer multi-issue lists so "#75, #76, #85" after Closes is fully captured.
+    for m in CLOSES_LIST_RE.finditer(body):
+        for g in m.groups():
+            if g:
+                _add(default_owner, default_repo, int(g))
+        # Also pull any extra #N tokens in the matched span (handles long lists).
+        for n in re.findall(r"#(\d+)\b", m.group(0)):
+            _add(default_owner, default_repo, int(n))
     for m in CLOSES_RE.finditer(body):
-        key = (default_owner, default_repo, int(m.group(1)))
-        if key not in seen:
-            seen.add(key)
-            found.append(key)
+        _add(default_owner, default_repo, int(m.group(1)))
     for m in CLOSES_FULL_RE.finditer(body):
-        # full URL with owner/repo capture
-        key = (m.group(1), m.group(2), int(m.group(3)))
-        if key not in seen:
-            seen.add(key)
-            found.append(key)
+        _add(m.group(1), m.group(2), int(m.group(3)))
     for m in CLOSES_CROSS_RE.finditer(body):
-        key = (m.group(1), m.group(2), int(m.group(3)))
-        if key not in seen:
-            seen.add(key)
-            found.append(key)
+        _add(m.group(1), m.group(2), int(m.group(3)))
     return found
 
 
@@ -164,6 +177,18 @@ def collect_pr(
     endpoints.append("pulls")
     if not isinstance(pull, dict):
         raise GitHubError(f"Unexpected pull payload for {full}#{pr_number}")
+
+    # Public-history only: reject private base/head repos immediately (token may
+    # still be able to read private repos — do not turn them into training data).
+    for side in ("base", "head"):
+        repo_meta = (pull.get(side) or {}).get("repo") or {}
+        if isinstance(repo_meta, dict) and repo_meta.get("private") is True:
+            side_full = repo_meta.get("full_name") or full
+            raise GitHubError(
+                f"Refusing to collect private repository {side_full} "
+                f"(PR {full}#{pr_number} {side}). "
+                "Operation Prometheus only extracts public GitHub history."
+            )
 
     issue_comments = client.get_all(f"/repos/{full}/issues/{pr_number}/comments")
     endpoints.append("issue_comments")

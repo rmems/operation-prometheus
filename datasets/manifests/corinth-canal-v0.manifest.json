@@ -6,8 +6,8 @@
   "source_repo": "rmems/corinth-canal",
   "jsonl_path": "datasets/jsonl/corinth-canal-v0.jsonl",
   "record_count": 6,
-  "sha256": "3e735db7a51447532afc603818fa4f6384d6a8abf132656efe63895e0911eb1e",
-  "bytes": 412125,
+  "sha256": "eb2bd567ad17df63d60e8e630e341f4b28d2ca3341437b59f39d54974b4430e5",
+  "bytes": 412431,
   "records": [
     {
       "id": "rmems-corinth-canal-82",
@@ -20,7 +20,8 @@
       "has_issue_context": true,
       "review_signal_count": 8,
       "patch_chars": 85314,
-      "validation_count": 3
+      "validation_count": 3,
+      "source_url_count": 2
     },
     {
       "id": "rmems-corinth-canal-89",
@@ -33,7 +34,8 @@
       "has_issue_context": true,
       "review_signal_count": 8,
       "patch_chars": 30415,
-      "validation_count": 3
+      "validation_count": 3,
+      "source_url_count": 2
     },
     {
       "id": "rmems-corinth-canal-91",
@@ -46,7 +48,8 @@
       "has_issue_context": true,
       "review_signal_count": 8,
       "patch_chars": 97961,
-      "validation_count": 3
+      "validation_count": 3,
+      "source_url_count": 4
     },
     {
       "id": "rmems-corinth-canal-94",
@@ -59,7 +62,8 @@
       "has_issue_context": true,
       "review_signal_count": 8,
       "patch_chars": 44520,
-      "validation_count": 3
+      "validation_count": 3,
+      "source_url_count": 2
     },
     {
       "id": "rmems-corinth-canal-95",
@@ -72,7 +76,8 @@
       "has_issue_context": true,
       "review_signal_count": 8,
       "patch_chars": 63256,
-      "validation_count": 3
+      "validation_count": 3,
+      "source_url_count": 4
     },
     {
       "id": "rmems-corinth-canal-96",
@@ -85,8 +90,8 @@
       "has_issue_context": true,
       "review_signal_count": 8,
       "patch_chars": 11132,
-      "validation_count": 3
+      "validation_count": 3,
+      "source_url_count": 2
     }
-  ],
-  "notes": "Manually shortlisted, machine-collected, schema-validated v0 trajectories. feature bucket maps to training_use=other per schema v0 enum. Trajectory ids include owner (rmems-corinth-canal-N)."
+  ]
 }
