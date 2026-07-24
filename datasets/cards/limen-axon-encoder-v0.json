@@ -1,0 +1,46 @@
+{
+  "name": "limen-axon-encoder-v0",
+  "source_repo": "Limen-Neural/axon-encoder",
+  "source_repo_url": "https://github.com/Limen-Neural/axon-encoder",
+  "source_repo_description": "SNN sensory preprocessing library: rate/delta/temporal/population encoders with neuromodulator gain curves",
+  "schema_version": "pr_trajectory_v0",
+  "schema_url": "https://github.com/rmems/operation-prometheus/schemas/pr_trajectory.schema.json",
+  "language": "Rust",
+  "domains": [
+    "snn",
+    "ml-infra",
+    "api"
+  ],
+  "pr_count": 3,
+  "pr_numbers": [
+    37,
+    50,
+    41
+  ],
+  "training_use_buckets": {
+    "review-to-patch": [
+      37,
+      41
+    ],
+    "repair": [
+      50
+    ]
+  },
+  "extracted_at": "2026-07-23",
+  "status": "extracted-v0",
+  "created_at": "2026-07-23",
+  "created_by": "Grok Build Agent: Grok 4.5",
+  "jsonl_path": "datasets/jsonl/limen-axon-encoder-v0.jsonl",
+  "manifest_path": "datasets/manifests/limen-axon-encoder-v0.manifest.json",
+  "notes": "First Limen-Neural org extract. High-signal axon-encoder PRs with review\u2192fix and security repair. Bot-heavy review threads expected; engineering bots retained after filter. Schema maps feature\u2192other if used. Owner of Limen-Neural is rmems; public history only in this forge.",
+  "source_doc": "docs/source-repos.md",
+  "related_issues": {
+    "operation_prometheus": [
+      13,
+      15
+    ],
+    "axon_encoder": [
+      26
+    ]
+  }
+}
