@@ -70,6 +70,10 @@ _MACROSCOPE_NOTE = re.compile(
 _GEMINI_IMPORTANT_BLOCK = re.compile(
     r"(?is)(?:^|\n)\s*>\s*\[!IMPORTANT\]\s*\n(?:\s*>[^\n]*(?:\n|$))+",
 )
+# Codex review transport footer (product chrome, not engineering signal).
+_CODEX_REACT_FOOTER = re.compile(
+    r"(?is)\s*Useful\?\s*React with\s*[^\n]*$",
+)
 
 
 def is_bot_user(login: str | None, user_type: str | None = None) -> bool:
@@ -96,14 +100,23 @@ def strip_bot_boilerplate(markdown: str) -> str:
     text = _HTML_COMMENT.sub("", text)
     text = _CODEANT_BLOCK.sub("", text)
     text = _MACROSCOPE_NOTE.sub("", text)
-    # Drop Gemini IMPORTANT lifecycle/sunset blockquotes only (keep other notes).
+    # Drop Gemini product lifecycle/sunset IMPORTANT blocks only.
+    # Keep actionable deprecation/API-migration IMPORTANT review notes.
     def _drop_gemini_lifecycle(m: re.Match[str]) -> str:
         block = m.group(0).lower()
-        if "sunset" in block or "deprecat" in block or "gemini code assist" in block:
-            return "\n"
-        return m.group(0)
+        is_product_lifecycle = (
+            "sunset" in block
+            or "will officially cease" in block
+            or "installations will be blocked" in block
+            or (
+                "gemini code assist" in block
+                and ("consumer version" in block or "timeline and next steps" in block)
+            )
+        )
+        return "\n" if is_product_lifecycle else m.group(0)
 
     text = _GEMINI_IMPORTANT_BLOCK.sub(_drop_gemini_lifecycle, text)
+    text = _CODEX_REACT_FOOTER.sub("", text)
 
     # Cut at first strong boilerplate marker if remaining.
     cut_at = len(text)
@@ -125,19 +138,29 @@ def _heading_level(line: str) -> int:
 
 
 def _heading_matches_keyword(line: str, keyword: str) -> bool:
-    """True when heading title equals/starts with keyword (not parenthetical mentions).
+    """True when heading title contains keyword as a real title token.
 
-    Avoids matching ``#### Commands run (summary)`` for keyword ``summary``.
+    Matches ``## Local testing`` / ``## CI validation`` (keyword not first).
+    Rejects parenthetical-only hits like ``#### Commands run (summary)``.
     """
     level = _heading_level(line)
     if not level:
         return False
     title = line[level:].strip().lower()
-    # Drop trailing punctuation / emoji noise for matching.
-    title = re.sub(r"[^\w\s:-]+", " ", title)
+    # Keep word chars, spaces, hyphens, colons; drop other punctuation noise.
+    title = re.sub(r"[^\w\s:()-]+", " ", title)
     title = re.sub(r"\s+", " ", title).strip()
     kw = keyword.lower().strip()
-    return title == kw or title.startswith(kw + " ") or title.startswith(kw + ":")
+    if not kw:
+        return False
+    # Exact / prefix still preferred.
+    if title == kw or title.startswith(kw + " ") or title.startswith(kw + ":"):
+        return True
+    # Whole-word match outside parentheses so "Commands run (summary)" fails
+    # for keyword "summary", but "Manual verification" matches "verification".
+    without_parens = re.sub(r"\([^)]*\)", " ", title)
+    without_parens = re.sub(r"\s+", " ", without_parens).strip()
+    return bool(re.search(rf"\b{re.escape(kw)}\b", without_parens))
 
 
 def extract_section(markdown: str, heading_keywords: tuple[str, ...]) -> str | None:

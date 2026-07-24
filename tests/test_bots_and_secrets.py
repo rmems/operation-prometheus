@@ -21,6 +21,16 @@ def test_extract_section_ignores_parenthetical_summary():
     assert extract_section(body, ("summary",)) is None
 
 
+def test_extract_section_matches_prefixed_validation_headings():
+    body = (
+        "## Local testing\n\n`cargo test` green.\n\n"
+        "## Manual verification\n\nSanitizer clean.\n\n"
+        "## Other\n\nnoise\n"
+    )
+    assert "cargo test" in (extract_section(body, ("testing", "tests")) or "")
+    assert "Sanitizer" in (extract_section(body, ("verification",)) or "")
+
+
 def test_strip_gemini_sunset_boilerplate():
     body = (
         "## Code Review\n\nFix the panic path.\n\n"
@@ -32,6 +42,28 @@ def test_strip_gemini_sunset_boilerplate():
     assert "Fix the panic path" in cleaned
     assert "sunset" not in cleaned.lower()
     assert "Help Documentation" not in cleaned
+
+
+def test_keep_actionable_deprecation_important_blocks():
+    body = (
+        "## Code Review\n\nPlease migrate callers.\n\n"
+        "> [!IMPORTANT]\n"
+        "> `OldApi` is deprecated; use `NewApi` instead to avoid breakage.\n"
+    )
+    cleaned = strip_bot_boilerplate(body)
+    assert "deprecated" in cleaned.lower()
+    assert "NewApi" in cleaned
+
+
+def test_strip_codex_react_footer():
+    body = (
+        "Avoid forcing the JS entropy backend from the library.\n\n"
+        "Useful? React with 👍 / 👎."
+    )
+    cleaned = strip_bot_boilerplate(body)
+    assert "JS entropy" in cleaned
+    assert "Useful?" not in cleaned
+    assert "React with" not in cleaned
 
 
 def test_is_bot_user_by_type_and_login():
