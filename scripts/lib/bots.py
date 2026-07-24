@@ -100,20 +100,22 @@ def strip_bot_boilerplate(markdown: str) -> str:
     text = _HTML_COMMENT.sub("", text)
     text = _CODEANT_BLOCK.sub("", text)
     text = _MACROSCOPE_NOTE.sub("", text)
-    # Drop Gemini product lifecycle/sunset IMPORTANT blocks only.
-    # Keep actionable deprecation/API-migration IMPORTANT review notes.
+    # Drop Gemini Code Assist product lifecycle IMPORTANT blocks only.
+    # Require a Gemini marker so "sunset the old endpoint" human notes are kept.
     def _drop_gemini_lifecycle(m: re.Match[str]) -> str:
         block = m.group(0).lower()
-        is_product_lifecycle = (
+        has_gemini = (
+            "gemini code assist" in block
+            or "gemini-code-assist" in block
+            or "developers.google.com/gemini-code-assist" in block
+        )
+        is_lifecycle = (
             "sunset" in block
             or "will officially cease" in block
             or "installations will be blocked" in block
-            or (
-                "gemini code assist" in block
-                and ("consumer version" in block or "timeline and next steps" in block)
-            )
+            or "consumer version" in block
         )
-        return "\n" if is_product_lifecycle else m.group(0)
+        return "\n" if has_gemini and is_lifecycle else m.group(0)
 
     text = _GEMINI_IMPORTANT_BLOCK.sub(_drop_gemini_lifecycle, text)
     text = _CODEX_REACT_FOOTER.sub("", text)

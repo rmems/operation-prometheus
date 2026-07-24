@@ -145,8 +145,8 @@ def domain_for(repo: str, pr: int, card: dict[str, Any], raw: dict[str, Any]) ->
     if by_pr:
         for k, v in by_pr.items():
             try:
-                if int(k) == pr and str(v).strip():
-                    return str(v).strip()
+                if int(k) == pr and isinstance(v, str) and v.strip():
+                    return v.strip()
             except (TypeError, ValueError):
                 continue
     domains = card.get("domains") or []
@@ -275,11 +275,23 @@ def extract_issue_context(raw: dict[str, Any]) -> str | None:
     return text or None
 
 
+# Maintainer ack-only replies consume review-signal budget without review content.
+_BARE_FIXED_IN_REPLY = re.compile(
+    r"(?is)^\s*(?:\*\*)?(?:addressed|fixed)\s+in\s+`?[0-9a-f]{7,40}`?"
+    r"(?:\*\*)?\s*\.?\s*$"
+)
+
+
 def _is_non_actionable_review_body(body: str) -> bool:
-    """True for product review wrappers (e.g. Codex summary shell) without signal."""
+    """True for product wrappers or bare fixed-in acks without review signal."""
     if not body or not body.strip():
         return True
-    return bool(_CODEX_REVIEW_WRAPPER.search(body))
+    if _CODEX_REVIEW_WRAPPER.search(body):
+        return True
+    # "Fixed in 0b05325." / "**Addressed in `abc1234`**" — outcome, not review.
+    if _BARE_FIXED_IN_REPLY.match(body.strip()):
+        return True
+    return False
 
 
 def extract_review_signals(raw: dict[str, Any], *, max_items: int = 8) -> list[dict[str, str]]:
@@ -538,20 +550,61 @@ def _safe_sidecar_path(raw_path: Path, sidecar: str) -> Path | None:
     return None
 
 
+# Local-ephemeral paths that must not appear in curated training patches.
+_NOISE_PATCH_BASENAMES: frozenset[str] = frozenset(
+    {
+        "remotes.txt",
+        ".env",
+        ".env.local",
+    }
+)
+def _is_noise_patch_path(path: str | None) -> bool:
+    if not path:
+        return False
+    base = Path(str(path).replace("\\", "/")).name.lower()
+    return base in _NOISE_PATCH_BASENAMES
+
+
+def _filter_noise_from_diff(diff_text: str) -> str:
+    """Drop unified-diff hunks for local-only files (e.g. remotes.txt)."""
+    if not diff_text:
+        return diff_text
+    if not any(name in diff_text for name in _NOISE_PATCH_BASENAMES):
+        return diff_text
+    out: list[str] = []
+    skip = False
+    for line in diff_text.splitlines(keepends=True):
+        if line.startswith("diff --git "):
+            low = line.lower()
+            skip = any(name in low for name in _NOISE_PATCH_BASENAMES)
+            if skip:
+                continue
+            out.append(line)
+            continue
+        if skip:
+            continue
+        out.append(line)
+    return "".join(out)
+
+
 def _load_diff_text(raw: dict[str, Any], raw_path: Path | None) -> str:
     diff = raw.get("diff") or {}
     inline = diff.get("inline")
     if isinstance(inline, str) and inline.strip():
-        return inline
+        return _filter_noise_from_diff(inline)
     sidecar = diff.get("sidecar_path")
     if sidecar and raw_path is not None:
         side = _safe_sidecar_path(raw_path, str(sidecar))
         if side is not None:
-            return side.read_text(encoding="utf-8", errors="replace")
+            return _filter_noise_from_diff(
+                side.read_text(encoding="utf-8", errors="replace")
+            )
     # Fall back to concatenating file patches; mark omitted/truncated files explicitly.
     chunks: list[str] = []
     for f in raw.get("files") or []:
         name = f.get("filename") or "unknown"
+        if _is_noise_patch_path(name):
+            continue
         patch = f.get("patch")
         if patch:
             chunks.append(f"--- a/{name}\n+++ b/{name}\n{patch}")
@@ -581,8 +634,12 @@ def extract_patch(
     encoded = full.encode("utf-8")
     if len(encoded) <= max_bytes:
         return full
-    # Prefer first portion + file list footer
-    files = raw.get("files") or []
+    # Prefer first portion + file list footer (omit local-noise paths).
+    files = [
+        f
+        for f in (raw.get("files") or [])
+        if not _is_noise_patch_path(f.get("filename"))
+    ]
     header_lines = [
         f"# Truncated unified diff for training (full raw under datasets/raw/; "
         f"{len(encoded)} bytes, {len(files)} files)",

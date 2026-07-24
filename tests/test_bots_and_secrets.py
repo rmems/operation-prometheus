@@ -55,6 +55,16 @@ def test_keep_actionable_deprecation_important_blocks():
     assert "NewApi" in cleaned
 
 
+def test_keep_non_gemini_sunset_important_blocks():
+    body = (
+        "## Code Review\n\nPlan the migration.\n\n"
+        "> [!IMPORTANT]\n"
+        "> We will sunset the old endpoint next quarter; migrate clients now.\n"
+    )
+    cleaned = strip_bot_boilerplate(body)
+    assert "sunset the old endpoint" in cleaned
+
+
 def test_strip_codex_react_footer():
     body = (
         "Avoid forcing the JS entropy backend from the library.\n\n"
