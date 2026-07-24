@@ -65,6 +65,11 @@ _MACROSCOPE_NOTE = re.compile(
     r">\s*\[!NOTE\].*?Macroscope summarized.*?(?:\n\n|\Z)",
     re.DOTALL | re.IGNORECASE,
 )
+# Gemini Code Assist IMPORTANT lifecycle admonitions (full blockquote runs).
+# Last line may omit trailing newline at EOF.
+_GEMINI_IMPORTANT_BLOCK = re.compile(
+    r"(?is)(?:^|\n)\s*>\s*\[!IMPORTANT\]\s*\n(?:\s*>[^\n]*(?:\n|$))+",
+)
 
 
 def is_bot_user(login: str | None, user_type: str | None = None) -> bool:
@@ -91,6 +96,14 @@ def strip_bot_boilerplate(markdown: str) -> str:
     text = _HTML_COMMENT.sub("", text)
     text = _CODEANT_BLOCK.sub("", text)
     text = _MACROSCOPE_NOTE.sub("", text)
+    # Drop Gemini IMPORTANT lifecycle/sunset blockquotes only (keep other notes).
+    def _drop_gemini_lifecycle(m: re.Match[str]) -> str:
+        block = m.group(0).lower()
+        if "sunset" in block or "deprecat" in block or "gemini code assist" in block:
+            return "\n"
+        return m.group(0)
+
+    text = _GEMINI_IMPORTANT_BLOCK.sub(_drop_gemini_lifecycle, text)
 
     # Cut at first strong boilerplate marker if remaining.
     cut_at = len(text)
@@ -111,8 +124,24 @@ def _heading_level(line: str) -> int:
     return n if line[n : n + 1] == " " else 0
 
 
+def _heading_matches_keyword(line: str, keyword: str) -> bool:
+    """True when heading title equals/starts with keyword (not parenthetical mentions).
+
+    Avoids matching ``#### Commands run (summary)`` for keyword ``summary``.
+    """
+    level = _heading_level(line)
+    if not level:
+        return False
+    title = line[level:].strip().lower()
+    # Drop trailing punctuation / emoji noise for matching.
+    title = re.sub(r"[^\w\s:-]+", " ", title)
+    title = re.sub(r"\s+", " ", title).strip()
+    kw = keyword.lower().strip()
+    return title == kw or title.startswith(kw + " ") or title.startswith(kw + ":")
+
+
 def extract_section(markdown: str, heading_keywords: tuple[str, ...]) -> str | None:
-    """Extract a markdown section whose heading contains any keyword (case-insensitive)."""
+    """Extract a markdown section whose heading title matches any keyword."""
     if not markdown:
         return None
     lines = markdown.splitlines()
@@ -121,8 +150,7 @@ def extract_section(markdown: str, heading_keywords: tuple[str, ...]) -> str | N
     for i, line in enumerate(lines):
         if not line.startswith("#"):
             continue
-        low = line.lower()
-        if any(k in low for k in heading_keywords):
+        if any(_heading_matches_keyword(line, k) for k in heading_keywords):
             start = i + 1
             start_level = _heading_level(line)
             break

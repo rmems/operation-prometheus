@@ -18,9 +18,11 @@
 
 | PR | Bucket (card) | Schema `training_use` | Domain | Focus |
 |----|---------------|----------------------|--------|--------|
-| [#37](https://github.com/Limen-Neural/axon-encoder/pull/37) | review-to-patch | review-to-patch | snn / api | Neuromodulator gain curves |
-| [#50](https://github.com/Limen-Neural/axon-encoder/pull/50) | repair | repair | security | RNG swap + tests |
+| [#37](https://github.com/Limen-Neural/axon-encoder/pull/37) | review-to-patch | review-to-patch | snn | Neuromodulator gain curves |
+| [#50](https://github.com/Limen-Neural/axon-encoder/pull/50) | repair | repair | security | RNG swap + tests (`task_type: security`) |
 | [#41](https://github.com/Limen-Neural/axon-encoder/pull/41) | review-to-patch | review-to-patch | api | Encoder standardization |
+
+Per-PR domains are set via card `domain_by_pr` so JSONL/manifest match this table.
 
 ## Known limitations (v0)
 

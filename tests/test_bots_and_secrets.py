@@ -8,8 +8,30 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "scripts"))
 
-from lib.bots import is_bot_user, strip_bot_boilerplate  # noqa: E402
+from lib.bots import extract_section, is_bot_user, strip_bot_boilerplate  # noqa: E402
 from lib.secrets import find_secrets, redact_home_paths, redact_secrets, sanitize_text  # noqa: E402
+
+
+def test_extract_section_ignores_parenthetical_summary():
+    body = (
+        "### What changed\n\nReplaces the PRNG.\n\n"
+        "#### Commands run (summary)\n\n| Command | Pass means |\n"
+    )
+    assert "Replaces" in (extract_section(body, ("what changed",)) or "")
+    assert extract_section(body, ("summary",)) is None
+
+
+def test_strip_gemini_sunset_boilerplate():
+    body = (
+        "## Code Review\n\nFix the panic path.\n\n"
+        "> [!IMPORTANT]\n"
+        "> The consumer version of Gemini Code Assist on GitHub is being sunset.\n"
+        "> For more details on the timeline, see Help Documentation.\n"
+    )
+    cleaned = strip_bot_boilerplate(body)
+    assert "Fix the panic path" in cleaned
+    assert "sunset" not in cleaned.lower()
+    assert "Help Documentation" not in cleaned
 
 
 def test_is_bot_user_by_type_and_login():

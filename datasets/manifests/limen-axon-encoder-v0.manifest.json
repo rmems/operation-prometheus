@@ -6,8 +6,8 @@
   "source_repo": "Limen-Neural/axon-encoder",
   "jsonl_path": "datasets/jsonl/limen-axon-encoder-v0.jsonl",
   "record_count": 3,
-  "sha256": "03a62cc7c1c3eafecb34fc50dd90e72f16b2508fa476fa0e28341fec107b70bd",
-  "bytes": 210497,
+  "sha256": "0c2e25c0182c0d8f64cd305586afec2b7684adffdb3f9e3e110a6764b32be254",
+  "bytes": 206529,
   "records": [
     {
       "id": "Limen-Neural-axon-encoder-37",
@@ -28,7 +28,7 @@
       "pr_number": 41,
       "training_use": "review-to-patch",
       "task_type": "bugfix",
-      "domain": "snn",
+      "domain": "api",
       "quality_score": 0.95,
       "outcome": "merged",
       "has_issue_context": true,
@@ -41,14 +41,14 @@
       "id": "Limen-Neural-axon-encoder-50",
       "pr_number": 50,
       "training_use": "repair",
-      "task_type": "other",
-      "domain": "snn",
+      "task_type": "security",
+      "domain": "security",
       "quality_score": 0.95,
       "outcome": "merged",
       "has_issue_context": true,
       "review_signal_count": 8,
       "patch_chars": 20225,
-      "validation_count": 4,
+      "validation_count": 3,
       "source_url_count": 1
     }
   ]

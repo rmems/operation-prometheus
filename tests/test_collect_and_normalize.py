@@ -317,6 +317,25 @@ def test_review_apps_alone_do_not_count_as_validation():
     assert any(e["detail"].startswith("review_apps:") for e in events)
 
 
+def test_sec_title_is_security_task_type():
+    from lib.normalize import task_type_for
+
+    raw = {"pull": {"title": "sec(rng): replace insecure xorshift with rand"}}
+    assert task_type_for("Limen-Neural/axon-encoder", 50, raw) == "security"
+
+
+def test_domain_by_pr_on_card():
+    from lib.normalize import domain_for
+
+    card = {
+        "domains": ["snn"],
+        "domain_by_pr": {"50": "security", "41": "api", "37": "snn"},
+    }
+    assert domain_for("Limen-Neural/axon-encoder", 50, card, {}) == "security"
+    assert domain_for("Limen-Neural/axon-encoder", 41, card, {}) == "api"
+    assert domain_for("Limen-Neural/axon-encoder", 37, card, {}) == "snn"
+
+
 def test_codeql_and_snyk_stay_in_ci_validation():
     from lib.normalize import extract_validation
 

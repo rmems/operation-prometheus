@@ -94,7 +94,8 @@ TITLE_TASK_HINTS: list[tuple[re.Pattern[str], str]] = [
     (re.compile(r"(?i)^docs?\b"), "docs"),
     (re.compile(r"(?i)^test\b"), "test"),
     (re.compile(r"(?i)^perf\b"), "perf"),
-    (re.compile(r"(?i)^security\b"), "security"),
+    # Conventional commit: security | sec(scope):
+    (re.compile(r"(?i)^sec(?:urity)?\b"), "security"),
     (re.compile(r"(?i)^chore\b"), "chore"),
 ]
 
@@ -139,6 +140,15 @@ def domain_for(repo: str, pr: int, card: dict[str, Any], raw: dict[str, Any]) ->
     key = (repo, pr)
     if key in DOMAIN_OVERRIDE:
         return DOMAIN_OVERRIDE[key]
+    # Per-PR domain map on the card (keys may be str or int in JSON).
+    by_pr = card.get("domain_by_pr") or {}
+    if by_pr:
+        for k, v in by_pr.items():
+            try:
+                if int(k) == pr and str(v).strip():
+                    return str(v).strip()
+            except (TypeError, ValueError):
+                continue
     domains = card.get("domains") or []
     if domains:
         return str(domains[0])
@@ -242,11 +252,19 @@ def extract_issue_context(raw: dict[str, Any]) -> str | None:
             parts.append(body[:1500])
     pull = raw.get("pull") or {}
     body = strip_bot_boilerplate(pull.get("body") or "")
-    summary = extract_section(body, ("summary", "user description"))
-    if summary:
-        parts.append(summary[:2500])
-    elif body:
-        parts.append(body[:2000])
+    # Prefer problem/motivation sections over local verification tables.
+    # "what changed" before bare "summary" so parenthetical headings never win.
+    for keywords in (
+        ("what changed", "user description", "motivation", "problem", "overview"),
+        ("summary",),
+    ):
+        summary = extract_section(body, keywords)
+        if summary:
+            parts.append(summary[:2500])
+            break
+    else:
+        if body:
+            parts.append(body[:2000])
     title = (pull.get("title") or "").strip()
     if title and not parts:
         parts.append(title)
@@ -298,7 +316,7 @@ def extract_review_signals(raw: dict[str, Any], *, max_items: int = 8) -> list[d
         for c in raw.get("review_comments") or []:
             if is_bot_user(c.get("user_login"), c.get("user_type")):
                 continue
-            body = (c.get("body") or "").strip()
+            body = strip_bot_boilerplate((c.get("body") or "").strip())
             if not body or _is_non_actionable_review_body(body):
                 continue
             body, _ = sanitize_text(body)

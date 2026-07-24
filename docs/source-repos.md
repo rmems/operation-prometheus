@@ -147,6 +147,11 @@ All trajectories are extracted as JSONL records conforming to [pr_trajectory.sch
 **Metadata card**: [datasets/cards/limen-axon-encoder-v0.json](../datasets/cards/limen-axon-encoder-v0.json)  
 **JSONL**: [datasets/jsonl/limen-axon-encoder-v0.jsonl](../datasets/jsonl/limen-axon-encoder-v0.jsonl)
 
+> **Wave A / v0 exception:** This first Limen extract uses **three** high-signal PRs.
+> The usual “at least five” shortlist rule below still applies to new source repos;
+> Wave A intentionally ships a smaller pilot so review→fix density can be validated
+> before expanding the Limen shortlist.
+
 | PR | Title | Domain | Bucket | Signal |
 |----|-------|--------|--------|--------|
 | [#37](https://github.com/Limen-Neural/axon-encoder/pull/37) | feat(modulators): dynamic neuromodulator gain curves | snn, api | review-to-patch | GainCurve + modulated encode paths; strong review→fix (zero-scale, serde). |
