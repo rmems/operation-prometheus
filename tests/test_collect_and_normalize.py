@@ -412,6 +412,29 @@ def test_before_context_omits_noise_paths():
     assert ".env" not in ctx
 
 
+def test_c_quoted_diff_header_noise_basename():
+    from lib.normalize import extract_patch
+
+    # Git quotes non-ASCII path components with C-style escapes.
+    raw = {
+        "diff": {
+            "inline": (
+                'diff --git "a/caf\\303\\251/remotes.txt" "b/caf\\303\\251/remotes.txt"\n'
+                "--- a/caf\xc3\xa9/remotes.txt\n"
+                "+++ b/caf\xc3\xa9/remotes.txt\n"
+                "@@ -0,0 +1 @@\n+secret-remote\n"
+                "diff --git a/src/ok.rs b/src/ok.rs\n"
+                "--- a/src/ok.rs\n+++ b/src/ok.rs\n@@ -1 +1 @@\n-a\n+b\n"
+            )
+        },
+        "files": [],
+    }
+    patch = extract_patch(raw)
+    assert "src/ok.rs" in patch
+    assert "secret-remote" not in patch
+    assert "remotes.txt" not in patch
+
+
 def test_codeql_and_snyk_stay_in_ci_validation():
     from lib.normalize import extract_validation
 

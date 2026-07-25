@@ -562,28 +562,62 @@ _NOISE_PATCH_BASENAMES: frozenset[str] = frozenset(
         ".env.local",
     }
 )
+def _decode_git_path(token: str) -> str:
+    """Decode a path token from a ``diff --git`` header.
+
+    Handles Git C-quoted paths such as ``\"a/caf\\303\\251/remotes.txt\"`` so
+    basename checks see ``remotes.txt`` rather than ``remotes.txt\"``.
+    """
+    s = (token or "").strip()
+    if len(s) >= 2 and s[0] == '"' and s[-1] == '"':
+        # Git uses C-style escapes inside double quotes (octal + common escapes).
+        inner = s[1:-1]
+        try:
+            # unicode_escape understands \\303 style octal as in Git's quoted paths.
+            s = (
+                inner.encode("utf-8")
+                .decode("unicode_escape")
+                .encode("latin-1")
+                .decode("utf-8", errors="replace")
+            )
+        except Exception:
+            s = inner.replace('\\"', '"').replace("\\\\", "\\")
+    # Strip a/ or b/ prefix used by unified diffs.
+    if s.startswith("a/") or s.startswith("b/"):
+        s = s[2:]
+    return s
+
+
 def _is_noise_patch_path(path: str | None) -> bool:
     if not path:
         return False
-    base = Path(str(path).replace("\\", "/")).name.lower()
+    decoded = _decode_git_path(str(path)) if str(path).startswith('"') else str(path)
+    # Also tolerate tokens that already include a/ or trailing quote fragments.
+    cleaned = decoded.replace("\\", "/").strip().strip('"')
+    if cleaned.startswith("a/") or cleaned.startswith("b/"):
+        cleaned = cleaned[2:]
+    base = Path(cleaned).name.lower().rstrip('"')
     return base in _NOISE_PATCH_BASENAMES
 
 
 def _diff_header_has_noise_path(header_line: str) -> bool:
     """True if a ``diff --git`` header touches a noise basename (exact).
 
-    Parses ``a/...`` and ``b/...`` paths so ``.env.example`` is kept while
-    ``.env`` / ``remotes.txt`` are dropped (substring match would false-positive).
+    Parses ``a/...`` and ``b/...`` paths (including C-quoted forms) so
+    ``.env.example`` is kept while ``.env`` / ``remotes.txt`` are dropped.
     """
-    # diff --git a/path b/path  (paths may contain spaces rarely; keep simple split)
-    parts = header_line.strip().split()
-    # ['diff', '--git', 'a/foo', 'b/foo'] ideally
+    line = header_line.strip()
+    if not line.startswith("diff --git "):
+        return False
+    rest = line[len("diff --git ") :]
+    # Prefer quoted tokens, then unquoted whitespace-separated a/ b/ paths.
+    tokens = re.findall(r'"([^"\\]*(?:\\.[^"\\]*)*)"|(\S+)', rest)
     paths: list[str] = []
-    for p in parts[2:]:
-        if p.startswith("a/") or p.startswith("b/"):
-            paths.append(p[2:])
-        else:
-            paths.append(p)
+    for quoted, plain in tokens:
+        token = f'"{quoted}"' if quoted else plain
+        if not token:
+            continue
+        paths.append(_decode_git_path(token))
     return any(_is_noise_patch_path(p) for p in paths)
 
 
