@@ -516,7 +516,11 @@ def extract_validation(raw: dict[str, Any]) -> list[dict[str, str]]:
 def extract_before_context(raw: dict[str, Any]) -> str:
     pull = raw.get("pull") or {}
     title = pull.get("title") or ""
-    files = raw.get("files") or []
+    files = [
+        f
+        for f in (raw.get("files") or [])
+        if not _is_noise_patch_path(f.get("filename"))
+    ]
     names = [f.get("filename") for f in files[:20] if f.get("filename")]
     body = strip_bot_boilerplate(pull.get("body") or "")
     summary = extract_section(body, ("summary", "user description", "what changed"))
@@ -565,18 +569,44 @@ def _is_noise_patch_path(path: str | None) -> bool:
     return base in _NOISE_PATCH_BASENAMES
 
 
+def _diff_header_has_noise_path(header_line: str) -> bool:
+    """True if a ``diff --git`` header touches a noise basename (exact).
+
+    Parses ``a/...`` and ``b/...`` paths so ``.env.example`` is kept while
+    ``.env`` / ``remotes.txt`` are dropped (substring match would false-positive).
+    """
+    # diff --git a/path b/path  (paths may contain spaces rarely; keep simple split)
+    parts = header_line.strip().split()
+    # ['diff', '--git', 'a/foo', 'b/foo'] ideally
+    paths: list[str] = []
+    for p in parts[2:]:
+        if p.startswith("a/") or p.startswith("b/"):
+            paths.append(p[2:])
+        else:
+            paths.append(p)
+    return any(_is_noise_patch_path(p) for p in paths)
+
+
 def _filter_noise_from_diff(diff_text: str) -> str:
     """Drop unified-diff hunks for local-only files (e.g. remotes.txt)."""
     if not diff_text:
         return diff_text
-    if not any(name in diff_text for name in _NOISE_PATCH_BASENAMES):
-        return diff_text
+    # Cheap prefilter: only scan when a noise basename token might appear.
+    if not any(
+        f"/{name}" in diff_text or f" {name}" in diff_text or diff_text.endswith(name)
+        for name in _NOISE_PATCH_BASENAMES
+    ) and not any(
+        f"a/{name}" in diff_text or f"b/{name}" in diff_text
+        for name in _NOISE_PATCH_BASENAMES
+    ):
+        # Still handle bare basenames in headers.
+        if not any(name in diff_text for name in _NOISE_PATCH_BASENAMES):
+            return diff_text
     out: list[str] = []
     skip = False
     for line in diff_text.splitlines(keepends=True):
         if line.startswith("diff --git "):
-            low = line.lower()
-            skip = any(name in low for name in _NOISE_PATCH_BASENAMES)
+            skip = _diff_header_has_noise_path(line)
             if skip:
                 continue
             out.append(line)

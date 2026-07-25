@@ -378,6 +378,8 @@ def test_remotes_txt_stripped_from_patch():
                 "diff --git a/remotes.txt b/remotes.txt\n"
                 "--- a/remotes.txt\n+++ b/remotes.txt\n"
                 "@@ -0,0 +1,2 @@\n+origin  git@github.com:Spikenaut/spikenaut-encoder.git\n"
+                "diff --git a/.env.example b/.env.example\n"
+                "--- a/.env.example\n+++ b/.env.example\n@@ -1 +1 @@\n-FOO=\n+FOO=1\n"
             )
         },
         "files": [],
@@ -387,6 +389,27 @@ def test_remotes_txt_stripped_from_patch():
     assert "diff --git a/remotes.txt" not in patch
     assert "Spikenaut" not in patch
     assert "remotes/origin/" not in patch
+    # Basename match must not drop .env.example as if it were .env
+    assert ".env.example" in patch
+    assert "FOO=1" in patch
+
+
+def test_before_context_omits_noise_paths():
+    from lib.normalize import extract_before_context
+
+    raw = {
+        "pull": {"title": "feat: x", "body": "## Summary\nHello\n"},
+        "files": [
+            {"filename": "src/lib.rs"},
+            {"filename": "remotes.txt"},
+            {"filename": ".env"},
+        ],
+    }
+    ctx = extract_before_context(raw)
+    assert "Changed files (1)" in ctx
+    assert "src/lib.rs" in ctx
+    assert "remotes.txt" not in ctx
+    assert ".env" not in ctx
 
 
 def test_codeql_and_snyk_stay_in_ci_validation():
