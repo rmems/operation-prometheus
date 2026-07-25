@@ -65,6 +65,22 @@ def test_keep_non_gemini_sunset_important_blocks():
     assert "sunset the old endpoint" in cleaned
 
 
+def test_gemini_lifecycle_stops_at_blank_line_before_actionable_quote():
+    """Blank line between blockquote runs must not swallow the next review signal."""
+    body = (
+        "## Code Review\n\n"
+        "> [!IMPORTANT]\n"
+        "> The consumer version of Gemini Code Assist on GitHub is being sunset.\n"
+        "> Installations will be blocked after the deadline.\n"
+        "\n"
+        "> Please fix the integer overflow in evaluate().\n"
+    )
+    cleaned = strip_bot_boilerplate(body)
+    assert "sunset" not in cleaned.lower()
+    assert "integer overflow" in cleaned
+    assert "evaluate()" in cleaned
+
+
 def test_strip_codex_react_footer():
     body = (
         "Avoid forcing the JS entropy backend from the library.\n\n"

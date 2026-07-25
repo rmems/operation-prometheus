@@ -562,6 +562,8 @@ _NOISE_PATCH_BASENAMES: frozenset[str] = frozenset(
         ".env.local",
     }
 )
+
+
 def _decode_git_path(token: str) -> str:
     """Decode a path token from a ``diff --git`` header.
 
@@ -600,42 +602,61 @@ def _is_noise_patch_path(path: str | None) -> bool:
     return base in _NOISE_PATCH_BASENAMES
 
 
-def _diff_header_has_noise_path(header_line: str) -> bool:
-    """True if a ``diff --git`` header touches a noise basename (exact).
+def _parse_diff_git_paths(header_line: str) -> list[str]:
+    """Return a/ and b/ path fields from a ``diff --git`` header.
 
-    Parses ``a/...`` and ``b/...`` paths (including C-quoted forms) so
-    ``.env.example`` is kept while ``.env`` / ``remotes.txt`` are dropped.
+    Handles C-quoted paths and unquoted paths that contain spaces (Git emits
+    ``diff --git a/foo bar b/foo bar``). Never splits mid-path on whitespace.
     """
     line = header_line.strip()
     if not line.startswith("diff --git "):
-        return False
+        return []
     rest = line[len("diff --git ") :]
-    # Prefer quoted tokens, then unquoted whitespace-separated a/ b/ paths.
+    # Two C-quoted paths (standard for spaces / special chars).
+    quoted = re.fullmatch(
+        r'"([^"\\]*(?:\\.[^"\\]*)*)"\s+"([^"\\]*(?:\\.[^"\\]*)*)"',
+        rest,
+    )
+    if quoted:
+        return [
+            _decode_git_path(f'"{quoted.group(1)}"'),
+            _decode_git_path(f'"{quoted.group(2)}"'),
+        ]
+    # Unquoted: split only at the a/... → b/... boundary so paths may contain spaces.
+    if rest.startswith("a/"):
+        sep = rest.find(" b/")
+        if sep != -1:
+            return [
+                _decode_git_path(rest[:sep]),
+                _decode_git_path(rest[sep + 1 :]),
+            ]
+    # Fallback: whitespace tokens (legacy / malformed headers).
     tokens = re.findall(r'"([^"\\]*(?:\\.[^"\\]*)*)"|(\S+)', rest)
     paths: list[str] = []
-    for quoted, plain in tokens:
-        token = f'"{quoted}"' if quoted else plain
-        if not token:
-            continue
-        paths.append(_decode_git_path(token))
-    return any(_is_noise_patch_path(p) for p in paths)
+    for q, plain in tokens:
+        token = f'"{q}"' if q else plain
+        if token:
+            paths.append(_decode_git_path(token))
+    return paths
+
+
+def _diff_header_has_noise_path(header_line: str) -> bool:
+    """True if a ``diff --git`` header touches a noise basename (exact).
+
+    Parses ``a/...`` and ``b/...`` paths (including C-quoted forms and spaces)
+    so ``.env.example`` / ``.env template`` are kept while ``.env`` is dropped.
+    """
+    return any(_is_noise_patch_path(p) for p in _parse_diff_git_paths(header_line))
 
 
 def _filter_noise_from_diff(diff_text: str) -> str:
     """Drop unified-diff hunks for local-only files (e.g. remotes.txt)."""
     if not diff_text:
         return diff_text
-    # Cheap prefilter: only scan when a noise basename token might appear.
-    if not any(
-        f"/{name}" in diff_text or f" {name}" in diff_text or diff_text.endswith(name)
-        for name in _NOISE_PATCH_BASENAMES
-    ) and not any(
-        f"a/{name}" in diff_text or f"b/{name}" in diff_text
-        for name in _NOISE_PATCH_BASENAMES
-    ):
-        # Still handle bare basenames in headers.
-        if not any(name in diff_text for name in _NOISE_PATCH_BASENAMES):
-            return diff_text
+    # Cheap case-insensitive prefilter: skip scan when no noise basename appears.
+    low = diff_text.lower()
+    if not any(name in low for name in _NOISE_PATCH_BASENAMES):
+        return diff_text
     out: list[str] = []
     skip = False
     for line in diff_text.splitlines(keepends=True):
@@ -690,8 +711,12 @@ def extract_patch(
     full = _load_diff_text(raw, raw_path)
     full, _ = sanitize_text(full)
     if not full.strip():
-        files = raw.get("files") or []
-        names = [f.get("filename") for f in files if f.get("filename")]
+        # Same noise filter as the files-API path so remotes.txt/.env never reappear.
+        names = [
+            f.get("filename")
+            for f in (raw.get("files") or [])
+            if f.get("filename") and not _is_noise_patch_path(f.get("filename"))
+        ]
         return (
             f"# Patch unavailable from API; changed files: {', '.join(names) or '(none)'}\n"
         )

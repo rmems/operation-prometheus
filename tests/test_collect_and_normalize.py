@@ -435,6 +435,73 @@ def test_c_quoted_diff_header_noise_basename():
     assert "remotes.txt" not in patch
 
 
+def test_empty_patch_fallback_omits_noise_filenames():
+    from lib.normalize import extract_patch
+
+    # Inline noise-only + files list with noise + one real path without a patch chunk.
+    raw = {
+        "diff": {
+            "inline": (
+                "diff --git a/remotes.txt b/remotes.txt\n"
+                "--- a/remotes.txt\n+++ b/remotes.txt\n@@ -0,0 +1 @@\n+origin secret\n"
+            )
+        },
+        "files": [
+            {"filename": "remotes.txt"},
+            {"filename": ".env"},
+            {"filename": "src/lib.rs"},
+        ],
+    }
+    patch = extract_patch(raw)
+    assert "remotes.txt" not in patch
+    assert ".env" not in patch
+    assert "origin secret" not in patch
+    assert "changed files: src/lib.rs" in patch
+
+
+def test_noise_filter_keeps_paths_with_space_after_env_prefix():
+    from lib.normalize import extract_patch
+
+    # Unquoted path with a space must not be split so "a/.env" alone looks like noise.
+    raw = {
+        "diff": {
+            "inline": (
+                "diff --git a/.env template b/.env template\n"
+                "--- a/.env template\n+++ b/.env template\n"
+                "@@ -1 +1 @@\n-old\n+new\n"
+                "diff --git a/src/ok.rs b/src/ok.rs\n"
+                "--- a/src/ok.rs\n+++ b/src/ok.rs\n@@ -1 +1 @@\n-a\n+b\n"
+            )
+        },
+        "files": [],
+    }
+    patch = extract_patch(raw)
+    assert ".env template" in patch
+    assert "+new" in patch
+    assert "src/ok.rs" in patch
+
+
+def test_noise_prefilter_case_insensitive_uppercase_env():
+    from lib.normalize import extract_patch
+
+    raw = {
+        "diff": {
+            "inline": (
+                "diff --git a/.ENV b/.ENV\n"
+                "--- a/.ENV\n+++ b/.ENV\n"
+                "@@ -0,0 +1 @@\n+SECRET=1\n"
+                "diff --git a/src/ok.rs b/src/ok.rs\n"
+                "--- a/src/ok.rs\n+++ b/src/ok.rs\n@@ -1 +1 @@\n-a\n+b\n"
+            )
+        },
+        "files": [],
+    }
+    patch = extract_patch(raw)
+    assert "SECRET=1" not in patch
+    assert "diff --git a/.ENV" not in patch
+    assert "src/ok.rs" in patch
+
+
 def test_codeql_and_snyk_stay_in_ci_validation():
     from lib.normalize import extract_validation
 

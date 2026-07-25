@@ -65,10 +65,11 @@ _MACROSCOPE_NOTE = re.compile(
     r">\s*\[!NOTE\].*?Macroscope summarized.*?(?:\n\n|\Z)",
     re.DOTALL | re.IGNORECASE,
 )
-# Gemini Code Assist IMPORTANT lifecycle admonitions (full blockquote runs).
-# Last line may omit trailing newline at EOF.
+# Gemini Code Assist IMPORTANT lifecycle admonitions (contiguous blockquote run).
+# Continuation lines use [ \t]* only — not \s* — so a blank line ends the match
+# and a later actionable blockquote is preserved.
 _GEMINI_IMPORTANT_BLOCK = re.compile(
-    r"(?is)(?:^|\n)\s*>\s*\[!IMPORTANT\]\s*\n(?:\s*>[^\n]*(?:\n|$))+",
+    r"(?im)(?:^|\n)[ \t]*>[ \t]*\[!IMPORTANT\][ \t]*\n(?:[ \t]*>[^\n]*(?:\n|$))*",
 )
 # Codex review transport footer (product chrome, not engineering signal).
 _CODEX_REACT_FOOTER = re.compile(
