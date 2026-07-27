@@ -376,7 +376,7 @@ def extract_validation(raw: dict[str, Any]) -> list[dict[str, str]]:
     pull_body = strip_bot_boilerplate((raw.get("pull") or {}).get("body") or "")
     val_section = extract_section(
         pull_body,
-        ("validation", "test plan", "verification", "testing", "tests"),
+        ("validation", "validations", "test plan", "test plans", "verification", "verifications", "testing", "tests"),
     )
     if val_section:
         low = val_section.lower()
@@ -424,7 +424,10 @@ def extract_validation(raw: dict[str, Any]) -> list[dict[str, str]]:
         # Non-zero error/failure counts (sanitizer / pytest style): "1 error", "2 failures".
         if re.search(r"\b[1-9]\d*\s+(?:tests?\s+)?(?:errors?|failures?)\b", low):
             result = "fail"
+        truncated = len(val_section) > 1500
         detail, _ = sanitize_text(val_section[:1500])
+        if truncated and detail:
+            detail = detail.rstrip() + " […]"
         events.append({"type": "test", "result": result, "detail": detail})
 
     checks = (raw.get("checks") or {}).get("check_runs") or []
@@ -599,7 +602,11 @@ def _is_noise_patch_path(path: str | None) -> bool:
     if cleaned.startswith("a/") or cleaned.startswith("b/"):
         cleaned = cleaned[2:]
     base = Path(cleaned).name.lower().rstrip('"')
-    return base in _NOISE_PATCH_BASENAMES
+    if base in _NOISE_PATCH_BASENAMES:
+        return True
+    # Recognize .env.*.local patterns (e.g., .env.development.local, .env.test.local)
+    # but preserve .env.example
+    return base.startswith(".env.") and base.endswith(".local") and base != ".env.example"
 
 
 def _parse_diff_git_paths(header_line: str) -> list[str]:

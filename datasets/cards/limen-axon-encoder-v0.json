@@ -4,7 +4,7 @@
   "source_repo_url": "https://github.com/Limen-Neural/axon-encoder",
   "source_repo_description": "SNN sensory preprocessing library: rate/delta/temporal/population encoders with neuromodulator gain curves",
   "schema_version": "pr_trajectory_v0",
-  "schema_url": "https://github.com/rmems/operation-prometheus/schemas/pr_trajectory.schema.json",
+  "schema_url": "https://github.com/rmems/operation-prometheus/blob/main/schemas/pr_trajectory.schema.json",
   "language": "Rust",
   "domains": ["snn", "ml-infra", "api", "security"],
   "domain_by_pr": {

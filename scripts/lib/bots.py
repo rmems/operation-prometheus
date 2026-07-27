@@ -73,7 +73,7 @@ _GEMINI_IMPORTANT_BLOCK = re.compile(
 )
 # Codex review transport footer (product chrome, not engineering signal).
 _CODEX_REACT_FOOTER = re.compile(
-    r"(?is)\s*Useful\?\s*React with\s*[^\n]*$",
+    r"(?ism)^\s*Useful\?\s*React with\s*[^\n]*$",
 )
 
 
@@ -110,13 +110,13 @@ def strip_bot_boilerplate(markdown: str) -> str:
             or "gemini-code-assist" in block
             or "developers.google.com/gemini-code-assist" in block
         )
-        is_lifecycle = (
-            "sunset" in block
-            or "will officially cease" in block
-            or "installations will be blocked" in block
-            or "consumer version" in block
+        is_gemini_lifecycle = (
+            ("gemini" in block and "sunset" in block)
+            or "gemini code assist will officially cease" in block
+            or ("gemini" in block and "installations will be blocked" in block)
+            or "gemini code assist consumer version" in block
         )
-        return "\n" if has_gemini and is_lifecycle else m.group(0)
+        return "\n" if has_gemini and is_gemini_lifecycle else m.group(0)
 
     text = _GEMINI_IMPORTANT_BLOCK.sub(_drop_gemini_lifecycle, text)
     text = _CODEX_REACT_FOOTER.sub("", text)

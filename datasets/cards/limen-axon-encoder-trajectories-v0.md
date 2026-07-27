@@ -5,8 +5,9 @@
 **Schema:** [pr_trajectory.schema.json](../../schemas/pr_trajectory.schema.json) (v0)  
 **JSONL:** [limen-axon-encoder-v0.jsonl](../jsonl/limen-axon-encoder-v0.jsonl)  
 **Machine card:** [limen-axon-encoder-v0.json](limen-axon-encoder-v0.json)  
-**Manifest:** [limen-axon-encoder-v0.manifest.json](../manifests/limen-axon-encoder-v0.manifest.json)  
+**Manifest:** [limen-axon-encoder-v0.manifest.json](../manifests/limen-axon-encoder-v0.manifest.json)
 **Shortlist source:** [docs/source-repos.md](../../docs/source-repos.md) (Limen-Neural section)
+**Data policy:** [docs/data-policy.md](../../docs/data-policy.md)
 
 ## Source repository
 
@@ -16,11 +17,11 @@
 
 ## Included PRs (3)
 
-| PR | Bucket (card) | Schema `training_use` | Domain | Focus |
-|----|---------------|----------------------|--------|--------|
-| [#37](https://github.com/Limen-Neural/axon-encoder/pull/37) | review-to-patch | review-to-patch | snn | Neuromodulator gain curves |
-| [#50](https://github.com/Limen-Neural/axon-encoder/pull/50) | repair | repair | security | RNG swap + tests (`task_type: security`) |
-| [#41](https://github.com/Limen-Neural/axon-encoder/pull/41) | review-to-patch | review-to-patch | api | Encoder standardization |
+| PR | Bucket (card) | Schema `training_use` | Domain | Quality | Focus |
+|----|---------------|----------------------|--------|---------|--------|
+| [#37](https://github.com/Limen-Neural/axon-encoder/pull/37) | review-to-patch | review-to-patch | snn | 0.95 | Neuromodulator gain curves |
+| [#50](https://github.com/Limen-Neural/axon-encoder/pull/50) | repair | repair | security | 0.95 | RNG swap + tests (`task_type: security`) |
+| [#41](https://github.com/Limen-Neural/axon-encoder/pull/41) | review-to-patch | review-to-patch | api | 0.95 | Encoder standardization |
 
 Per-PR domains are set via card `domain_by_pr` so JSONL/manifest match this table.
 
@@ -46,3 +47,9 @@ python scripts/build_trajectory_jsonl.py \
 
 python scripts/validate_jsonl.py --strict-policy datasets/jsonl/limen-axon-encoder-v0.jsonl
 ```
+
+## License / provenance
+
+- **Source repository license:** MIT (Limen-Neural/axon-encoder)
+- **This dataset:** Curated derivative of public PR history under the allowed-source policy
+- **Provenance:** Extracted from public PRs; manual curation applied per quality scoring and bot filtering
