@@ -94,7 +94,8 @@ TITLE_TASK_HINTS: list[tuple[re.Pattern[str], str]] = [
     (re.compile(r"(?i)^docs?\b"), "docs"),
     (re.compile(r"(?i)^test\b"), "test"),
     (re.compile(r"(?i)^perf\b"), "perf"),
-    (re.compile(r"(?i)^security\b"), "security"),
+    # Conventional commit: security | sec(scope):
+    (re.compile(r"(?i)^sec(?:urity)?\b"), "security"),
     (re.compile(r"(?i)^chore\b"), "chore"),
 ]
 
@@ -139,6 +140,15 @@ def domain_for(repo: str, pr: int, card: dict[str, Any], raw: dict[str, Any]) ->
     key = (repo, pr)
     if key in DOMAIN_OVERRIDE:
         return DOMAIN_OVERRIDE[key]
+    # Per-PR domain map on the card (keys may be str or int in JSON).
+    by_pr = card.get("domain_by_pr") or {}
+    if by_pr:
+        for k, v in by_pr.items():
+            try:
+                if int(k) == pr and isinstance(v, str) and v.strip():
+                    return v.strip()
+            except (TypeError, ValueError):
+                continue
     domains = card.get("domains") or []
     if domains:
         return str(domains[0])
@@ -242,11 +252,19 @@ def extract_issue_context(raw: dict[str, Any]) -> str | None:
             parts.append(body[:1500])
     pull = raw.get("pull") or {}
     body = strip_bot_boilerplate(pull.get("body") or "")
-    summary = extract_section(body, ("summary", "user description"))
-    if summary:
-        parts.append(summary[:2500])
-    elif body:
-        parts.append(body[:2000])
+    # Prefer problem/motivation sections over local verification tables.
+    # "what changed" before bare "summary" so parenthetical headings never win.
+    for keywords in (
+        ("what changed", "user description", "motivation", "problem", "overview"),
+        ("summary",),
+    ):
+        summary = extract_section(body, keywords)
+        if summary:
+            parts.append(summary[:2500])
+            break
+    else:
+        if body:
+            parts.append(body[:2000])
     title = (pull.get("title") or "").strip()
     if title and not parts:
         parts.append(title)
@@ -257,11 +275,23 @@ def extract_issue_context(raw: dict[str, Any]) -> str | None:
     return text or None
 
 
+# Maintainer ack-only replies consume review-signal budget without review content.
+_BARE_FIXED_IN_REPLY = re.compile(
+    r"(?is)^\s*(?:\*\*)?(?:addressed|fixed)\s+in\s+`?[0-9a-f]{7,40}`?"
+    r"(?:\*\*)?\s*\.?\s*$"
+)
+
+
 def _is_non_actionable_review_body(body: str) -> bool:
-    """True for product review wrappers (e.g. Codex summary shell) without signal."""
+    """True for product wrappers or bare fixed-in acks without review signal."""
     if not body or not body.strip():
         return True
-    return bool(_CODEX_REVIEW_WRAPPER.search(body))
+    if _CODEX_REVIEW_WRAPPER.search(body):
+        return True
+    # "Fixed in 0b05325." / "**Addressed in `abc1234`**" — outcome, not review.
+    if _BARE_FIXED_IN_REPLY.match(body.strip()):
+        return True
+    return False
 
 
 def extract_review_signals(raw: dict[str, Any], *, max_items: int = 8) -> list[dict[str, str]]:
@@ -298,7 +328,7 @@ def extract_review_signals(raw: dict[str, Any], *, max_items: int = 8) -> list[d
         for c in raw.get("review_comments") or []:
             if is_bot_user(c.get("user_login"), c.get("user_type")):
                 continue
-            body = (c.get("body") or "").strip()
+            body = strip_bot_boilerplate((c.get("body") or "").strip())
             if not body or _is_non_actionable_review_body(body):
                 continue
             body, _ = sanitize_text(body)
@@ -346,7 +376,7 @@ def extract_validation(raw: dict[str, Any]) -> list[dict[str, str]]:
     pull_body = strip_bot_boilerplate((raw.get("pull") or {}).get("body") or "")
     val_section = extract_section(
         pull_body,
-        ("validation", "test plan", "verification", "testing", "tests"),
+        ("validation", "validations", "test plan", "test plans", "verification", "verifications", "testing", "tests"),
     )
     if val_section:
         low = val_section.lower()
@@ -394,7 +424,10 @@ def extract_validation(raw: dict[str, Any]) -> list[dict[str, str]]:
         # Non-zero error/failure counts (sanitizer / pytest style): "1 error", "2 failures".
         if re.search(r"\b[1-9]\d*\s+(?:tests?\s+)?(?:errors?|failures?)\b", low):
             result = "fail"
+        truncated = len(val_section) > 1500
         detail, _ = sanitize_text(val_section[:1500])
+        if truncated and detail:
+            detail = detail.rstrip() + " […]"
         events.append({"type": "test", "result": result, "detail": detail})
 
     checks = (raw.get("checks") or {}).get("check_runs") or []
@@ -486,7 +519,11 @@ def extract_validation(raw: dict[str, Any]) -> list[dict[str, str]]:
 def extract_before_context(raw: dict[str, Any]) -> str:
     pull = raw.get("pull") or {}
     title = pull.get("title") or ""
-    files = raw.get("files") or []
+    files = [
+        f
+        for f in (raw.get("files") or [])
+        if not _is_noise_patch_path(f.get("filename"))
+    ]
     names = [f.get("filename") for f in files[:20] if f.get("filename")]
     body = strip_bot_boilerplate(pull.get("body") or "")
     summary = extract_section(body, ("summary", "user description", "what changed"))
@@ -520,20 +557,146 @@ def _safe_sidecar_path(raw_path: Path, sidecar: str) -> Path | None:
     return None
 
 
+# Local-ephemeral paths that must not appear in curated training patches.
+_NOISE_PATCH_BASENAMES: frozenset[str] = frozenset(
+    {
+        "remotes.txt",
+        ".env",
+        ".env.local",
+    }
+)
+
+
+def _decode_git_path(token: str) -> str:
+    """Decode a path token from a ``diff --git`` header.
+
+    Handles Git C-quoted paths such as ``\"a/caf\\303\\251/remotes.txt\"`` so
+    basename checks see ``remotes.txt`` rather than ``remotes.txt\"``.
+    """
+    s = (token or "").strip()
+    if len(s) >= 2 and s[0] == '"' and s[-1] == '"':
+        # Git uses C-style escapes inside double quotes (octal + common escapes).
+        inner = s[1:-1]
+        try:
+            # unicode_escape understands \\303 style octal as in Git's quoted paths.
+            s = (
+                inner.encode("utf-8")
+                .decode("unicode_escape")
+                .encode("latin-1")
+                .decode("utf-8", errors="replace")
+            )
+        except Exception:
+            s = inner.replace('\\"', '"').replace("\\\\", "\\")
+    # Strip a/ or b/ prefix used by unified diffs.
+    if s.startswith("a/") or s.startswith("b/"):
+        s = s[2:]
+    return s
+
+
+def _is_noise_patch_path(path: str | None) -> bool:
+    if not path:
+        return False
+    decoded = _decode_git_path(str(path)) if str(path).startswith('"') else str(path)
+    # Also tolerate tokens that already include a/ or trailing quote fragments.
+    cleaned = decoded.replace("\\", "/").strip().strip('"')
+    if cleaned.startswith("a/") or cleaned.startswith("b/"):
+        cleaned = cleaned[2:]
+    base = Path(cleaned).name.lower().rstrip('"')
+    if base in _NOISE_PATCH_BASENAMES:
+        return True
+    # Recognize .env.*.local patterns (e.g., .env.development.local, .env.test.local)
+    # but preserve .env.example
+    return base.startswith(".env.") and base.endswith(".local") and base != ".env.example"
+
+
+def _parse_diff_git_paths(header_line: str) -> list[str]:
+    """Return a/ and b/ path fields from a ``diff --git`` header.
+
+    Handles C-quoted paths and unquoted paths that contain spaces (Git emits
+    ``diff --git a/foo bar b/foo bar``). Never splits mid-path on whitespace.
+    """
+    line = header_line.strip()
+    if not line.startswith("diff --git "):
+        return []
+    rest = line[len("diff --git ") :]
+    # Two C-quoted paths (standard for spaces / special chars).
+    quoted = re.fullmatch(
+        r'"([^"\\]*(?:\\.[^"\\]*)*)"\s+"([^"\\]*(?:\\.[^"\\]*)*)"',
+        rest,
+    )
+    if quoted:
+        return [
+            _decode_git_path(f'"{quoted.group(1)}"'),
+            _decode_git_path(f'"{quoted.group(2)}"'),
+        ]
+    # Unquoted: split only at the a/... → b/... boundary so paths may contain spaces.
+    if rest.startswith("a/"):
+        sep = rest.find(" b/")
+        if sep != -1:
+            return [
+                _decode_git_path(rest[:sep]),
+                _decode_git_path(rest[sep + 1 :]),
+            ]
+    # Fallback: whitespace tokens (legacy / malformed headers).
+    tokens = re.findall(r'"([^"\\]*(?:\\.[^"\\]*)*)"|(\S+)', rest)
+    paths: list[str] = []
+    for q, plain in tokens:
+        token = f'"{q}"' if q else plain
+        if token:
+            paths.append(_decode_git_path(token))
+    return paths
+
+
+def _diff_header_has_noise_path(header_line: str) -> bool:
+    """True if a ``diff --git`` header touches a noise basename (exact).
+
+    Parses ``a/...`` and ``b/...`` paths (including C-quoted forms and spaces)
+    so ``.env.example`` / ``.env template`` are kept while ``.env`` is dropped.
+    """
+    return any(_is_noise_patch_path(p) for p in _parse_diff_git_paths(header_line))
+
+
+def _filter_noise_from_diff(diff_text: str) -> str:
+    """Drop unified-diff hunks for local-only files (e.g. remotes.txt)."""
+    if not diff_text:
+        return diff_text
+    # Cheap case-insensitive prefilter: skip scan when no noise basename appears.
+    low = diff_text.lower()
+    if not any(name in low for name in _NOISE_PATCH_BASENAMES):
+        return diff_text
+    out: list[str] = []
+    skip = False
+    for line in diff_text.splitlines(keepends=True):
+        if line.startswith("diff --git "):
+            skip = _diff_header_has_noise_path(line)
+            if skip:
+                continue
+            out.append(line)
+            continue
+        if skip:
+            continue
+        out.append(line)
+    return "".join(out)
+
+
 def _load_diff_text(raw: dict[str, Any], raw_path: Path | None) -> str:
     diff = raw.get("diff") or {}
     inline = diff.get("inline")
     if isinstance(inline, str) and inline.strip():
-        return inline
+        return _filter_noise_from_diff(inline)
     sidecar = diff.get("sidecar_path")
     if sidecar and raw_path is not None:
         side = _safe_sidecar_path(raw_path, str(sidecar))
         if side is not None:
-            return side.read_text(encoding="utf-8", errors="replace")
+            return _filter_noise_from_diff(
+                side.read_text(encoding="utf-8", errors="replace")
+            )
     # Fall back to concatenating file patches; mark omitted/truncated files explicitly.
     chunks: list[str] = []
     for f in raw.get("files") or []:
         name = f.get("filename") or "unknown"
+        if _is_noise_patch_path(name):
+            continue
         patch = f.get("patch")
         if patch:
             chunks.append(f"--- a/{name}\n+++ b/{name}\n{patch}")
@@ -555,16 +718,24 @@ def extract_patch(
     full = _load_diff_text(raw, raw_path)
     full, _ = sanitize_text(full)
     if not full.strip():
-        files = raw.get("files") or []
-        names = [f.get("filename") for f in files if f.get("filename")]
+        # Same noise filter as the files-API path so remotes.txt/.env never reappear.
+        names = [
+            f.get("filename")
+            for f in (raw.get("files") or [])
+            if f.get("filename") and not _is_noise_patch_path(f.get("filename"))
+        ]
         return (
             f"# Patch unavailable from API; changed files: {', '.join(names) or '(none)'}\n"
         )
     encoded = full.encode("utf-8")
     if len(encoded) <= max_bytes:
         return full
-    # Prefer first portion + file list footer
-    files = raw.get("files") or []
+    # Prefer first portion + file list footer (omit local-noise paths).
+    files = [
+        f
+        for f in (raw.get("files") or [])
+        if not _is_noise_patch_path(f.get("filename"))
+    ]
     header_lines = [
         f"# Truncated unified diff for training (full raw under datasets/raw/; "
         f"{len(encoded)} bytes, {len(files)} files)",

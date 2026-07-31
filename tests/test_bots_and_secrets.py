@@ -8,8 +8,88 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "scripts"))
 
-from lib.bots import is_bot_user, strip_bot_boilerplate  # noqa: E402
+from lib.bots import extract_section, is_bot_user, strip_bot_boilerplate  # noqa: E402
 from lib.secrets import find_secrets, redact_home_paths, redact_secrets, sanitize_text  # noqa: E402
+
+
+def test_extract_section_ignores_parenthetical_summary():
+    body = (
+        "### What changed\n\nReplaces the PRNG.\n\n"
+        "#### Commands run (summary)\n\n| Command | Pass means |\n"
+    )
+    assert "Replaces" in (extract_section(body, ("what changed",)) or "")
+    assert extract_section(body, ("summary",)) is None
+
+
+def test_extract_section_matches_prefixed_validation_headings():
+    body = (
+        "## Local testing\n\n`cargo test` green.\n\n"
+        "## Manual verification\n\nSanitizer clean.\n\n"
+        "## Other\n\nnoise\n"
+    )
+    assert "cargo test" in (extract_section(body, ("testing", "tests")) or "")
+    assert "Sanitizer" in (extract_section(body, ("verification",)) or "")
+
+
+def test_strip_gemini_sunset_boilerplate():
+    body = (
+        "## Code Review\n\nFix the panic path.\n\n"
+        "> [!IMPORTANT]\n"
+        "> The consumer version of Gemini Code Assist on GitHub is being sunset.\n"
+        "> For more details on the timeline, see Help Documentation.\n"
+    )
+    cleaned = strip_bot_boilerplate(body)
+    assert "Fix the panic path" in cleaned
+    assert "sunset" not in cleaned.lower()
+    assert "Help Documentation" not in cleaned
+
+
+def test_keep_actionable_deprecation_important_blocks():
+    body = (
+        "## Code Review\n\nPlease migrate callers.\n\n"
+        "> [!IMPORTANT]\n"
+        "> `OldApi` is deprecated; use `NewApi` instead to avoid breakage.\n"
+    )
+    cleaned = strip_bot_boilerplate(body)
+    assert "deprecated" in cleaned.lower()
+    assert "NewApi" in cleaned
+
+
+def test_keep_non_gemini_sunset_important_blocks():
+    body = (
+        "## Code Review\n\nPlan the migration.\n\n"
+        "> [!IMPORTANT]\n"
+        "> We will sunset the old endpoint next quarter; migrate clients now.\n"
+    )
+    cleaned = strip_bot_boilerplate(body)
+    assert "sunset the old endpoint" in cleaned
+
+
+def test_gemini_lifecycle_stops_at_blank_line_before_actionable_quote():
+    """Blank line between blockquote runs must not swallow the next review signal."""
+    body = (
+        "## Code Review\n\n"
+        "> [!IMPORTANT]\n"
+        "> The consumer version of Gemini Code Assist on GitHub is being sunset.\n"
+        "> Installations will be blocked after the deadline.\n"
+        "\n"
+        "> Please fix the integer overflow in evaluate().\n"
+    )
+    cleaned = strip_bot_boilerplate(body)
+    assert "sunset" not in cleaned.lower()
+    assert "integer overflow" in cleaned
+    assert "evaluate()" in cleaned
+
+
+def test_strip_codex_react_footer():
+    body = (
+        "Avoid forcing the JS entropy backend from the library.\n\n"
+        "Useful? React with 👍 / 👎."
+    )
+    cleaned = strip_bot_boilerplate(body)
+    assert "JS entropy" in cleaned
+    assert "Useful?" not in cleaned
+    assert "React with" not in cleaned
 
 
 def test_is_bot_user_by_type_and_login():
