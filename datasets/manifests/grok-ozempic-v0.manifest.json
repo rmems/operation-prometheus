@@ -6,8 +6,8 @@
   "source_repo": "rmems/grok-ozempic",
   "jsonl_path": "datasets/jsonl/grok-ozempic-v0.jsonl",
   "record_count": 7,
-  "sha256": "9e8bef9740ed3c8931525c477060ef27b823b8ba4e1994966c7804ce8f653622",
-  "bytes": 487655,
+  "sha256": "5ae8990422c7db8c114438c55d77c0619a65f05680468ce1254bb7f7a8fb95df",
+  "bytes": 486493,
   "records": [
     {
       "id": "rmems-grok-ozempic-29",

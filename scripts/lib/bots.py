@@ -62,7 +62,9 @@ _CODEANT_BLOCK = re.compile(
     re.DOTALL | re.IGNORECASE,
 )
 _MACROSCOPE_NOTE = re.compile(
-    r">\s*\[!NOTE\].*?Macroscope summarized.*?(?:\n\n|\Z)",
+    # The attribution is rendered as `<a href="...">Macroscope</a> summarized`,
+    # so name and verb are not adjacent — tolerate markup between them.
+    r">\s*\[!NOTE\].*?Macroscope\b.{0,80}?summari[sz]ed.*?(?:\n\n|\Z)",
     re.DOTALL | re.IGNORECASE,
 )
 # Gemini Code Assist IMPORTANT lifecycle admonitions (contiguous blockquote run).

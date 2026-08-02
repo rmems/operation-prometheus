@@ -434,8 +434,11 @@ def extract_review_signals(raw: dict[str, Any], *, max_items: int = 8) -> list[d
 # invert them to `pass`.
 _EXPECTED_FAILURE_CUE = re.compile(
     r"(?:"
+    # Allow a couple of modifiers — "expected *test* failure", "expected
+    # *validation* failure". Bounded at two words so "expected a clean run but
+    # saw 3 test failures" cannot reach the fail word.
     r"\b(?:expected|intended|intentional|deliberate)(?:ly)?\s+(?:to\s+)?"
-    r"fail(?:ure|ed|ing|s)?\b"
+    r"(?:\w+\s+){0,2}fail(?:ure|ed|ing|s)?\b"
     r"|\bfail(?:s|ed|ing)?\s+as\s+(?:expected|intended|designed)\b"
     # A deliberately bad *fixture* asserted to produce a failure — the assertion
     # succeeding, not a failed run. The adjective alone is not enough: the fixture
