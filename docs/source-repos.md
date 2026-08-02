@@ -155,8 +155,10 @@ allowlist, which raise the problems the maintainer then patches.
 
 Note: the earlier verdict that `#33` was "review-noise heavy … optional secondary only" counted
 raw comment volume (168, of which 77 were bot reviews). After the pipeline's filter it is the
-cleanest review→fix trajectory in the repo. Large diffs (`#11`, `#24`, `#26`) truncate at the
-96 KiB patch budget as expected.
+cleanest review→fix trajectory in the repo. Only `#11` reaches the 96 KiB patch budget and
+carries the `# … truncated …` footer; `#24` (77,970 chars) and `#26` (50,149) are complete.
+`#26` is smaller than its raw diff because `.beads/` and `.claude/` agent state is filtered
+out of curated patches — see [`_NOISE_PATCH_DIRS`](../scripts/lib/normalize.py).
 
 ### Candidate next: myelin-accelerator
 

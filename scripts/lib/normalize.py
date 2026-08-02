@@ -40,7 +40,9 @@ _REVIEW_APP_CHECK_MARKERS: tuple[str, ...] = (
     "qodo",
     "chatgpt-codex",
     "codex",
-    "copilot",
+    # Exact reviewer check name: a bare "copilot" would also swallow real CI
+    # such as "Copilot integration tests".
+    "copilot-pull-request-reviewer",
 )
 
 
@@ -449,6 +451,17 @@ _EXPECTED_FAILURE_CUE = re.compile(
 
 _FAIL_WORD = re.compile(r"\b(?:failed|failing|failures?)\b")
 
+# An expected failure that did not occur — the negative test accepted input it was
+# supposed to reject. Intent alone does not prove the failure happened.
+_EXPECTED_FAILURE_CONTRADICTED = re.compile(
+    r"(?:"
+    r"\bbut\s+(?:it\s+)?(?:passed|succeeded|was\s+accepted)\b"
+    r"|\b(?:passed|succeeded)\s+unexpectedly\b"
+    r"|\bunexpectedly\s+(?:passed|succeeded)\b"
+    r"|\bdid\s+not\s+fail\b"
+    r")"
+)
+
 
 def _fail_words_all_expected(low: str) -> bool:
     """True when every fail/failure mention sits inside expected-failure prose.
@@ -457,11 +470,12 @@ def _fail_words_all_expected(low: str) -> bool:
     real failure alongside a deliberate one still classifies as ``fail``.
     """
     spans = [m.span() for m in _EXPECTED_FAILURE_CUE.finditer(low)]
-    if not spans:
+    mentions = list(_FAIL_WORD.finditer(low))
+    if not spans or not mentions:
         return False
     return all(
         any(start <= m.start() and m.end() <= end for start, end in spans)
-        for m in _FAIL_WORD.finditer(low)
+        for m in mentions
     )
 
 
@@ -518,6 +532,9 @@ def extract_validation(raw: dict[str, Any]) -> list[dict[str, str]]:
                 result = "fail"
         # Non-zero error/failure counts (sanitizer / pytest style): "1 error", "2 failures".
         if re.search(r"\b[1-9]\d*\s+(?:tests?\s+)?(?:errors?|failures?)\b", low):
+            result = "fail"
+        # Intent without an observed failure: the negative test itself failed.
+        if _EXPECTED_FAILURE_CUE.search(low) and _EXPECTED_FAILURE_CONTRADICTED.search(low):
             result = "fail"
         truncated = len(val_section) > 1500
         detail, _ = sanitize_text(val_section[:1500])
@@ -664,7 +681,8 @@ _NOISE_PATCH_BASENAMES: frozenset[str] = frozenset(
 # Local agent / tracker state directories. These carry machine-specific config,
 # hook scripts and tracker exports (assignee emails, local paths) rather than any
 # engineering trajectory; docs/data-policy.md excludes private local configuration.
-_NOISE_PATCH_DIRS: tuple[str, ...] = (".beads/", ".claude/")
+# Matched as path *components*, so a monorepo's pkg/.claude/ is caught too.
+_NOISE_PATCH_DIRS: tuple[str, ...] = (".beads", ".claude")
 
 
 def _decode_git_path(token: str) -> str:
@@ -704,9 +722,11 @@ def _is_noise_patch_path(path: str | None) -> bool:
     base = Path(cleaned).name.lower().rstrip('"')
     if base in _NOISE_PATCH_BASENAMES:
         return True
-    # removeprefix, not lstrip: lstrip("./") would eat the leading dot of ".beads/".
+    # removeprefix, not lstrip: lstrip("./") would eat the leading dot of ".beads".
     low = cleaned.lower().removeprefix("./")
-    if any(low.startswith(d) for d in _NOISE_PATCH_DIRS):
+    # Any *directory* component, so nested agent state (pkg/.claude/settings.json)
+    # is filtered as well as repo-root state.
+    if any(seg in _NOISE_PATCH_DIRS for seg in low.split("/")[:-1]):
         return True
     # Recognize .env.*.local patterns (e.g., .env.development.local, .env.test.local)
     # but preserve .env.example

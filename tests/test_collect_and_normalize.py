@@ -934,3 +934,63 @@ def test_noise_dir_only_diff_is_still_filtered():
     assert ".claude" not in out
     assert "someone@example.com" not in out
     assert "src/core/alignment.rs" in out
+
+
+def test_nested_agent_state_dirs_are_filtered():
+    """Monorepos nest agent state below the root (Codex P1)."""
+    from lib.normalize import _is_noise_patch_path
+
+    for path in (
+        "pkg/.claude/settings.json",
+        "workspace/.beads/config.yaml",
+        "a/crates/app/.beads/issues.jsonl",
+        ".beads/config.yaml",
+    ):
+        assert _is_noise_patch_path(path), path
+    for path in ("src/core/alignment.rs", "beads/x.rs", ".beadsfoo/y.rs", "pkg/beads/x.rs"):
+        assert not _is_noise_patch_path(path), path
+
+
+def test_generic_copilot_named_ci_is_not_a_review_app():
+    """Only the reviewer check is a review app, not any check saying "copilot"."""
+    from lib.normalize import _is_review_app_check
+
+    assert _is_review_app_check("copilot-pull-request-reviewer")
+    assert not _is_review_app_check("Copilot integration tests")
+
+    from lib.normalize import extract_validation
+
+    events = extract_validation(
+        {
+            "pull": {"body": ""},
+            "checks": {
+                "check_runs": [
+                    {
+                        "name": "Copilot integration tests",
+                        "status": "completed",
+                        "conclusion": "success",
+                    }
+                ]
+            },
+        }
+    )
+    ci = [e for e in events if e["type"] == "ci"]
+    assert len(ci) == 1 and ci[0]["result"] == "pass"
+
+
+def test_expected_failure_that_did_not_happen_is_a_failure():
+    """Intent without an observed failure means the negative test failed (Codex P2)."""
+    from lib.normalize import extract_validation
+
+    for body in (
+        "## Validation\n\nThe invalid fixture was expected to fail, but it passed unexpectedly\n",
+        "## Validation\n\nNegative test: malformed manifest did not fail\n",
+    ):
+        events = extract_validation({"pull": {"body": body}, "checks": {}})
+        assert events[0]["result"] == "fail", body
+
+
+def test_no_fail_words_is_not_all_expected():
+    from lib.normalize import _fail_words_all_expected
+
+    assert not _fail_words_all_expected("expected to fail")
