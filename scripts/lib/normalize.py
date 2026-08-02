@@ -434,11 +434,15 @@ _EXPECTED_FAILURE_CUE = re.compile(
     r"\b(?:expected|intended|intentional|deliberate)(?:ly)?\s+(?:to\s+)?"
     r"fail(?:ure|ed|ing|s)?\b"
     r"|\bfail(?:s|ed|ing)?\s+as\s+(?:expected|intended|designed)\b"
-    # A deliberately bad *fixture* is test scaffolding, so a failure it provokes
-    # is the assertion succeeding. Bare "failure behavior/mode" is not a cue:
-    # "CI showed failure behavior on Linux" is an ordinary failure report.
+    # A deliberately bad *fixture* asserted to produce a failure — the assertion
+    # succeeding, not a failed run. The adjective alone is not enough: the fixture
+    # must be the subject of a confirming verb whose object is the failure, so
+    # "Invalid fixture was repaired, but cargo test failed" stays a failure. The
+    # \w+ gaps cannot cross a comma, which keeps the match inside one clause.
     r"|\b(?:invalid|malformed|corrupt(?:ed)?|bad|broken|mismatched)\s+"
-    r"(?:\w+\s+){0,2}fixtures?\b[^.\n]{0,80}?\bfail(?:ure|ed|ing|s)?\b"
+    r"(?:\w+\s+){0,2}fixtures?\s+(?:\w+\s+){0,2}"
+    r"(?:confirms?|confirmed|verif(?:y|ies|ied)|demonstrates?|exercises?"
+    r"|triggers?|shows?|proves?)\s+(?:\w+\s+){0,3}\bfail(?:ure|ed|ing|s)?\b"
     r"|\bnegative\s+tests?\b"
     r")"
 )
@@ -760,9 +764,13 @@ def _filter_noise_from_diff(diff_text: str) -> str:
     """Drop unified-diff hunks for local-only files (e.g. remotes.txt)."""
     if not diff_text:
         return diff_text
-    # Cheap case-insensitive prefilter: skip scan when no noise basename appears.
+    # Cheap case-insensitive prefilter: skip the scan only when no noise basename
+    # *and* no noise directory appears. Basenames alone would let a diff touching
+    # only .beads/ or .claude/ files bypass header filtering entirely.
     low = diff_text.lower()
-    if not any(name in low for name in _NOISE_PATCH_BASENAMES):
+    if not any(
+        token in low for token in (*_NOISE_PATCH_BASENAMES, *_NOISE_PATCH_DIRS)
+    ):
         return diff_text
     out: list[str] = []
     skip = False

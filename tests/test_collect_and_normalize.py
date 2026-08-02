@@ -894,3 +894,43 @@ def test_local_agent_config_paths_are_filtered_from_patches():
         assert _is_noise_patch_path(path), path
     for path in ("src/core/alignment.rs", "AGENTS.md", "beads/x.rs", ".beadsfoo/y.rs"):
         assert not _is_noise_patch_path(path), path
+
+
+def test_bad_adjective_alone_does_not_suppress_a_real_failure():
+    """"Invalid fixture" is not intent unless it asserts the failure (Codex P1)."""
+    from lib.normalize import extract_validation
+
+    for body in (
+        "## Validation\n\nInvalid fixture was repaired, but cargo test failed on Linux\n",
+        "## Validation\n\nInvalid fixture was repaired but cargo test failed on Linux\n",
+    ):
+        events = extract_validation({"pull": {"body": body}, "checks": {}})
+        assert events[0]["result"] == "fail", body
+
+    # The fixture asserting the failure is still an expected failure.
+    for body in (
+        "## Validation\n\nInvalid schema fixture confirms ingest failure behavior\n",
+        "## Validation\n\nMalformed manifest fixture triggers the expected failure\n",
+    ):
+        events = extract_validation({"pull": {"body": body}, "checks": {}})
+        assert events[0]["result"] == "pass", body
+
+
+def test_noise_dir_only_diff_is_still_filtered():
+    """The cheap prefilter must not let a .beads/-only diff bypass it (Codex P1)."""
+    from lib.normalize import _filter_noise_from_diff
+
+    # Deliberately contains no _NOISE_PATCH_BASENAMES token.
+    diff = (
+        "diff --git a/.beads/config.yaml b/.beads/config.yaml\n"
+        "+owner: someone@example.com\n"
+        "diff --git a/.claude/settings.json b/.claude/settings.json\n"
+        '+{"hooks": {}}\n'
+        "diff --git a/src/core/alignment.rs b/src/core/alignment.rs\n"
+        "+fn align() {}\n"
+    )
+    out = _filter_noise_from_diff(diff)
+    assert ".beads" not in out
+    assert ".claude" not in out
+    assert "someone@example.com" not in out
+    assert "src/core/alignment.rs" in out
