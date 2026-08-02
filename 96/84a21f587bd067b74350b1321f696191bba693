@@ -1,0 +1,28 @@
+scripts/lib/normalize.py
+  s_d85af770ad3ff8::t_00482e4ff742b7 79-82
+datasets/jsonl/grok-ozempic-v0.jsonl
+  s_d85af770ad3ff8::t_ae4d6142eba72d 4
+  s_d85af770ad3ff8::t_1c4ff2aa393cce 1-3,5-7
+docs/source-repos.md
+  s_d85af770ad3ff8::t_48f0ab8b0a51c6 94,97-101,111-159,163-172,174-175
+datasets/manifests/grok-ozempic-v0.manifest.json
+  s_d85af770ad3ff8::t_3abba24717137b 1-111
+datasets/cards/grok-ozempic-v0.json
+  s_d85af770ad3ff8::t_346df00e09aa6f 10-20,23-24,26-27,30-32,35-36
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.5.2",
+  "base_commit_sha": "9684a21f587bd067b74350b1321f696191bba693",
+  "prompts": {},
+  "sessions": {
+    "s_d85af770ad3ff8": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "bf06db75-2ee0-4e31-8051-110f8a8beb53",
+        "model": "claude-opus-5"
+      },
+      "human_author": "Raul Montoya Cardenas <montoyaraul34@gmail.com>"
+    }
+  }
+}
