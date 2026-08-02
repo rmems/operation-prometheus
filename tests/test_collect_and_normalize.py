@@ -1014,3 +1014,23 @@ def test_absence_of_expected_failure_wording_is_a_failure():
         {"pull": {"body": "## Validation\n\nPreviously failed tests are now passing\n"}, "checks": {}}
     )
     assert events[0]["result"] == "pass"
+
+
+def test_absence_wording_must_share_a_sentence_with_the_cue():
+    """An unrelated later clause must not force fail (Codex P2)."""
+    from lib.normalize import extract_validation
+
+    for body in (
+        "## Validation\n\nInvalid fixture fails as expected. The warning did not occur\n",
+        "## Validation\n\nNegative test added. The deprecation notice was not observed\n",
+        # Separate list items are separate statements too.
+        "## Validation\n\n- Invalid fixture fails as expected\n- The warning did not occur\n",
+    ):
+        events = extract_validation({"pull": {"body": body}, "checks": {}})
+        assert events[0]["result"] == "pass", body
+
+    # Same sentence still forces fail.
+    events = extract_validation(
+        {"pull": {"body": "## Validation\n\nThe expected failure did not occur\n"}, "checks": {}}
+    )
+    assert events[0]["result"] == "fail"

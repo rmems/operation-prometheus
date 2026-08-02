@@ -468,6 +468,22 @@ _EXPECTED_FAILURE_CONTRADICTED = re.compile(
 )
 
 
+_SENTENCE_SPLIT = re.compile(r"(?<=[.!?])\s+|\n")
+
+
+def _expected_failure_was_contradicted(low: str) -> bool:
+    """True when one sentence both sets up an expected failure and reports it absent.
+
+    Scoped per sentence, not per section: "Invalid fixture fails as expected. The
+    warning did not occur" is a passing validation whose second clause is unrelated,
+    so a section-wide check would wrongly force it to ``fail``.
+    """
+    return any(
+        _EXPECTED_FAILURE_CUE.search(part) and _EXPECTED_FAILURE_CONTRADICTED.search(part)
+        for part in _SENTENCE_SPLIT.split(low)
+    )
+
+
 def _fail_words_all_expected(low: str) -> bool:
     """True when every fail/failure mention sits inside expected-failure prose.
 
@@ -539,7 +555,7 @@ def extract_validation(raw: dict[str, Any]) -> list[dict[str, str]]:
         if re.search(r"\b[1-9]\d*\s+(?:tests?\s+)?(?:errors?|failures?)\b", low):
             result = "fail"
         # Intent without an observed failure: the negative test itself failed.
-        if _EXPECTED_FAILURE_CUE.search(low) and _EXPECTED_FAILURE_CONTRADICTED.search(low):
+        if _expected_failure_was_contradicted(low):
             result = "fail"
         truncated = len(val_section) > 1500
         detail, _ = sanitize_text(val_section[:1500])
