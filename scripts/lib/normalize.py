@@ -469,7 +469,15 @@ _EXPECTED_FAILURE_CONTRADICTED = re.compile(
 )
 
 
-_SENTENCE_SPLIT = re.compile(r"(?<=[.!?])\s+|\n")
+# Statement boundaries: sentence end, blank line, or the start of a list item.
+# A bare newline is NOT a boundary — Markdown soft-wraps prose, and splitting on
+# it would separate "The expected failure\nwas not observed" into two halves and
+# lose the contradiction.
+_SENTENCE_SPLIT = re.compile(
+    r"(?<=[.!?])\s+"
+    r"|\n\s*\n"
+    r"|\n(?=\s*(?:[-*+]|\d+[.)])\s)"
+)
 
 
 def _expected_failure_was_contradicted(low: str) -> bool:

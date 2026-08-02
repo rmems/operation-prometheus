@@ -1034,3 +1034,24 @@ def test_absence_wording_must_share_a_sentence_with_the_cue():
         {"pull": {"body": "## Validation\n\nThe expected failure did not occur\n"}, "checks": {}}
     )
     assert events[0]["result"] == "fail"
+
+
+def test_soft_wrapped_sentences_keep_cue_and_contradiction_together():
+    """Markdown soft-wraps prose; a bare newline is not a statement boundary."""
+    from lib.normalize import extract_validation
+
+    for body in (
+        "## Validation\n\nThe expected failure\nwas not observed\n",
+        "## Validation\n\nThe invalid fixture was expected to fail, but it\npassed unexpectedly\n",
+    ):
+        events = extract_validation({"pull": {"body": body}, "checks": {}})
+        assert events[0]["result"] == "fail", body
+
+    # Real boundaries — sentence end, list item, blank line — still separate.
+    for body in (
+        "## Validation\n\nInvalid fixture fails as expected. The warning did not occur\n",
+        "## Validation\n\n- Invalid fixture fails as expected\n- The warning did not occur\n",
+        "## Validation\n\nInvalid fixture fails as expected\n\nThe warning did not occur\n",
+    ):
+        events = extract_validation({"pull": {"body": body}, "checks": {}})
+        assert events[0]["result"] == "pass", body
