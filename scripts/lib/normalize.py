@@ -458,7 +458,12 @@ _EXPECTED_FAILURE_CONTRADICTED = re.compile(
     r"\bbut\s+(?:it\s+)?(?:passed|succeeded|was\s+accepted)\b"
     r"|\b(?:passed|succeeded)\s+unexpectedly\b"
     r"|\bunexpectedly\s+(?:passed|succeeded)\b"
-    r"|\bdid\s+not\s+fail\b"
+    # Absence of the expected failure, however worded: "did not occur",
+    # "was not observed", "never triggered" all mean the negative test passed
+    # input it should have rejected.
+    r"|\b(?:did\s+not|does\s+not|was\s+not|were\s+not|never)\s+(?:\w+\s+){0,2}"
+    r"(?:fail|fails|failed|occur|occurred|observed|seen|triggered|raised"
+    r"|reported|happen|happened)\b"
     r")"
 )
 

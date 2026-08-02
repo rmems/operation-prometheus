@@ -994,3 +994,23 @@ def test_no_fail_words_is_not_all_expected():
     from lib.normalize import _fail_words_all_expected
 
     assert not _fail_words_all_expected("expected to fail")
+
+
+def test_absence_of_expected_failure_wording_is_a_failure():
+    """"did not occur" / "was not observed" mean the negative test passed (Codex P2)."""
+    from lib.normalize import extract_validation
+
+    for body in (
+        "## Validation\n\nThe expected failure did not occur\n",
+        "## Validation\n\nThe expected failure was not observed\n",
+        "## Validation\n\nExpected failure never triggered\n",
+    ):
+        events = extract_validation({"pull": {"body": body}, "checks": {}})
+        assert events[0]["result"] == "fail", body
+
+    # The contradiction only applies alongside an expected-failure cue, so
+    # ordinary resolved-failure prose is still a pass.
+    events = extract_validation(
+        {"pull": {"body": "## Validation\n\nPreviously failed tests are now passing\n"}, "checks": {}}
+    )
+    assert events[0]["result"] == "pass"
