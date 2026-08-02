@@ -59,6 +59,13 @@ FEATURE_BUCKET_TO_TRAINING = {
     "other": "other",
 }
 
+# GitHub repo slugs are case-insensitive and the collector stores whatever casing
+# the CLI was given, so every override table below is keyed on a lower-cased
+# "owner/name" and must be looked up through ``_override_key``.
+def _override_key(repo: str, pr: int) -> tuple[str, int]:
+    return (str(repo).strip().lower(), pr)
+
+
 # Per-PR overrides for corinth-canal shortlist training_use (schema enums).
 TRAINING_USE_OVERRIDE: dict[tuple[str, int], str] = {
     ("rmems/corinth-canal", 82): "repair",
@@ -145,7 +152,7 @@ def _bucket_map(card: dict[str, Any]) -> dict[int, str]:
 
 
 def training_use_for(repo: str, pr: int, card: dict[str, Any]) -> str:
-    key = (repo, pr)
+    key = _override_key(repo, pr)
     if key in TRAINING_USE_OVERRIDE:
         return TRAINING_USE_OVERRIDE[key]
     bucket = _bucket_map(card).get(pr)
@@ -155,7 +162,7 @@ def training_use_for(repo: str, pr: int, card: dict[str, Any]) -> str:
 
 
 def domain_for(repo: str, pr: int, card: dict[str, Any], raw: dict[str, Any]) -> str:
-    key = (repo, pr)
+    key = _override_key(repo, pr)
     if key in DOMAIN_OVERRIDE:
         return DOMAIN_OVERRIDE[key]
     # Per-PR domain map on the card (keys may be str or int in JSON).
@@ -177,7 +184,7 @@ def domain_for(repo: str, pr: int, card: dict[str, Any], raw: dict[str, Any]) ->
 
 
 def task_type_for(repo: str, pr: int, raw: dict[str, Any]) -> str:
-    key = (repo, pr)
+    key = _override_key(repo, pr)
     if key in TASK_TYPE_OVERRIDE:
         return TASK_TYPE_OVERRIDE[key]
     title = (raw.get("pull") or {}).get("title") or ""
@@ -271,7 +278,7 @@ def enrich_linked_issues(raw: dict[str, Any]) -> list[dict[str, Any]]:
         _stub(i_owner, i_repo, num, closed_by_pr=True)
 
     if self_pr is not None:
-        for num in LINKED_ISSUE_OVERRIDE.get((f"{owner}/{name}", self_pr), ()):
+        for num in LINKED_ISSUE_OVERRIDE.get(_override_key(self_repo, self_pr), ()):
             _stub(owner, name, num, closed_by_pr=False)
     return linked
 
@@ -408,13 +415,17 @@ def extract_review_signals(raw: dict[str, Any], *, max_items: int = 8) -> list[d
 
 # Negative-test prose. A fixture that is *supposed* to fail, and did, is evidence
 # the suite behaved correctly — it must not invert the validation result.
+#
+# Every alternative must carry an explicit intentionality marker. A reporting verb
+# alone is not one: "CI checks failed on Linux" and "Verified that cargo test
+# failed" are ordinary failure reports, and matching them here would systematically
+# invert them to `pass`.
 _EXPECTED_FAILURE_CUE = re.compile(
     r"(?:"
-    r"\bexpected\s+(?:to\s+)?fail(?:ure|ed|ing|s)?\b"
-    r"|\bfails?\s+as\s+expected\b"
-    r"|\b(?:confirms?|confirmed|verif(?:y|ies|ied)|assert(?:s|ed)?|checks?|checked"
-    r"|ensures?|ensured|expects?|expected)\b[^.\n]{0,80}?\bfail(?:ure|ed|ing|s)?\b"
-    r"|\bfail(?:ure)?\s+(?:behavio(?:u)?rs?|modes?|cases?|paths?|handling|messages?)\b"
+    r"\b(?:expected|intended|intentional|deliberate)(?:ly)?\s+(?:to\s+)?"
+    r"fail(?:ure|ed|ing|s)?\b"
+    r"|\bfail(?:s|ed|ing)?\s+as\s+(?:expected|intended|designed)\b"
+    r"|\bfail(?:ure)?\s+(?:behavio(?:u)?rs?|modes?|cases?|paths?|handling)\b"
     r"|\bnegative\s+tests?\b"
     r")"
 )

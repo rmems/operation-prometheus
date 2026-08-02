@@ -779,3 +779,33 @@ def test_linked_issue_override_adds_referenced_issues():
         "https://github.com/rmems/grok-ozempic/pull/26",
         "https://github.com/rmems/grok-ozempic/issues/22",
     ]
+
+
+def test_reporting_verbs_do_not_mask_failures():
+    """A reporting verb is not an expected-failure marker (Codex P1 on #17)."""
+    from lib.normalize import extract_validation
+
+    for body in (
+        "## Validation\n\nCI checks failed on Linux\n",
+        "## Validation\n\nVerified that cargo test failed\n",
+        "## Validation\n\nConfirmed the nightly job is still failing\n",
+        "## Validation\n\nEnsured coverage, but 1 test failed\n",
+    ):
+        events = extract_validation({"pull": {"body": body}, "checks": {}})
+        assert events[0]["result"] == "fail", body
+
+
+def test_override_lookup_is_case_insensitive():
+    """Repo slugs are case-insensitive; overrides must not depend on CLI casing."""
+    from lib.normalize import domain_for, enrich_linked_issues, task_type_for
+
+    assert task_type_for("RMEMS/GROK-OZEMPIC", 26, {"pull": {}}) == "feature"
+    assert domain_for("RMEMS/Corinth-Canal", 82, {}, {}) == "gpu-compute"
+
+    raw = {
+        "source": {"repo": "RMEMS/GROK-OZEMPIC", "pr_number": 26},
+        "pull": {"number": 26, "body": "Implements GitHub #22"},
+        "linked_issues": [],
+        "commits": [],
+    }
+    assert [i["number"] for i in enrich_linked_issues(raw)] == [22]
