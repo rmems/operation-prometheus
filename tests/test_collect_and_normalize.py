@@ -1121,3 +1121,23 @@ def test_asserted_negative_test_failure_is_a_pass():
     ):
         events = extract_validation({"pull": {"body": body}, "checks": {}})
         assert events[0]["result"] == "fail", body
+
+
+def test_macroscope_removal_keeps_surrounding_lines_separate():
+    """_NOTE_BLOCK eats the preceding newline, so removal must restore one."""
+    from lib.bots import strip_bot_boilerplate
+
+    body = (
+        "- cargo test --features cli\n"
+        "> [!NOTE]\n"
+        '> <sup>by <a href="https://macroscope.com">Macroscope</a> summarized</sup>\n'
+        "- invalid fixture confirms failure behavior\n"
+    )
+    out = strip_bot_boilerplate(body)
+    assert "Macroscope" not in out
+    assert "cli- invalid" not in out
+    lines = [ln for ln in out.splitlines() if ln.strip()]
+    assert lines == [
+        "- cargo test --features cli",
+        "- invalid fixture confirms failure behavior",
+    ]

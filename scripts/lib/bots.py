@@ -75,8 +75,13 @@ _MACROSCOPE_ATTRIBUTION = re.compile(
 
 
 def _drop_macroscope_note(m: "re.Match[str]") -> str:
-    """Drop a NOTE block only when it carries the Macroscope attribution."""
-    return "" if _MACROSCOPE_ATTRIBUTION.search(m.group(0)) else m.group(0)
+    """Drop a NOTE block only when it carries the Macroscope attribution.
+
+    Returns a newline rather than an empty string: ``_NOTE_BLOCK`` consumes the
+    newline preceding the block, so collapsing to "" would splice the line before
+    the note onto the line after it.
+    """
+    return "\n" if _MACROSCOPE_ATTRIBUTION.search(m.group(0)) else m.group(0)
 # Gemini Code Assist IMPORTANT lifecycle admonitions (contiguous blockquote run).
 # Continuation lines use [ \t]* only — not \s* — so a blank line ends the match
 # and a later actionable blockquote is preserved.
