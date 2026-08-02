@@ -76,6 +76,10 @@ TASK_TYPE_OVERRIDE: dict[tuple[str, int], str] = {
     ("rmems/corinth-canal", 94): "feature",
     ("rmems/corinth-canal", 95): "feature",
     ("rmems/corinth-canal", 96): "feature",
+    # Non-conventional title ("Verify grok-ozempic aligns with xai-dissect
+    # inventory") falls through to "other"; the PR adds grok1_inventory.rs and
+    # alignment.rs, so feature is the accurate label.
+    ("rmems/grok-ozempic", 26): "feature",
 }
 
 DOMAIN_OVERRIDE: dict[tuple[str, int], str] = {
