@@ -1,42 +1,6 @@
-# Operation Prometheus Agent Guide
+# Project Instructions for AI Agents
 
-Operation Prometheus converts public GitHub engineering history into structured JSON/JSONL trajectory datasets for local coding, research, and agentic models.
-
-## Prime Directive
-
-Preserve the engineering trajectory:
-
-issue/review signal → code state → patch/fix → validation → outcome
-
-## Current Priorities
-
-1. Keep the repo small and inspectable.
-2. Build schemas before large extractors.
-3. Use JSON/JSONL as the first dataset format.
-4. Start with high-signal `corinth-canal` PRs.
-5. Prefer read-only GitHub collection scripts before any write automation.
-
-## Do Not
-
-- Do not commit secrets, credentials, local config, or private files.
-- Do not commit large raw datasets blindly.
-- Do not commit model weights directly to this repo.
-- Do not use raw closed-model chat logs as the primary training corpus.
-- Do not overwrite existing project structure unless explicitly asked.
-
-## Validation
-
-Before committing, run:
-
-```bash
-ruff check scripts/
-pytest -q
-if ls datasets/jsonl/*.jsonl 1>/dev/null 2>&1; then
-  python scripts/validate_jsonl.py --strict-policy datasets/jsonl/*.jsonl
-else
-  echo "No JSONL files found; skipping schema validation."
-fi
-```
+This file provides instructions and context for AI coding agents working on this project.
 
 <!-- BEGIN BEADS INTEGRATION v:1 profile:minimal hash:7510c1e2 -->
 ## Beads Issue Tracker
@@ -85,3 +49,22 @@ bd close <id>         # Complete work
 - NEVER say "ready to push when you are" - YOU must push
 - If push fails, resolve and retry until it succeeds
 <!-- END BEADS INTEGRATION -->
+
+
+## Build & Test
+
+_Add your build and test commands here_
+
+```bash
+# Example:
+# npm install
+# npm test
+```
+
+## Architecture Overview
+
+_Add a brief overview of your project architecture_
+
+## Conventions & Patterns
+
+_Add your project-specific conventions here_

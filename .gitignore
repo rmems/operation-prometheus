@@ -81,3 +81,8 @@ Thumbs.db
 # Only the documentation README is tracked here.
 .beads/*
 !.beads/README.md
+
+# Beads / Dolt files (added by bd init)
+.dolt/
+*.db
+.beads-credential-key
