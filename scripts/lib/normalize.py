@@ -66,6 +66,7 @@ FEATURE_BUCKET_TO_TRAINING = {
 # the CLI was given, so every override table below is keyed on a lower-cased
 # "owner/name" and must be looked up through ``_override_key``.
 def _override_key(repo: str, pr: int) -> tuple[str, int]:
+    """Build a case-folded (repo, pr) key for the per-PR override tables."""
     return (str(repo).strip().lower(), pr)
 
 
