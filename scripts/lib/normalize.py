@@ -449,6 +449,14 @@ _EXPECTED_FAILURE_CUE = re.compile(
     r"(?:\w+\s+){0,2}fixtures?\s+(?:\w+\s+){0,2}"
     r"(?:confirms?|confirmed|verif(?:y|ies|ied)|demonstrates?|exercises?"
     r"|triggers?|shows?|proves?)\s+(?:\w+\s+){0,3}\bfail(?:ure|ed|ing|s)?\b"
+    # A negative test asserted to produce a failure. Needs an explicit
+    # observing/confirming verb, same shape as the fixture alternative, so
+    # "Negative test suite reported 3 failures" is not a cue. The bare
+    # "negative test" alternative stays for prose with no fail word.
+    r"|\bnegative\s+tests?\b(?:\s+\w+){0,2}\s+"
+    r"(?:confirms?|confirmed|observed|observes?|demonstrates?|shows?"
+    r"|triggers?|verif(?:y|ies|ied))(?:\s+\w+){0,3}\s+\w*"
+    r"fail(?:ure|ed|ing|s)?\b"
     r"|\bnegative\s+tests?\b"
     r")"
 )
@@ -715,7 +723,7 @@ _NOISE_PATCH_BASENAMES: frozenset[str] = frozenset(
 # hook scripts and tracker exports (assignee emails, local paths) rather than any
 # engineering trajectory; docs/data-policy.md excludes private local configuration.
 # Matched as path *components*, so a monorepo's pkg/.claude/ is caught too.
-_NOISE_PATCH_DIRS: tuple[str, ...] = (".beads", ".claude")
+_NOISE_PATCH_DIRS: tuple[str, ...] = (".beads", ".claude", ".kilo")
 
 
 def _decode_git_path(token: str) -> str:

@@ -1090,3 +1090,34 @@ def test_known_broken_ci_described_as_expected_is_not_a_pass():
         }
     )
     assert events[0]["result"] == "fail"
+
+
+def test_kilo_agent_state_is_filtered_from_patches():
+    """.kilo/ is agent state like .beads/ and .claude/ (Codex P1)."""
+    from lib.normalize import _is_noise_patch_path
+
+    for path in (".kilo/settings.json", "pkg/.kilo/state.json", "a/.kilo/mcp.json"):
+        assert _is_noise_patch_path(path), path
+    for path in ("kilo/x.rs", ".kilofoo/y.rs", "src/kilo_backend.rs"):
+        assert not _is_noise_patch_path(path), path
+
+
+def test_asserted_negative_test_failure_is_a_pass():
+    """"Negative test confirms failure behavior" is the assertion succeeding."""
+    from lib.normalize import extract_validation
+
+    for body in (
+        "## Validation\n\nNegative test confirms failure behavior\n",
+        "## Validation\n\nNegative test observed a validation failure\n",
+    ):
+        events = extract_validation({"pull": {"body": body}, "checks": {}})
+        assert events[0]["result"] == "pass", body
+
+    # An ordinary failure report that merely mentions a negative test stays fail.
+    for body in (
+        "## Validation\n\nNegative test suite reported 3 failures\n",
+        "## Validation\n\nNegative tests failed on Windows\n",
+        "## Validation\n\nNegative test added. CI checks failed on Linux\n",
+    ):
+        events = extract_validation({"pull": {"body": body}, "checks": {}})
+        assert events[0]["result"] == "fail", body
