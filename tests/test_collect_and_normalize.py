@@ -705,3 +705,77 @@ def test_sidecar_path_must_stay_under_raw_dir(tmp_path: Path):
     side.write_text("DIFF_OK", encoding="utf-8")
     raw3 = {"diff": {"sidecar_path": "pr-1.diff", "inline": None}, "files": []}
     assert _load_diff_text(raw3, raw_path) == "DIFF_OK"
+
+
+def test_expected_failure_prose_is_pass():
+    from lib.normalize import extract_validation
+
+    raw = {
+        "pull": {
+            "body": (
+                "## Validation\n\n"
+                "- `cargo test --features cli`\n"
+                "- Manual invalid schema fixture confirms ingest failure behavior\n"
+            )
+        },
+        "checks": {},
+    }
+    events = extract_validation(raw)
+    assert events[0]["result"] == "pass"
+
+
+def test_expected_failure_does_not_mask_a_real_failure():
+    from lib.normalize import extract_validation
+
+    raw = {
+        "pull": {
+            "body": (
+                "## Validation\n\n"
+                "- Invalid fixture fails as expected\n"
+                "- `cargo test` — 2 tests failed on the router path\n"
+            )
+        },
+        "checks": {},
+    }
+    events = extract_validation(raw)
+    assert events[0]["result"] == "fail"
+
+
+def test_self_referential_linked_issue_is_dropped():
+    from lib.normalize import enrich_linked_issues
+
+    raw = {
+        "source": {"repo": "rmems/widget", "pr_number": 26},
+        "pull": {"number": 26, "body": "Closes #26"},
+        "linked_issues": [],
+        "commits": [],
+    }
+    assert enrich_linked_issues(raw) == []
+
+
+def test_linked_issue_override_adds_referenced_issues():
+    from lib.normalize import LINKED_ISSUE_OVERRIDE, normalize_record
+
+    assert LINKED_ISSUE_OVERRIDE[("rmems/grok-ozempic", 26)] == (22,)
+    raw = {
+        "source": {"repo": "rmems/grok-ozempic", "pr_number": 26},
+        "pull": {
+            "title": "Verify grok-ozempic aligns with xai-dissect inventory",
+            "body": "Implements GitHub #22 / Linear MET-108.",
+            "state": "closed",
+            "merged": True,
+            "draft": False,
+        },
+        "linked_issues": [],
+        "reviews": [],
+        "review_comments": [],
+        "issue_comments": [],
+        "files": [{"filename": "src/core/alignment.rs", "status": "added", "patch": "+x\n"}],
+        "checks": {},
+        "commits": [],
+    }
+    urls = normalize_record(raw, {})["source_urls"]
+    assert urls == [
+        "https://github.com/rmems/grok-ozempic/pull/26",
+        "https://github.com/rmems/grok-ozempic/issues/22",
+    ]

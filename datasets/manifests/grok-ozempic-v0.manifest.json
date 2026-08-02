@@ -6,8 +6,8 @@
   "source_repo": "rmems/grok-ozempic",
   "jsonl_path": "datasets/jsonl/grok-ozempic-v0.jsonl",
   "record_count": 7,
-  "sha256": "1b96dc7620ebb3130188a39bfa7f8c8d98a8de666f2c0a799846da4e7c78745f",
-  "bytes": 506071,
+  "sha256": "a1ebf56d1a019471a57eeb9646acb18015aa01928ab0e75d4cd273e602f44151",
+  "bytes": 506371,
   "records": [
     {
       "id": "rmems-grok-ozempic-29",
@@ -21,7 +21,7 @@
       "review_signal_count": 8,
       "patch_chars": 44185,
       "validation_count": 4,
-      "source_url_count": 1
+      "source_url_count": 4
     },
     {
       "id": "rmems-grok-ozempic-26",
@@ -91,7 +91,7 @@
       "review_signal_count": 8,
       "patch_chars": 53542,
       "validation_count": 4,
-      "source_url_count": 1
+      "source_url_count": 2
     },
     {
       "id": "rmems-grok-ozempic-33",
@@ -105,7 +105,7 @@
       "review_signal_count": 8,
       "patch_chars": 56695,
       "validation_count": 3,
-      "source_url_count": 1
+      "source_url_count": 3
     }
   ]
 }

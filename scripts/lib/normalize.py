@@ -82,6 +82,20 @@ TASK_TYPE_OVERRIDE: dict[tuple[str, int], str] = {
     ("rmems/grok-ozempic", 26): "feature",
 }
 
+# Per-PR issue provenance for bodies that name their originating issue without a
+# GitHub close keyword ("Implements GitHub #22", "addressing issues #28 and #20").
+# ``parse_linked_issue_numbers`` only recognises close keywords by design, so
+# these trajectories would otherwise ship with the PR URL as their only source.
+# Numbers are the ones documented in docs/source-repos.md and each dataset card's
+# ``related_issues``; entries here are references, not close-links, so the stubs
+# they produce carry ``closed_by_pr: False``.
+LINKED_ISSUE_OVERRIDE: dict[tuple[str, int], tuple[int, ...]] = {
+    ("rmems/grok-ozempic", 26): (22,),
+    ("rmems/grok-ozempic", 29): (16, 22, 27),
+    ("rmems/grok-ozempic", 33): (28, 20),
+    ("rmems/grok-ozempic", 43): (38,),
+}
+
 DOMAIN_OVERRIDE: dict[tuple[str, int], str] = {
     ("rmems/corinth-canal", 82): "gpu-compute",
     ("rmems/corinth-canal", 89): "gpu-compute",
@@ -218,17 +232,20 @@ def enrich_linked_issues(raw: dict[str, Any]) -> list[dict[str, Any]]:
     except Exception:
         return linked
 
-    parts = [(raw.get("pull") or {}).get("body") or ""]
-    for c in raw.get("commits") or []:
-        msg = c.get("message") if isinstance(c, dict) else None
-        if msg:
-            parts.append(str(msg))
-    for i_owner, i_repo, num in parse_linked_issue_numbers(
-        "\n".join(parts), owner, name
-    ):
+    self_repo = f"{owner}/{name}".lower()
+    try:
+        self_pr = int(source.get("pr_number") or (raw.get("pull") or {}).get("number"))
+    except (TypeError, ValueError):
+        self_pr = None
+
+    def _stub(i_owner: str, i_repo: str, num: int, *, closed_by_pr: bool) -> None:
         key = (f"{i_owner}/{i_repo}".lower(), num)
         if key in seen:
-            continue
+            return
+        # Issues and PRs share one number space, so /issues/<pr> resolves back to
+        # the PR itself — a self-reference is provenance noise, never an issue.
+        if key == (self_repo, self_pr):
+            return
         seen.add(key)
         linked.append(
             {
@@ -238,10 +255,24 @@ def enrich_linked_issues(raw: dict[str, Any]) -> list[dict[str, Any]]:
                 "body": "",
                 "state": "unknown",
                 "html_url": f"https://github.com/{i_owner}/{i_repo}/issues/{num}",
-                "closed_by_pr": True,
+                "closed_by_pr": closed_by_pr,
                 "synthetic": True,
             }
         )
+
+    parts = [(raw.get("pull") or {}).get("body") or ""]
+    for c in raw.get("commits") or []:
+        msg = c.get("message") if isinstance(c, dict) else None
+        if msg:
+            parts.append(str(msg))
+    for i_owner, i_repo, num in parse_linked_issue_numbers(
+        "\n".join(parts), owner, name
+    ):
+        _stub(i_owner, i_repo, num, closed_by_pr=True)
+
+    if self_pr is not None:
+        for num in LINKED_ISSUE_OVERRIDE.get((f"{owner}/{name}", self_pr), ()):
+            _stub(owner, name, num, closed_by_pr=False)
     return linked
 
 
@@ -375,6 +406,37 @@ def extract_review_signals(raw: dict[str, Any], *, max_items: int = 8) -> list[d
     return signals
 
 
+# Negative-test prose. A fixture that is *supposed* to fail, and did, is evidence
+# the suite behaved correctly — it must not invert the validation result.
+_EXPECTED_FAILURE_CUE = re.compile(
+    r"(?:"
+    r"\bexpected\s+(?:to\s+)?fail(?:ure|ed|ing|s)?\b"
+    r"|\bfails?\s+as\s+expected\b"
+    r"|\b(?:confirms?|confirmed|verif(?:y|ies|ied)|assert(?:s|ed)?|checks?|checked"
+    r"|ensures?|ensured|expects?|expected)\b[^.\n]{0,80}?\bfail(?:ure|ed|ing|s)?\b"
+    r"|\bfail(?:ure)?\s+(?:behavio(?:u)?rs?|modes?|cases?|paths?|handling|messages?)\b"
+    r"|\bnegative\s+tests?\b"
+    r")"
+)
+
+_FAIL_WORD = re.compile(r"\b(?:failed|failing|failures?)\b")
+
+
+def _fail_words_all_expected(low: str) -> bool:
+    """True when every fail/failure mention sits inside expected-failure prose.
+
+    Checked per occurrence rather than section-wide so a test plan that reports a
+    real failure alongside a deliberate one still classifies as ``fail``.
+    """
+    spans = [m.span() for m in _EXPECTED_FAILURE_CUE.finditer(low)]
+    if not spans:
+        return False
+    return all(
+        any(start <= m.start() and m.end() <= end for start, end in spans)
+        for m in _FAIL_WORD.finditer(low)
+    )
+
+
 def extract_validation(raw: dict[str, Any]) -> list[dict[str, str]]:
     events: list[dict[str, str]] = []
     pull_body = strip_bot_boilerplate((raw.get("pull") or {}).get("body") or "")
@@ -421,6 +483,7 @@ def extract_validation(raw: dict[str, Any]) -> list[dict[str, str]]:
             and not zero_failures
             and "no fail" not in low
             and not resolved_failed
+            and not _fail_words_all_expected(low)
         ):
             # Avoid matching "fail" inside unrelated words; require fail/failed/failing/failure.
             if re.search(r"\b(?:failed|failing|failures?)\b", low):
