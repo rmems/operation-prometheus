@@ -809,3 +809,88 @@ def test_override_lookup_is_case_insensitive():
         "commits": [],
     }
     assert [i["number"] for i in enrich_linked_issues(raw)] == [22]
+
+
+def test_failure_behavior_noun_alone_is_not_an_expected_failure():
+    """"failure behavior/mode" without intent is an ordinary report (Codex P1)."""
+    from lib.normalize import extract_validation
+
+    for body in (
+        "## Validation\n\nCI showed failure behavior on Linux\n",
+        "## Validation\n\nObserved failure mode in cargo test\n",
+    ):
+        events = extract_validation({"pull": {"body": body}, "checks": {}})
+        assert events[0]["result"] == "fail", body
+
+    # A deliberately invalid fixture still reads as an expected failure.
+    events = extract_validation(
+        {
+            "pull": {
+                "body": "## Validation\n\nInvalid schema fixture confirms ingest failure behavior\n"
+            },
+            "checks": {},
+        }
+    )
+    assert events[0]["result"] == "pass"
+
+
+def test_pre_collected_self_referential_issue_is_dropped():
+    """A self-reference already in the raw record must not survive (Codex P2)."""
+    from lib.normalize import enrich_linked_issues
+
+    raw = {
+        "source": {"repo": "rmems/widget", "pr_number": 26},
+        "pull": {"number": 26, "body": ""},
+        "linked_issues": [
+            {
+                "number": 26,
+                "repo": "rmems/widget",
+                "html_url": "https://github.com/rmems/widget/issues/26",
+            },
+            {
+                "number": 22,
+                "repo": "rmems/widget",
+                "html_url": "https://github.com/rmems/widget/issues/22",
+            },
+        ],
+        "commits": [],
+    }
+    assert [i["number"] for i in enrich_linked_issues(raw)] == [22]
+
+
+def test_copilot_reviewer_is_not_ci_validation():
+    from lib.normalize import extract_validation
+
+    raw = {
+        "pull": {"body": ""},
+        "checks": {
+            "check_runs": [
+                {"name": "fmt / clippy / test", "status": "completed", "conclusion": "success"},
+                {
+                    "name": "copilot-pull-request-reviewer",
+                    "status": "completed",
+                    "conclusion": "success",
+                },
+            ]
+        },
+    }
+    events = extract_validation(raw)
+    ci = [e for e in events if e["type"] == "ci"]
+    assert len(ci) == 1
+    assert "copilot" not in ci[0]["detail"].lower()
+    assert any("copilot" in e["detail"].lower() for e in events if e["type"] == "other")
+
+
+def test_local_agent_config_paths_are_filtered_from_patches():
+    """Tracker/agent state carries emails and local config, never trajectory."""
+    from lib.normalize import _is_noise_patch_path
+
+    for path in (
+        ".beads/config.yaml",
+        ".beads/issues.jsonl",
+        "./.claude/settings.json",
+        "a/.beads/hooks/pre-push",
+    ):
+        assert _is_noise_patch_path(path), path
+    for path in ("src/core/alignment.rs", "AGENTS.md", "beads/x.rs", ".beadsfoo/y.rs"):
+        assert not _is_noise_patch_path(path), path

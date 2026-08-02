@@ -6,8 +6,8 @@
   "source_repo": "rmems/grok-ozempic",
   "jsonl_path": "datasets/jsonl/grok-ozempic-v0.jsonl",
   "record_count": 7,
-  "sha256": "a1ebf56d1a019471a57eeb9646acb18015aa01928ab0e75d4cd273e602f44151",
-  "bytes": 506371,
+  "sha256": "9e8bef9740ed3c8931525c477060ef27b823b8ba4e1994966c7804ce8f653622",
+  "bytes": 487655,
   "records": [
     {
       "id": "rmems-grok-ozempic-29",
@@ -33,7 +33,7 @@
       "outcome": "merged",
       "has_issue_context": true,
       "review_signal_count": 8,
-      "patch_chars": 67711,
+      "patch_chars": 50149,
       "validation_count": 3,
       "source_url_count": 2
     },

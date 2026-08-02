@@ -12,7 +12,8 @@
    - JSONL: `datasets/jsonl/limen-axon-encoder-v0.jsonl`  
    - Card/manifest under `datasets/cards/` and `datasets/manifests/`  
    - Source: `docs/source-repos.md` (Limen-Neural section)  
-5. **Tracker** — GH #13/#15 + Linear RM-172/RM-173; #11 grok-ozempic still open  
+5. **grok-ozempic-v0** — 7 trajectories extracted (#11)  
+6. **Tracker** — GH #13/#15 + Linear RM-172/RM-173  
 
 ## Trajectory quality (limen-axon-encoder-v0)
 
@@ -25,7 +26,6 @@
 ## Remaining gaps
 
 - Schema v0 lacks `training_use: feature` (mapped to `other`)  
-- **#11** grok-ozempic-v0 shortlist not yet extracted  
 - **#14** sibling data root for large patches not yet documented as env default  
 - Later Limen waves (neuromod, SpikeStream, kinetic-signals, limbic-critic) not extracted  
 - Large patches still truncated; bot review noise high on Limen PRs  
@@ -33,7 +33,7 @@
 
 ## Next-sprint roadmap (prioritized)
 
-1. **Extract grok-ozempic-v0** (#11) — PRs 29, 26, 24, 25, 11, 8  
+1. **Review-signal dedupe** (#18) + **`language_by_pr`** (#19) — both block grok-ozempic#42 (#20)  
 2. **Sibling data root** (#14) — `PROMETHEUS_DATA_ROOT` for raw/full patches  
 3. **Limen Wave B** — neuromod #5/#8/#9 or SpikeStream #22/#25  
 4. **Schema v0.1** — add `feature` to `training_use`  

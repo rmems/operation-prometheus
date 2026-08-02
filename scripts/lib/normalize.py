@@ -40,6 +40,7 @@ _REVIEW_APP_CHECK_MARKERS: tuple[str, ...] = (
     "qodo",
     "chatgpt-codex",
     "codex",
+    "copilot",
 )
 
 
@@ -224,20 +225,12 @@ def enrich_linked_issues(raw: dict[str, Any]) -> list[dict[str, Any]]:
     """
     from .raw_record import parse_linked_issue_numbers, parse_repo
 
-    linked = list(raw.get("linked_issues") or [])
-    seen: set[tuple[str, int]] = set()
-    for issue in linked:
-        repo_i = str(issue.get("repo") or "")
-        num = issue.get("number")
-        if repo_i and num is not None:
-            seen.add((repo_i.lower(), int(num)))
-
     source = raw.get("source") or {}
     repo = str(source.get("repo") or "")
     try:
         owner, name = parse_repo(repo)
     except Exception:
-        return linked
+        return list(raw.get("linked_issues") or [])
 
     self_repo = f"{owner}/{name}".lower()
     try:
@@ -245,13 +238,29 @@ def enrich_linked_issues(raw: dict[str, Any]) -> list[dict[str, Any]]:
     except (TypeError, ValueError):
         self_pr = None
 
+    def _key(repo_i: str, num: Any) -> tuple[str, int] | None:
+        try:
+            return (str(repo_i).lower(), int(num))
+        except (TypeError, ValueError):
+            return None
+
+    # Issues and PRs share one number space, so /issues/<pr> resolves back to the
+    # PR itself — a self-reference is provenance noise, never an issue. Applied to
+    # pre-collected entries too, not just synthesized ones: a raw record may carry
+    # one from an older collector run that predates the API-side guard.
+    linked: list[dict[str, Any]] = []
+    seen: set[tuple[str, int]] = set()
+    for issue in raw.get("linked_issues") or []:
+        key = _key(issue.get("repo") or "", issue.get("number"))
+        if key is not None:
+            if key == (self_repo, self_pr):
+                continue
+            seen.add(key)
+        linked.append(issue)
+
     def _stub(i_owner: str, i_repo: str, num: int, *, closed_by_pr: bool) -> None:
         key = (f"{i_owner}/{i_repo}".lower(), num)
-        if key in seen:
-            return
-        # Issues and PRs share one number space, so /issues/<pr> resolves back to
-        # the PR itself — a self-reference is provenance noise, never an issue.
-        if key == (self_repo, self_pr):
+        if key in seen or key == (self_repo, self_pr):
             return
         seen.add(key)
         linked.append(
@@ -425,7 +434,11 @@ _EXPECTED_FAILURE_CUE = re.compile(
     r"\b(?:expected|intended|intentional|deliberate)(?:ly)?\s+(?:to\s+)?"
     r"fail(?:ure|ed|ing|s)?\b"
     r"|\bfail(?:s|ed|ing)?\s+as\s+(?:expected|intended|designed)\b"
-    r"|\bfail(?:ure)?\s+(?:behavio(?:u)?rs?|modes?|cases?|paths?|handling)\b"
+    # A deliberately bad *fixture* is test scaffolding, so a failure it provokes
+    # is the assertion succeeding. Bare "failure behavior/mode" is not a cue:
+    # "CI showed failure behavior on Linux" is an ordinary failure report.
+    r"|\b(?:invalid|malformed|corrupt(?:ed)?|bad|broken|mismatched)\s+"
+    r"(?:\w+\s+){0,2}fixtures?\b[^.\n]{0,80}?\bfail(?:ure|ed|ing|s)?\b"
     r"|\bnegative\s+tests?\b"
     r")"
 )
@@ -644,6 +657,11 @@ _NOISE_PATCH_BASENAMES: frozenset[str] = frozenset(
     }
 )
 
+# Local agent / tracker state directories. These carry machine-specific config,
+# hook scripts and tracker exports (assignee emails, local paths) rather than any
+# engineering trajectory; docs/data-policy.md excludes private local configuration.
+_NOISE_PATCH_DIRS: tuple[str, ...] = (".beads/", ".claude/")
+
 
 def _decode_git_path(token: str) -> str:
     """Decode a path token from a ``diff --git`` header.
@@ -681,6 +699,10 @@ def _is_noise_patch_path(path: str | None) -> bool:
         cleaned = cleaned[2:]
     base = Path(cleaned).name.lower().rstrip('"')
     if base in _NOISE_PATCH_BASENAMES:
+        return True
+    # removeprefix, not lstrip: lstrip("./") would eat the leading dot of ".beads/".
+    low = cleaned.lower().removeprefix("./")
+    if any(low.startswith(d) for d in _NOISE_PATCH_DIRS):
         return True
     # Recognize .env.*.local patterns (e.g., .env.development.local, .env.test.local)
     # but preserve .env.example
