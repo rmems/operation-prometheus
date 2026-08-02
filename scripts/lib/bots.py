@@ -61,12 +61,22 @@ _CODEANT_BLOCK = re.compile(
     r"##\s*\*\*CodeAnt-AI Description\*\*.*",
     re.DOTALL | re.IGNORECASE,
 )
-_MACROSCOPE_NOTE = re.compile(
-    # The attribution is rendered as `<a href="...">Macroscope</a> summarized`,
-    # so name and verb are not adjacent — tolerate markup between them.
-    r">\s*\[!NOTE\].*?Macroscope\b.{0,80}?summari[sz]ed.*?(?:\n\n|\Z)",
-    re.DOTALL | re.IGNORECASE,
+# One `> [!NOTE]` blockquote run at a time (contiguous `>` lines). Matching a
+# single block matters: a `.*?` reaching forward for the attribution would span
+# an earlier human note and any validation prose between them and delete it too.
+_NOTE_BLOCK = re.compile(
+    r"(?im)(?:^|\n)[ \t]*>[ \t]*\[!NOTE\][ \t]*\n(?:[ \t]*>[^\n]*(?:\n|$))*",
 )
+# Attribution inside such a block. Rendered as `<a ...>Macroscope</a> summarized`,
+# so name and verb are not adjacent — tolerate markup between them.
+_MACROSCOPE_ATTRIBUTION = re.compile(
+    r"Macroscope\b.{0,80}?summari[sz]ed", re.DOTALL | re.IGNORECASE
+)
+
+
+def _drop_macroscope_note(m: "re.Match[str]") -> str:
+    """Drop a NOTE block only when it carries the Macroscope attribution."""
+    return "" if _MACROSCOPE_ATTRIBUTION.search(m.group(0)) else m.group(0)
 # Gemini Code Assist IMPORTANT lifecycle admonitions (contiguous blockquote run).
 # Continuation lines use [ \t]* only — not \s* — so a blank line ends the match
 # and a later actionable blockquote is preserved.
@@ -102,7 +112,7 @@ def strip_bot_boilerplate(markdown: str) -> str:
     text = _DEVIN_BLOCK.sub("", text)
     text = _HTML_COMMENT.sub("", text)
     text = _CODEANT_BLOCK.sub("", text)
-    text = _MACROSCOPE_NOTE.sub("", text)
+    text = _NOTE_BLOCK.sub(_drop_macroscope_note, text)
     # Drop Gemini Code Assist product lifecycle IMPORTANT blocks only.
     # Require a Gemini marker so "sunset the old endpoint" human notes are kept.
     def _drop_gemini_lifecycle(m: re.Match[str]) -> str:
