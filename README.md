@@ -65,7 +65,7 @@ See [datasets/README.md](datasets/README.md) for rules on what may be committed.
 ## Extraction Shortlists
 
 - **corinth-canal v0** (extracted): [docs/source-repos.md](docs/source-repos.md). 6 high-signal merged PRs → [datasets/jsonl/corinth-canal-v0.jsonl](datasets/jsonl/corinth-canal-v0.jsonl). Cards: [JSON](datasets/cards/corinth-canal-v0.json), [markdown](datasets/cards/corinth-canal-trajectories-v0.md). Manifest: [corinth-canal-v0.manifest.json](datasets/manifests/corinth-canal-v0.manifest.json).
-- **grok-ozempic v0** (shortlist only): documented in [docs/source-repos.md](docs/source-repos.md); card [datasets/cards/grok-ozempic-v0.json](datasets/cards/grok-ozempic-v0.json).
+- **grok-ozempic v0** (extracted): [docs/source-repos.md](docs/source-repos.md). 7 high-signal merged PRs → [datasets/jsonl/grok-ozempic-v0.jsonl](datasets/jsonl/grok-ozempic-v0.jsonl). Card: [JSON](datasets/cards/grok-ozempic-v0.json). Manifest: [grok-ozempic-v0.manifest.json](datasets/manifests/grok-ozempic-v0.manifest.json).
 - **Format**: JSONL (one trajectory record per line, conforming to schema v0). See [datasets/README.md](datasets/README.md).
 - **Sprint status**: [STATUS.md](STATUS.md)
 

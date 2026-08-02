@@ -7,20 +7,32 @@
   "schema_url": "https://github.com/rmems/operation-prometheus/blob/main/schemas/pr_trajectory.schema.json",
   "language": "Rust",
   "domains": ["ml-infra", "quantization", "validation"],
-  "pr_count": 6,
-  "pr_numbers": [29, 26, 24, 25, 11, 8],
+  "domain_by_pr": {
+    "29": "validation",
+    "26": "validation",
+    "24": "validation",
+    "25": "ml-infra",
+    "11": "ml-infra",
+    "43": "ml-infra",
+    "33": "testing"
+  },
+  "pr_count": 7,
+  "pr_numbers": [29, 26, 24, 25, 11, 43, 33],
   "training_use_buckets": {
     "validation": [29, 26, 24],
-    "feature": [25, 11, 8]
+    "feature": [25, 11],
+    "review-to-patch": [43, 33]
   },
-  "extracted_at": null,
-  "status": "shortlist-v0",
+  "extracted_at": "2026-08-02",
+  "status": "extracted-v0",
   "created_at": "2026-07-21",
   "created_by": "Grok Build Agent: Grok 4.5",
-  "notes": "High-signal merged PRs for ternary quantization, alignment inventory, SAAQ artifact ladder, myelin CUDA backend boundary, and xai-dissect pipeline wiring. Extraction not yet performed. Schema maps feature → training_use other.",
+  "jsonl_path": "datasets/jsonl/grok-ozempic-v0.jsonl",
+  "manifest_path": "datasets/manifests/grok-ozempic-v0.manifest.json",
+  "notes": "High-signal merged PRs for ternary quantization, alignment inventory, SAAQ artifact ladder, myelin CUDA backend boundary, xai-dissect pipeline wiring, GOZ1 quantization CLI, and test-suite refactor. Shortlist revised 2026-08-02 against measured review-signal yield (see docs/source-repos.md): added #43 and #33 (review-to-patch), dropped #8 (only 2 kept signals). #42 deferred pending normalizer ack-dedupe and per-PR language override. rmems is the repo's only human account; engineering review signal comes largely from the gemini-code-assist / chatgpt-codex-connector allowlist. Schema maps feature -> training_use other.",
   "source_doc": "docs/source-repos.md",
   "related_issues": {
-    "operation_prometheus": [],
-    "grok_ozempic": [16, 22, 27, 13, 14, 15, 17, 18, 19, 21, 10, 6, 5]
+    "operation_prometheus": [11],
+    "grok_ozempic": [16, 22, 27, 13, 14, 15, 17, 18, 19, 21, 10, 6, 5, 38, 28, 20]
   }
 }

@@ -705,3 +705,439 @@ def test_sidecar_path_must_stay_under_raw_dir(tmp_path: Path):
     side.write_text("DIFF_OK", encoding="utf-8")
     raw3 = {"diff": {"sidecar_path": "pr-1.diff", "inline": None}, "files": []}
     assert _load_diff_text(raw3, raw_path) == "DIFF_OK"
+
+
+def test_expected_failure_prose_is_pass():
+    from lib.normalize import extract_validation
+
+    raw = {
+        "pull": {
+            "body": (
+                "## Validation\n\n"
+                "- `cargo test --features cli`\n"
+                "- Manual invalid schema fixture confirms ingest failure behavior\n"
+            )
+        },
+        "checks": {},
+    }
+    events = extract_validation(raw)
+    assert events[0]["result"] == "pass"
+
+
+def test_expected_failure_does_not_mask_a_real_failure():
+    from lib.normalize import extract_validation
+
+    raw = {
+        "pull": {
+            "body": (
+                "## Validation\n\n"
+                "- Invalid fixture fails as expected\n"
+                "- `cargo test` — 2 tests failed on the router path\n"
+            )
+        },
+        "checks": {},
+    }
+    events = extract_validation(raw)
+    assert events[0]["result"] == "fail"
+
+
+def test_self_referential_linked_issue_is_dropped():
+    from lib.normalize import enrich_linked_issues
+
+    raw = {
+        "source": {"repo": "rmems/widget", "pr_number": 26},
+        "pull": {"number": 26, "body": "Closes #26"},
+        "linked_issues": [],
+        "commits": [],
+    }
+    assert enrich_linked_issues(raw) == []
+
+
+def test_linked_issue_override_adds_referenced_issues():
+    from lib.normalize import LINKED_ISSUE_OVERRIDE, normalize_record
+
+    assert LINKED_ISSUE_OVERRIDE[("rmems/grok-ozempic", 26)] == (22,)
+    raw = {
+        "source": {"repo": "rmems/grok-ozempic", "pr_number": 26},
+        "pull": {
+            "title": "Verify grok-ozempic aligns with xai-dissect inventory",
+            "body": "Implements GitHub #22 / Linear MET-108.",
+            "state": "closed",
+            "merged": True,
+            "draft": False,
+        },
+        "linked_issues": [],
+        "reviews": [],
+        "review_comments": [],
+        "issue_comments": [],
+        "files": [{"filename": "src/core/alignment.rs", "status": "added", "patch": "+x\n"}],
+        "checks": {},
+        "commits": [],
+    }
+    urls = normalize_record(raw, {})["source_urls"]
+    assert urls == [
+        "https://github.com/rmems/grok-ozempic/pull/26",
+        "https://github.com/rmems/grok-ozempic/issues/22",
+    ]
+
+
+def test_reporting_verbs_do_not_mask_failures():
+    """A reporting verb is not an expected-failure marker (Codex P1 on #17)."""
+    from lib.normalize import extract_validation
+
+    for body in (
+        "## Validation\n\nCI checks failed on Linux\n",
+        "## Validation\n\nVerified that cargo test failed\n",
+        "## Validation\n\nConfirmed the nightly job is still failing\n",
+        "## Validation\n\nEnsured coverage, but 1 test failed\n",
+    ):
+        events = extract_validation({"pull": {"body": body}, "checks": {}})
+        assert events[0]["result"] == "fail", body
+
+
+def test_override_lookup_is_case_insensitive():
+    """Repo slugs are case-insensitive; overrides must not depend on CLI casing."""
+    from lib.normalize import domain_for, enrich_linked_issues, task_type_for
+
+    assert task_type_for("RMEMS/GROK-OZEMPIC", 26, {"pull": {}}) == "feature"
+    assert domain_for("RMEMS/Corinth-Canal", 82, {}, {}) == "gpu-compute"
+
+    raw = {
+        "source": {"repo": "RMEMS/GROK-OZEMPIC", "pr_number": 26},
+        "pull": {"number": 26, "body": "Implements GitHub #22"},
+        "linked_issues": [],
+        "commits": [],
+    }
+    assert [i["number"] for i in enrich_linked_issues(raw)] == [22]
+
+
+def test_failure_behavior_noun_alone_is_not_an_expected_failure():
+    """"failure behavior/mode" without intent is an ordinary report (Codex P1)."""
+    from lib.normalize import extract_validation
+
+    for body in (
+        "## Validation\n\nCI showed failure behavior on Linux\n",
+        "## Validation\n\nObserved failure mode in cargo test\n",
+    ):
+        events = extract_validation({"pull": {"body": body}, "checks": {}})
+        assert events[0]["result"] == "fail", body
+
+    # A deliberately invalid fixture still reads as an expected failure.
+    events = extract_validation(
+        {
+            "pull": {
+                "body": "## Validation\n\nInvalid schema fixture confirms ingest failure behavior\n"
+            },
+            "checks": {},
+        }
+    )
+    assert events[0]["result"] == "pass"
+
+
+def test_pre_collected_self_referential_issue_is_dropped():
+    """A self-reference already in the raw record must not survive (Codex P2)."""
+    from lib.normalize import enrich_linked_issues
+
+    raw = {
+        "source": {"repo": "rmems/widget", "pr_number": 26},
+        "pull": {"number": 26, "body": ""},
+        "linked_issues": [
+            {
+                "number": 26,
+                "repo": "rmems/widget",
+                "html_url": "https://github.com/rmems/widget/issues/26",
+            },
+            {
+                "number": 22,
+                "repo": "rmems/widget",
+                "html_url": "https://github.com/rmems/widget/issues/22",
+            },
+        ],
+        "commits": [],
+    }
+    assert [i["number"] for i in enrich_linked_issues(raw)] == [22]
+
+
+def test_copilot_reviewer_is_not_ci_validation():
+    from lib.normalize import extract_validation
+
+    raw = {
+        "pull": {"body": ""},
+        "checks": {
+            "check_runs": [
+                {"name": "fmt / clippy / test", "status": "completed", "conclusion": "success"},
+                {
+                    "name": "copilot-pull-request-reviewer",
+                    "status": "completed",
+                    "conclusion": "success",
+                },
+            ]
+        },
+    }
+    events = extract_validation(raw)
+    ci = [e for e in events if e["type"] == "ci"]
+    assert len(ci) == 1
+    assert "copilot" not in ci[0]["detail"].lower()
+    assert any("copilot" in e["detail"].lower() for e in events if e["type"] == "other")
+
+
+def test_local_agent_config_paths_are_filtered_from_patches():
+    """Tracker/agent state carries emails and local config, never trajectory."""
+    from lib.normalize import _is_noise_patch_path
+
+    for path in (
+        ".beads/config.yaml",
+        ".beads/issues.jsonl",
+        "./.claude/settings.json",
+        "a/.beads/hooks/pre-push",
+    ):
+        assert _is_noise_patch_path(path), path
+    for path in ("src/core/alignment.rs", "AGENTS.md", "beads/x.rs", ".beadsfoo/y.rs"):
+        assert not _is_noise_patch_path(path), path
+
+
+def test_bad_adjective_alone_does_not_suppress_a_real_failure():
+    """"Invalid fixture" is not intent unless it asserts the failure (Codex P1)."""
+    from lib.normalize import extract_validation
+
+    for body in (
+        "## Validation\n\nInvalid fixture was repaired, but cargo test failed on Linux\n",
+        "## Validation\n\nInvalid fixture was repaired but cargo test failed on Linux\n",
+    ):
+        events = extract_validation({"pull": {"body": body}, "checks": {}})
+        assert events[0]["result"] == "fail", body
+
+    # The fixture asserting the failure is still an expected failure.
+    for body in (
+        "## Validation\n\nInvalid schema fixture confirms ingest failure behavior\n",
+        "## Validation\n\nMalformed manifest fixture triggers the expected failure\n",
+    ):
+        events = extract_validation({"pull": {"body": body}, "checks": {}})
+        assert events[0]["result"] == "pass", body
+
+
+def test_noise_dir_only_diff_is_still_filtered():
+    """The cheap prefilter must not let a .beads/-only diff bypass it (Codex P1)."""
+    from lib.normalize import _filter_noise_from_diff
+
+    # Deliberately contains no _NOISE_PATCH_BASENAMES token.
+    diff = (
+        "diff --git a/.beads/config.yaml b/.beads/config.yaml\n"
+        "+owner: someone@example.com\n"
+        "diff --git a/.claude/settings.json b/.claude/settings.json\n"
+        '+{"hooks": {}}\n'
+        "diff --git a/src/core/alignment.rs b/src/core/alignment.rs\n"
+        "+fn align() {}\n"
+    )
+    out = _filter_noise_from_diff(diff)
+    assert ".beads" not in out
+    assert ".claude" not in out
+    assert "someone@example.com" not in out
+    assert "src/core/alignment.rs" in out
+
+
+def test_nested_agent_state_dirs_are_filtered():
+    """Monorepos nest agent state below the root (Codex P1)."""
+    from lib.normalize import _is_noise_patch_path
+
+    for path in (
+        "pkg/.claude/settings.json",
+        "workspace/.beads/config.yaml",
+        "a/crates/app/.beads/issues.jsonl",
+        ".beads/config.yaml",
+    ):
+        assert _is_noise_patch_path(path), path
+    for path in ("src/core/alignment.rs", "beads/x.rs", ".beadsfoo/y.rs", "pkg/beads/x.rs"):
+        assert not _is_noise_patch_path(path), path
+
+
+def test_generic_copilot_named_ci_is_not_a_review_app():
+    """Only the reviewer check is a review app, not any check saying "copilot"."""
+    from lib.normalize import _is_review_app_check
+
+    assert _is_review_app_check("copilot-pull-request-reviewer")
+    assert not _is_review_app_check("Copilot integration tests")
+
+    from lib.normalize import extract_validation
+
+    events = extract_validation(
+        {
+            "pull": {"body": ""},
+            "checks": {
+                "check_runs": [
+                    {
+                        "name": "Copilot integration tests",
+                        "status": "completed",
+                        "conclusion": "success",
+                    }
+                ]
+            },
+        }
+    )
+    ci = [e for e in events if e["type"] == "ci"]
+    assert len(ci) == 1 and ci[0]["result"] == "pass"
+
+
+def test_expected_failure_that_did_not_happen_is_a_failure():
+    """Intent without an observed failure means the negative test failed (Codex P2)."""
+    from lib.normalize import extract_validation
+
+    for body in (
+        "## Validation\n\nThe invalid fixture was expected to fail, but it passed unexpectedly\n",
+        "## Validation\n\nNegative test: malformed manifest did not fail\n",
+    ):
+        events = extract_validation({"pull": {"body": body}, "checks": {}})
+        assert events[0]["result"] == "fail", body
+
+
+def test_no_fail_words_is_not_all_expected():
+    from lib.normalize import _fail_words_all_expected
+
+    assert not _fail_words_all_expected("expected to fail")
+
+
+def test_absence_of_expected_failure_wording_is_a_failure():
+    """"did not occur" / "was not observed" mean the negative test passed (Codex P2)."""
+    from lib.normalize import extract_validation
+
+    for body in (
+        "## Validation\n\nThe expected failure did not occur\n",
+        "## Validation\n\nThe expected failure was not observed\n",
+        "## Validation\n\nExpected failure never triggered\n",
+    ):
+        events = extract_validation({"pull": {"body": body}, "checks": {}})
+        assert events[0]["result"] == "fail", body
+
+    # The contradiction only applies alongside an expected-failure cue, so
+    # ordinary resolved-failure prose is still a pass.
+    events = extract_validation(
+        {"pull": {"body": "## Validation\n\nPreviously failed tests are now passing\n"}, "checks": {}}
+    )
+    assert events[0]["result"] == "pass"
+
+
+def test_absence_wording_must_share_a_sentence_with_the_cue():
+    """An unrelated later clause must not force fail (Codex P2)."""
+    from lib.normalize import extract_validation
+
+    for body in (
+        "## Validation\n\nInvalid fixture fails as expected. The warning did not occur\n",
+        "## Validation\n\nNegative test added. The deprecation notice was not observed\n",
+        # Separate list items are separate statements too.
+        "## Validation\n\n- Invalid fixture fails as expected\n- The warning did not occur\n",
+    ):
+        events = extract_validation({"pull": {"body": body}, "checks": {}})
+        assert events[0]["result"] == "pass", body
+
+    # Same sentence still forces fail.
+    events = extract_validation(
+        {"pull": {"body": "## Validation\n\nThe expected failure did not occur\n"}, "checks": {}}
+    )
+    assert events[0]["result"] == "fail"
+
+
+def test_soft_wrapped_sentences_keep_cue_and_contradiction_together():
+    """Markdown soft-wraps prose; a bare newline is not a statement boundary."""
+    from lib.normalize import extract_validation
+
+    for body in (
+        "## Validation\n\nThe expected failure\nwas not observed\n",
+        "## Validation\n\nThe invalid fixture was expected to fail, but it\npassed unexpectedly\n",
+    ):
+        events = extract_validation({"pull": {"body": body}, "checks": {}})
+        assert events[0]["result"] == "fail", body
+
+    # Real boundaries — sentence end, list item, blank line — still separate.
+    for body in (
+        "## Validation\n\nInvalid fixture fails as expected. The warning did not occur\n",
+        "## Validation\n\n- Invalid fixture fails as expected\n- The warning did not occur\n",
+        "## Validation\n\nInvalid fixture fails as expected\n\nThe warning did not occur\n",
+    ):
+        events = extract_validation({"pull": {"body": body}, "checks": {}})
+        assert events[0]["result"] == "pass", body
+
+
+def test_macroscope_note_stripped_without_eating_earlier_content():
+    """Only the attributed NOTE is dropped, not everything before it (Codex P2)."""
+    from lib.bots import strip_bot_boilerplate
+
+    body = (
+        "## Validation\n\n"
+        "> [!NOTE]\n> Human note: run the ingest fixture first.\n\n"
+        "- cargo test --features cli\n"
+        "- invalid schema fixture confirms failure behavior\n\n"
+        "> [!NOTE]\n> ### Bot summary\n"
+        '> <sup>Generated by <a href="https://macroscope.com">Macroscope</a> '
+        "summarized this PR.</sup>\n\n"
+    )
+    out = strip_bot_boilerplate(body)
+    assert "Bot summary" not in out
+    assert "Human note" in out
+    assert "cargo test --features cli" in out
+
+
+def test_known_broken_ci_described_as_expected_is_not_a_pass():
+    """A known-broken run is not a negative test (Codex P2)."""
+    from lib.normalize import extract_validation
+
+    events = extract_validation(
+        {
+            "pull": {
+                "body": "## Validation\n\nThe CI was expected to be failing on "
+                "Linux until the runner is repaired\n"
+            },
+            "checks": {},
+        }
+    )
+    assert events[0]["result"] == "fail"
+
+
+def test_kilo_agent_state_is_filtered_from_patches():
+    """.kilo/ is agent state like .beads/ and .claude/ (Codex P1)."""
+    from lib.normalize import _is_noise_patch_path
+
+    for path in (".kilo/settings.json", "pkg/.kilo/state.json", "a/.kilo/mcp.json"):
+        assert _is_noise_patch_path(path), path
+    for path in ("kilo/x.rs", ".kilofoo/y.rs", "src/kilo_backend.rs"):
+        assert not _is_noise_patch_path(path), path
+
+
+def test_asserted_negative_test_failure_is_a_pass():
+    """"Negative test confirms failure behavior" is the assertion succeeding."""
+    from lib.normalize import extract_validation
+
+    for body in (
+        "## Validation\n\nNegative test confirms failure behavior\n",
+        "## Validation\n\nNegative test observed a validation failure\n",
+    ):
+        events = extract_validation({"pull": {"body": body}, "checks": {}})
+        assert events[0]["result"] == "pass", body
+
+    # An ordinary failure report that merely mentions a negative test stays fail.
+    for body in (
+        "## Validation\n\nNegative test suite reported 3 failures\n",
+        "## Validation\n\nNegative tests failed on Windows\n",
+        "## Validation\n\nNegative test added. CI checks failed on Linux\n",
+    ):
+        events = extract_validation({"pull": {"body": body}, "checks": {}})
+        assert events[0]["result"] == "fail", body
+
+
+def test_macroscope_removal_keeps_surrounding_lines_separate():
+    """_NOTE_BLOCK eats the preceding newline, so removal must restore one."""
+    from lib.bots import strip_bot_boilerplate
+
+    body = (
+        "- cargo test --features cli\n"
+        "> [!NOTE]\n"
+        '> <sup>by <a href="https://macroscope.com">Macroscope</a> summarized</sup>\n'
+        "- invalid fixture confirms failure behavior\n"
+    )
+    out = strip_bot_boilerplate(body)
+    assert "Macroscope" not in out
+    assert "cli- invalid" not in out
+    lines = [ln for ln in out.splitlines() if ln.strip()]
+    assert lines == [
+        "- cargo test --features cli",
+        "- invalid fixture confirms failure behavior",
+    ]
