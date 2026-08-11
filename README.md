@@ -79,7 +79,10 @@ pip install -r requirements.txt
 
 export GITHUB_TOKEN=...   # optional; higher rate limits
 
-# Issue #5 — collect raw PR records (gitignored under datasets/raw/)
+# Optional: large raw dumps outside the git tree (issue #14)
+# export PROMETHEUS_DATA_ROOT=~/rmems/prometheus-data
+
+# Issue #5 — collect raw PR records (gitignored under datasets/raw/, or $PROMETHEUS_DATA_ROOT/raw/)
 python scripts/collect_pr_records.py \
   --repo rmems/corinth-canal \
   --pr 82,89,91,94,95,96 \

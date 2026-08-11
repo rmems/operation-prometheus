@@ -1,18 +1,18 @@
 #!/usr/bin/env python3
 """Read-only GitHub PR collector for Operation Prometheus.
 
-Collects public PR trajectory signals into local JSON under datasets/raw/.
-Performs no write operations against GitHub.
+Collects public PR trajectory signals into local JSON under datasets/raw/
+(or $PROMETHEUS_DATA_ROOT/raw/ when set). Performs no write operations against GitHub.
 
 Examples:
-    export GITHUB_TOKEN=...
+    export GITHUB_TOKEN="$(gh auth token)"
     python scripts/collect_pr_records.py \\
       --repo rmems/corinth-canal --pr 89 \\
       --out-dir datasets/raw/corinth-canal
 
+    export PROMETHEUS_DATA_ROOT=~/rmems/prometheus-data
     python scripts/collect_pr_records.py \\
-      --repo rmems/corinth-canal --pr 82,89,91,94,95,96 \\
-      --out-dir datasets/raw/corinth-canal
+      --repo Limen-Neural/neuromod --pr 5,8,9 --skip-existing
 """
 
 from __future__ import annotations
@@ -27,7 +27,8 @@ _SCRIPTS = Path(__file__).resolve().parent
 if str(_SCRIPTS) not in sys.path:
     sys.path.insert(0, str(_SCRIPTS))
 
-from lib.github_client import GitHubClient, GitHubError, parse_repo, repo_slug  # noqa: E402
+from lib.github_client import GitHubClient, GitHubError, parse_repo  # noqa: E402
+from lib.paths import DATA_ROOT_ENV, resolve_raw_out_dir  # noqa: E402
 from lib.raw_record import collect_pr, write_raw_record  # noqa: E402
 
 logging.basicConfig(level=logging.INFO, format="%(levelname)s: %(message)s")
@@ -60,7 +61,11 @@ def build_parser() -> argparse.ArgumentParser:
         "--out-dir",
         type=Path,
         default=None,
-        help="Output directory (default: datasets/raw/<repo-slug>)",
+        help=(
+            "Output directory. Default: $"
+            + DATA_ROOT_ENV
+            + "/raw/<owner_repo> if set, else datasets/raw/<owner_repo>"
+        ),
     )
     p.add_argument(
         "--token-env",
@@ -75,6 +80,11 @@ def build_parser() -> argparse.ArgumentParser:
     )
     p.add_argument("--skip-checks", action="store_true", help="Skip check-runs API")
     p.add_argument("--skip-diff", action="store_true", help="Skip full unified diff fetch")
+    p.add_argument(
+        "--skip-existing",
+        action="store_true",
+        help="Skip PRs that already have pr-N.json in out-dir (resume-friendly)",
+    )
     p.add_argument(
         "--allow-cross-repo",
         action="append",
@@ -108,18 +118,24 @@ def main(argv: list[str] | None = None) -> int:
         logger.error("%s", exc)
         return 2
 
-    out_dir = args.out_dir
-    if out_dir is None:
-        root = Path(__file__).resolve().parent.parent
-        out_dir = root / "datasets" / "raw" / repo_slug(full)
+    out_dir = resolve_raw_out_dir(full, args.out_dir)
 
     if args.dry_run:
         print(f"Would collect {full} PRs {prs} → {out_dir}")
+        if args.skip_existing:
+            print("(with --skip-existing)")
         return 0
 
     client = GitHubClient.from_env(args.token_env)
     failures = 0
+    collected = 0
+    skipped = 0
     for pr in prs:
+        target = out_dir / f"pr-{pr}.json"
+        if args.skip_existing and target.exists():
+            logger.info("Skipping %s#%s (exists: %s)", full, pr, target)
+            skipped += 1
+            continue
         logger.info("Collecting %s#%s …", full, pr)
         try:
             record = collect_pr(
@@ -136,6 +152,7 @@ def main(argv: list[str] | None = None) -> int:
                 max_inline_diff_bytes=args.max_inline_diff_bytes,
             )
             logger.info("Wrote %s", path)
+            collected += 1
         except (GitHubError, OSError, ValueError) as exc:
             failures += 1
             logger.error("Failed %s#%s: %s", full, pr, exc)
@@ -143,9 +160,19 @@ def main(argv: list[str] | None = None) -> int:
                 return 1
 
     if failures:
-        logger.error("%s PR(s) failed", failures)
+        logger.error(
+            "%s PR(s) failed (%s collected, %s skipped)",
+            failures,
+            collected,
+            skipped,
+        )
         return 1
-    logger.info("Collected %s PR(s) into %s", len(prs), out_dir)
+    logger.info(
+        "Done: %s collected, %s skipped → %s",
+        collected,
+        skipped,
+        out_dir,
+    )
     return 0
 
 
