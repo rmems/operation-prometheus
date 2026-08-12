@@ -415,19 +415,100 @@ def test_review_signal_dedupe_and_ack_deprioritized():
         assert first_problem < first_ack
 
 
+def test_max_items_one_prefers_problem_over_ack():
+    """When max_items=1, do not reserve the only slot for an ack."""
+    from lib.normalize import extract_review_signals
+
+    raw = {
+        "reviews": [],
+        "review_comments": [
+            {
+                "user_login": "rmems",
+                "user_type": "User",
+                "body": (
+                    "Addressed in abcdef0123456789: portable paths and dtype guard notes."
+                ),
+            },
+            {
+                "user_login": "reviewer-x",
+                "user_type": "User",
+                "body": "Finding 1: please validate export path edge case before merge.",
+            },
+        ],
+        "issue_comments": [],
+    }
+    signals = extract_review_signals(raw, max_items=1)
+    assert len(signals) == 1
+    assert signals[0]["comment"].startswith("Finding 1")
+
+
+def test_duplicate_merges_suggestion_from_inline():
+    """Dedupe keeps problem text and merges a later non-empty suggestion."""
+    from lib.normalize import extract_review_signals
+
+    body = "Please fix the dtype KeyError guard in the export path."
+    raw = {
+        "reviews": [
+            {
+                "user_login": "reviewer-x",
+                "user_type": "User",
+                "state": "COMMENTED",
+                "body": body,
+            }
+        ],
+        "review_comments": [
+            {
+                "user_login": "reviewer-x",
+                "user_type": "User",
+                "body": body + "\n```suggestion\nfixed_line = True\n```\n",
+            }
+        ],
+        "issue_comments": [],
+    }
+    signals = extract_review_signals(raw, max_items=8)
+    assert len(signals) == 1
+    assert "dtype KeyError" in signals[0]["comment"]
+    assert signals[0].get("suggestion") == "fixed_line = True"
+
+
+def test_fixed_in_commit_bare_ack_dropped():
+    from lib.normalize import extract_review_signals
+
+    raw = {
+        "reviews": [],
+        "review_comments": [],
+        "issue_comments": [
+            {
+                "user_login": "rmems",
+                "user_type": "User",
+                "body": "Fixed in commit 0b05325abcdef.",
+            },
+            {
+                "user_login": "reviewer-x",
+                "user_type": "User",
+                "body": "Please reject non-finite input_range before division in GainCurve::evaluate.",
+            },
+        ],
+    }
+    signals = extract_review_signals(raw)
+    assert len(signals) == 1
+    assert "GainCurve" in signals[0]["comment"]
+
+
 def test_language_by_pr_overrides_card_language():
     """GH #19: language_by_pr beats card.language for that PR only."""
     from lib.normalize import language_for
 
     card = {
         "language": "Rust",
-        "language_by_pr": {"42": "Python", "99": ""},
+        "language_by_pr": {"42": "Python", 7: "Julia", "99": ""},
     }
     raw42 = {"source": {"pr_number": 42}, "files": [{"filename": "scripts/export.py"}]}
     raw7 = {"source": {"pr_number": 7}, "files": [{"filename": "src/lib.rs"}]}
     raw99 = {"source": {"pr_number": 99}, "files": [{"filename": "src/lib.rs"}]}
     assert language_for(card, raw42) == "Python"
-    assert language_for(card, raw7) == "Rust"
+    # Integer key in language_by_pr
+    assert language_for(card, raw7) == "Julia"
     # Empty override ignored → card language.
     assert language_for(card, raw99) == "Rust"
     # No card language → extension sniff.

@@ -330,8 +330,9 @@ def extract_issue_context(raw: dict[str, Any]) -> str | None:
 
 
 # Maintainer ack-only replies consume review-signal budget without review content.
+# Optional "commit" token matches "Fixed in commit <sha>." (Bugbot / GH #18 follow-up).
 _BARE_FIXED_IN_REPLY = re.compile(
-    r"(?is)^\s*(?:\*\*)?(?:addressed|fixed)\s+in\s+`?[0-9a-f]{7,40}`?"
+    r"(?is)^\s*(?:\*\*)?(?:addressed|fixed)\s+in\s+(?:commit\s+)?`?[0-9a-f]{7,40}`?"
     r"(?:\*\*)?\s*\.?\s*$"
 )
 # Ack-shaped replies that may still carry fix rationale after the SHA.
@@ -363,10 +364,17 @@ def _is_ack_shaped_review_body(body: str) -> bool:
 
 
 def _signal_body_key(body: str) -> str:
-    """Normalize body for dedupe: collapse whitespace, strip leading ack prefix."""
-    text = re.sub(r"\s+", " ", (body or "").strip())
+    """Normalize body for dedupe: collapse whitespace, strip ack prefix + fences."""
+    text = body or ""
+    # Drop fenced blocks so a review and its inline ```suggestion``` twin share a key.
+    text = re.sub(r"```.*?```", " ", text, flags=re.DOTALL)
+    text = re.sub(r"\s+", " ", text.strip())
     text = _ACK_PREFIX_FOR_KEY.sub("", text, count=1)
-    return text.strip().lower()
+    key = text.strip().lower()
+    # Empty / punctuation-only after strip is not a usable signal key.
+    if not re.search(r"[a-z0-9]", key):
+        return ""
+    return key
 
 
 def _select_deduped_signals(
@@ -382,24 +390,30 @@ def _select_deduped_signals(
         return []
 
     # Preserve first-seen order; if same key appears as both ack and problem, keep problem.
+    # Merge non-empty suggestion onto the retained candidate when duplicates arrive.
     by_key: dict[str, dict[str, Any]] = {}
     order: list[str] = []
     for c in candidates:
         key = c["key"]
         if key not in by_key:
-            by_key[key] = c
+            by_key[key] = dict(c)
             order.append(key)
             continue
         prev = by_key[key]
         if prev.get("ack") and not c.get("ack"):
-            by_key[key] = c
+            merged = dict(c)
+            if not merged.get("suggestion") and prev.get("suggestion"):
+                merged["suggestion"] = prev["suggestion"]
+            by_key[key] = merged
+        elif not prev.get("suggestion") and c.get("suggestion"):
+            prev["suggestion"] = c["suggestion"]
 
     problems = [by_key[k] for k in order if not by_key[k].get("ack")]
     acks = [by_key[k] for k in order if by_key[k].get("ack")]
 
     selected: list[dict[str, Any]] = []
-    # Reserve one slot for a rationale-bearing ack when problems would otherwise monopolize.
-    reserve = 1 if acks else 0
+    # Reserve an ack slot only when max_items > 1 so a lone slot stays problem-first.
+    reserve = 1 if acks and problems and max_items > 1 else 0
     for p in problems:
         if len(selected) >= max_items - reserve:
             break
