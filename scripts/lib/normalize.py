@@ -624,9 +624,9 @@ def _fail_words_all_expected(low: str) -> bool:
     )
 
 
-# Unchecked markdown task items in a test-plan section.
-_UNCHECKED_CHECKBOX = re.compile(r"(?m)^\s*[-*]\s*\[\s\]\s*(.+?)\s*$")
-# Self-declared optional / deferred work must not fail the validation event.
+# Unchecked markdown task items; text capture may be empty (bare `- [ ]`).
+_UNCHECKED_CHECKBOX_LINE = re.compile(r"(?m)^(?P<full>\s*[-*]\s*\[\s\]\s*(?P<text>.*?))\s*$")
+# Affirmative optionality (not "not optional" / "non-optional").
 _OPTIONAL_CHECKBOX_CUE = re.compile(
     r"(?:"
     r"\boptional\b"
@@ -638,14 +638,48 @@ _OPTIONAL_CHECKBOX_CUE = re.compile(
     r")",
     re.IGNORECASE,
 )
+_NEGATED_OPTIONAL_CUE = re.compile(
+    r"(?:"
+    r"\bnot\s+optional\b"
+    r"|\bisn'?t\s+optional\b"
+    r"|\bnon[- ]optional\b"
+    r"|\bno\s+longer\s+optional\b"
+    r")",
+    re.IGNORECASE,
+)
+
+
+def _is_optional_checkbox_text(text: str) -> bool:
+    """True only for affirmative optionality; empty / negated labels stay required."""
+    item = (text or "").strip()
+    if not item:
+        return False
+    if _NEGATED_OPTIONAL_CUE.search(item):
+        return False
+    return bool(_OPTIONAL_CHECKBOX_CUE.search(item))
 
 
 def _has_blocking_unchecked_checkbox(section: str) -> bool:
-    """True when an unchecked task item is required (not self-declared optional)."""
-    for item in _UNCHECKED_CHECKBOX.findall(section):
-        if not _OPTIONAL_CHECKBOX_CUE.search(item):
+    """True when an unchecked task item is required (not self-declared optional).
+
+    Bare ``- [ ]`` (no text) is blocking. ``not optional`` / ``non-optional`` are
+    never treated as optional (Codex P2s on operation-prometheus#35).
+    """
+    for m in _UNCHECKED_CHECKBOX_LINE.finditer(section):
+        if not _is_optional_checkbox_text(m.group("text") or ""):
             return True
     return False
+
+
+def _strip_optional_unchecked_lines(section: str) -> str:
+    """Drop optional unchecked checkbox lines so deferred wording cannot fail the event."""
+    kept: list[str] = []
+    for line in section.splitlines():
+        m = _UNCHECKED_CHECKBOX_LINE.match(line)
+        if m is not None and _is_optional_checkbox_text(m.group("text") or ""):
+            continue
+        kept.append(line)
+    return "\n".join(kept)
 
 
 def extract_validation(raw: dict[str, Any]) -> list[dict[str, str]]:
@@ -656,13 +690,11 @@ def extract_validation(raw: dict[str, Any]) -> list[dict[str, str]]:
         ("validation", "validations", "test plan", "test plans", "verification", "verifications", "testing", "tests"),
     )
     if val_section:
-        low = val_section.lower()
+        # Required incomplete work fails; optional unchecked lines are ignored for
+        # both checkbox and generic deferred-work scans (pending/todo/not run/…).
+        required_section = _strip_optional_unchecked_lines(val_section)
+        low = required_section.lower()
         result = "pass"
-        # Anchored/non-pass cues — avoid loose substrings ("not running…").
-        # Unchecked boxes: only *required* incomplete work fails. Lines that
-        # mark themselves optional / not-required / out-of-scope do not flip
-        # the whole test-plan event to fail (Codex P2 on operation-prometheus#35
-        # for grok-ozempic#42's "Optional full 3 GiB export … not required").
         if _has_blocking_unchecked_checkbox(val_section):
             result = "fail"
         non_pass_res = (

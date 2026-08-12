@@ -1046,6 +1046,42 @@ def test_required_unchecked_checkbox_still_fails_validation():
     assert events[0]["result"] == "fail"
 
 
+def test_negated_optional_checkbox_still_blocks():
+    """'not optional' must not be treated as optional (#35 Codex P2)."""
+    from lib.normalize import extract_validation
+
+    body = (
+        "## Test plan\n\n"
+        "- [x] Unit tests\n"
+        "- [ ] Windows test is not optional\n"
+    )
+    events = extract_validation({"pull": {"body": body}, "checks": {}})
+    assert events[0]["result"] == "fail"
+
+
+def test_bare_unchecked_checkbox_still_blocks():
+    """Empty `- [ ]` lines remain required (#35 Codex P2)."""
+    from lib.normalize import extract_validation
+
+    body = "## Test plan\n\n- [x] Unit tests\n- [ ]\n"
+    events = extract_validation({"pull": {"body": body}, "checks": {}})
+    assert events[0]["result"] == "fail"
+
+
+def test_optional_checkbox_deferred_wording_does_not_fail_section():
+    """Optional lines with pending/todo/not executed must not fail via section scan."""
+    from lib.normalize import extract_validation
+
+    for item in (
+        "Optional follow-up pending upstream benchmark",
+        "Out of scope; not executed",
+        "Optional path not run on CI",
+    ):
+        body = f"## Test plan\n\n- [x] Core tests\n- [ ] {item}\n"
+        events = extract_validation({"pull": {"body": body}, "checks": {}})
+        assert events[0]["result"] == "pass", item
+
+
 def test_override_lookup_is_case_insensitive():
     """Repo slugs are case-insensitive; overrides must not depend on CLI casing."""
     from lib.normalize import domain_for, enrich_linked_issues, task_type_for
