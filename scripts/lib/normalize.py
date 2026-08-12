@@ -628,18 +628,6 @@ def _fail_words_all_expected(low: str) -> bool:
 _UNCHECKED_CHECKBOX_LINE = re.compile(
     r"^(?P<full>\s*[-*]\s*\[\s\]\s*(?P<text>.*?))\s*$"
 )
-# Affirmative optionality only — bare "follow-up" is NOT optional (required
-# follow-up tasks must still block; CodeRabbit/Codex on #35).
-_OPTIONAL_CHECKBOX_CUE = re.compile(
-    r"(?:"
-    r"\boptional\b"
-    r"|\bnot\s+required(?:\s+for\s+merge)?\b"
-    r"|\bout\s+of\s+scope\b"
-    r"|\bif\s+time\s+permits\b"
-    r"|\bnice[- ]to[- ]have\b"
-    r")",
-    re.IGNORECASE,
-)
 # Negated / required phrasing that must never be treated as optional.
 _NEGATED_OPTIONAL_CUE = re.compile(
     r"(?:"
@@ -672,17 +660,59 @@ def _line_indent(line: str) -> int:
     return n
 
 
+# Optionality must lead the task text — mid-sentence "optional coverage" is not
+# a whole-item deferral (Codex P2 on #35).
+_LEADING_OPTIONAL_CUE = re.compile(
+    r"^(?:"
+    r"optional\b"
+    r"|out\s+of\s+scope\b"
+    r"|if\s+time\s+permits\b"
+    r"|nice[- ]to[- ]have\b"
+    r")",
+    re.IGNORECASE,
+)
+_WHOLE_ITEM_NOT_REQUIRED = re.compile(
+    r"^not\s+required(?:\s+for\s+merge)?\.?$",
+    re.IGNORECASE,
+)
+# Observed failure (not bare "failure-recovery" nouns in deferred task names).
+_OBSERVED_FAIL_VERB = re.compile(r"\b(?:failed|failing)\b", re.IGNORECASE)
+_NONZERO_ERROR_COUNT = re.compile(
+    r"\b[1-9]\d*\s+(?:tests?\s+)?(?:errors?|failures?)\b", re.IGNORECASE
+)
+_ZERO_FAIL_SUMMARY = re.compile(
+    r"\b(?:0|no)\s+(?:tests?\s+)?fail(?:ed|ing|ures?)\b", re.IGNORECASE
+)
+_RESOLVED_FAILED_LINE = re.compile(
+    r"(?:"
+    r"\b(?:previously|formerly|no longer)\s+fail(?:ed|ing|ures?)?\b"
+    r"|\bfail(?:ed|ing)\s+(?:tests?\s+)?(?:are\s+)?now\s+pass"
+    r"|\bhas\s+not\s+fail(?:ed|ing)\b"
+    r"|\bnot\s+fail(?:ed|ing)\b"
+    r"|\bnever\s+fail(?:ed|ing)\b"
+    r")",
+    re.IGNORECASE,
+)
+
+
 def _is_optional_checkbox_text(text: str) -> bool:
-    """True only for affirmative optionality; empty / negated / required stay blocking."""
+    """True only when optionality qualifies the *whole* unchecked task.
+
+    Leading ``Optional …`` / ``Out of scope …`` count. Mentions like
+    ``with optional coverage`` or ``(GPU not required)`` do not exempt a
+    required task (Codex P2 on #35).
+    """
     item = (text or "").strip()
     if not item:
         return False
     if _NEGATED_OPTIONAL_CUE.search(item):
         return False
-    # "Required follow-up: …" is required work; "not required for merge" is optional.
+    # "Required follow-up: …" is required work.
     if _REQUIRED_WORK_CUE.search(item) and not _NOT_REQUIRED_CUE.search(item):
         return False
-    return bool(_OPTIONAL_CHECKBOX_CUE.search(item))
+    if _WHOLE_ITEM_NOT_REQUIRED.match(item):
+        return True
+    return bool(_LEADING_OPTIONAL_CUE.match(item))
 
 
 def _has_blocking_unchecked_checkbox(section: str) -> bool:
@@ -703,8 +733,8 @@ def _has_blocking_unchecked_checkbox(section: str) -> bool:
 def _strip_optional_unchecked_lines(section: str) -> str:
     """Drop optional unchecked items and their full indented subtrees.
 
-    Nested sublists (``  - [ ] Windows pending``) stay with the optional parent
-    via deeper indent, not only plain continuation prose.
+    Blank lines inside an optional item do not end the subtree; only a
+    non-blank sibling at indent ≤ base does (Codex P2 on #35).
     """
     lines = section.splitlines()
     kept: list[str] = []
@@ -718,7 +748,9 @@ def _strip_optional_unchecked_lines(section: str) -> str:
             while i < len(lines):
                 cont = lines[i]
                 if not cont.strip():
-                    break
+                    # Blank line may sit between parent and indented child.
+                    i += 1
+                    continue
                 if _line_indent(cont) > base_indent:
                     i += 1
                     continue
@@ -729,6 +761,35 @@ def _strip_optional_unchecked_lines(section: str) -> str:
     return "\n".join(kept)
 
 
+def _line_has_observed_failure(line: str) -> bool:
+    """True when this single line reports an actual failed run / nonzero errors.
+
+    Bare nouns like ``failure-recovery`` are not enough. A ``0 failures``
+    summary on *this* line suppresses only this line (Codex P2s on #35).
+    """
+    low = line.lower()
+    if not low.strip():
+        return False
+    if _ZERO_FAIL_SUMMARY.search(low) or "no fail" in low:
+        return False
+    if _RESOLVED_FAILED_LINE.search(low):
+        return False
+    if _fail_words_all_expected(low):
+        return False
+    if _expected_failure_was_contradicted(low):
+        return True
+    if _NONZERO_ERROR_COUNT.search(low):
+        return True
+    if _OBSERVED_FAIL_VERB.search(low):
+        return True
+    return False
+
+
+def _section_has_observed_failure(section: str) -> bool:
+    """Line-scoped observed-failure scan (does not let one zero-fail line mask another)."""
+    return any(_line_has_observed_failure(line) for line in section.splitlines())
+
+
 def extract_validation(raw: dict[str, Any]) -> list[dict[str, str]]:
     events: list[dict[str, str]] = []
     pull_body = strip_bot_boilerplate((raw.get("pull") or {}).get("body") or "")
@@ -737,13 +798,12 @@ def extract_validation(raw: dict[str, Any]) -> list[dict[str, str]]:
         ("validation", "validations", "test plan", "test plans", "verification", "verifications", "testing", "tests"),
     )
     if val_section:
-        # Optional unchecked subtrees are ignored for deferred-work cues and for
-        # "blocking incomplete checkbox" detection. Actual failure language
-        # (failed/errors) still scans the full section so attempted optional
-        # work that blew up is not misreported as pass (Codex P2s on #35).
+        # Optional unchecked subtrees: ignored for deferred-work cues and for
+        # incomplete-checkbox blocking. Observed failures still use the full
+        # section, line-scoped, so attempted optional work that blew up fails
+        # while bare "failure-recovery" names on deferred items do not.
         required_section = _strip_optional_unchecked_lines(val_section)
         low_deferred = required_section.lower()
-        low_full = val_section.lower()
         result = "pass"
         if _has_blocking_unchecked_checkbox(required_section):
             result = "fail"
@@ -763,36 +823,23 @@ def extract_validation(raw: dict[str, Any]) -> list[dict[str, str]]:
             r"\b0\s+skipped\b", low_deferred
         ):
             result = "fail"
-        zero_failures = re.search(
-            r"\b(?:0|no)\s+(?:tests?\s+)?fail(?:ed|ing|ures?)\b", low_full
-        )
-        # Resolved/negated fail* prose should not invert a passing summary.
-        resolved_failed = re.search(
-            r"(?:"
-            r"\b(?:previously|formerly|no longer)\s+fail(?:ed|ing|ures?)?\b"
-            r"|\bfail(?:ed|ing)\s+(?:tests?\s+)?(?:are\s+)?now\s+pass"
-            r"|\bhas\s+not\s+fail(?:ed|ing)\b"
-            r"|\bnot\s+fail(?:ed|ing)\b"
-            r"|\bnever\s+fail(?:ed|ing)\b"
-            r")",
-            low_full,
-        )
-        # Past-tense failed, active failing, or "failure" wording (full section).
-        if (
-            re.search(r"\bfail(?:ed|ing|ures?)?\b", low_full)
-            and not zero_failures
-            and "no fail" not in low_full
-            and not resolved_failed
-            and not _fail_words_all_expected(low_full)
-        ):
-            # Avoid matching "fail" inside unrelated words; require fail/failed/failing/failure.
-            if re.search(r"\b(?:failed|failing|failures?)\b", low_full):
-                result = "fail"
-        # Non-zero error/failure counts (sanitizer / pytest style): "1 error", "2 failures".
-        if re.search(r"\b[1-9]\d*\s+(?:tests?\s+)?(?:errors?|failures?)\b", low_full):
+        # Observed failed/failing / nonzero error counts — line-scoped on full text
+        # so one "0 failures" line cannot mask "Optional X failed" elsewhere.
+        if _section_has_observed_failure(val_section):
             result = "fail"
-        # Intent without an observed failure: the negative test itself failed.
-        if _expected_failure_was_contradicted(low_full):
+        # Bare "failure(s)" nouns on *required* text only (optional deferred
+        # titles like "failure-recovery benchmark; not run" are stripped).
+        if (
+            re.search(r"\bfailures?\b", low_deferred)
+            and not _ZERO_FAIL_SUMMARY.search(low_deferred)
+            and "no fail" not in low_deferred
+            and not _RESOLVED_FAILED_LINE.search(low_deferred)
+            and not _fail_words_all_expected(low_deferred)
+        ):
+            result = "fail"
+        if _expected_failure_was_contradicted(low_deferred) or (
+            _expected_failure_was_contradicted(val_section.lower())
+        ):
             result = "fail"
         truncated = len(val_section) > 1500
         detail, _ = sanitize_text(val_section[:1500])

@@ -1148,6 +1148,57 @@ def test_optional_line_with_actual_failure_still_fails():
     assert events[0]["result"] == "fail"
 
 
+def test_optional_blank_then_nested_sublist_does_not_fail():
+    from lib.normalize import extract_validation
+
+    body = (
+        "## Test plan\n\n"
+        "- [x] Core tests\n"
+        "- [ ] Optional platform tests\n"
+        "\n"
+        "  - [ ] Windows pending\n"
+    )
+    events = extract_validation({"pull": {"body": body}, "checks": {}})
+    assert events[0]["result"] == "pass", events[0]
+
+
+def test_mid_sentence_optional_mention_does_not_exempt_task():
+    from lib.normalize import extract_validation
+
+    for item in (
+        "Run release tests with optional coverage reporting",
+        "Run release tests (GPU not required)",
+    ):
+        body = f"## Test plan\n\n- [x] Core\n- [ ] {item}\n"
+        events = extract_validation({"pull": {"body": body}, "checks": {}})
+        assert events[0]["result"] == "fail", item
+
+
+def test_optional_failure_recovery_name_not_run_is_pass():
+    """Bare 'failure' in a deferred optional task name is not an observed fail."""
+    from lib.normalize import extract_validation
+
+    body = (
+        "## Test plan\n\n"
+        "- [x] Core tests\n"
+        "- [ ] Optional failure-recovery benchmark; not run\n"
+    )
+    events = extract_validation({"pull": {"body": body}, "checks": {}})
+    assert events[0]["result"] == "pass", events[0]
+
+
+def test_zero_failures_line_does_not_mask_other_failed_line():
+    from lib.normalize import extract_validation
+
+    body = (
+        "## Test plan\n\n"
+        "- [x] Core suite: 0 failures\n"
+        "- [ ] Optional Windows smoke test failed\n"
+    )
+    events = extract_validation({"pull": {"body": body}, "checks": {}})
+    assert events[0]["result"] == "fail"
+
+
 def test_override_lookup_is_case_insensitive():
     """Repo slugs are case-insensitive; overrides must not depend on CLI casing."""
     from lib.normalize import domain_for, enrich_linked_issues, task_type_for
