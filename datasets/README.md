@@ -12,6 +12,22 @@ This directory contains generated artifacts for Operation Prometheus trajectory 
 
 Large data should live outside the repo (e.g. on object storage, Dolt, or a separate private datasets repo) and be referenced via manifests or cards.
 
+## Sibling data root (`PROMETHEUS_DATA_ROOT`)
+
+For scale collects, set a sibling directory so raw dumps never bloat the git tree:
+
+```bash
+export PROMETHEUS_DATA_ROOT=~/rmems/prometheus-data   # or /tmp/prometheus-data
+# Layout:
+#   $PROMETHEUS_DATA_ROOT/raw/<owner_repo>/pr-N.json
+```
+
+When `PROMETHEUS_DATA_ROOT` is set and `--out-dir` is omitted, `collect_pr_records.py` writes under that root. Resume multi-hour batches with `--skip-existing`. Discover candidates with `scripts/list_merged_prs.py` (still shortlist before training).
+
+| Commit | Do not commit |
+|--------|----------------|
+| cards, manifests, small curated JSONL, examples | `$PROMETHEUS_DATA_ROOT/**`, full multi-MB JSONL regenerates |
+
 This keeps the repository small, inspectable, and compliant with the project's prime directive and "Do Not" guidelines.
 
 See:

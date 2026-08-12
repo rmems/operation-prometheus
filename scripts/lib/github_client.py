@@ -54,7 +54,12 @@ class GitHubClient:
 
     @classmethod
     def from_env(cls, env_name: str = "GITHUB_TOKEN") -> GitHubClient:
-        return cls(token=os.environ.get(env_name) or None)
+        """Load token from env. Default name GITHUB_TOKEN; falls back to GH_TOKEN."""
+        token = os.environ.get(env_name) or None
+        if not token and env_name == "GITHUB_TOKEN":
+            # gh CLI commonly exports GH_TOKEN; bridge without printing secrets.
+            token = os.environ.get("GH_TOKEN") or None
+        return cls(token=token)
 
     def _headers(self, accept: str = "application/vnd.github+json") -> dict[str, str]:
         headers = {

@@ -79,11 +79,17 @@ pip install -r requirements.txt
 
 export GITHUB_TOKEN=...   # optional; higher rate limits
 
-# Issue #5 — collect raw PR records (gitignored under datasets/raw/)
+# Optional: large raw dumps outside the git tree (issue #14).
+# When set and --out-dir is omitted, collector writes to $PROMETHEUS_DATA_ROOT/raw/<owner_repo>/.
+# export PROMETHEUS_DATA_ROOT=~/rmems/prometheus-data
+
+# Issue #5 — collect raw PR records (default: datasets/raw/<owner_repo>/, or DATA_ROOT)
 python scripts/collect_pr_records.py \
   --repo rmems/corinth-canal \
-  --pr 82,89,91,94,95,96 \
-  --out-dir datasets/raw/corinth-canal
+  --pr 82,89,91,94,95,96
+
+# Explicit in-tree path (overrides PROMETHEUS_DATA_ROOT):
+#   --out-dir datasets/raw/corinth-canal
 
 # Issue #6 — normalize to schema-compliant JSONL
 python scripts/build_trajectory_jsonl.py \
