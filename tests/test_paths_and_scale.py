@@ -126,6 +126,16 @@ def test_list_merged_prs_rejects_nonpositive_limit():
         list_merged_prs(FakeClient(), "rmems/corinth-canal", limit=0)
 
 
+def test_list_merged_prs_cli_limit_zero_exits_2():
+    """CLI --limit 0 must fail before any GitHub call (exit 2)."""
+    import list_merged_prs as list_mod
+
+    rc = list_mod.main(
+        ["--repo", "rmems/corinth-canal", "--limit", "0"]
+    )
+    assert rc == 2
+
+
 def test_github_client_falls_back_to_gh_token(monkeypatch: pytest.MonkeyPatch):
     from lib.github_client import GitHubClient
 
