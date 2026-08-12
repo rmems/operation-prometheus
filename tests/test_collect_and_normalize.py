@@ -1082,6 +1082,45 @@ def test_optional_checkbox_deferred_wording_does_not_fail_section():
         assert events[0]["result"] == "pass", item
 
 
+def test_required_follow_up_checkbox_still_blocks():
+    """Bare 'follow-up' / 'Required follow-up' must not be treated as optional."""
+    from lib.normalize import extract_validation
+
+    for item in (
+        "Required follow-up: run Windows tests before merge",
+        "Follow-up: run integration tests",
+    ):
+        body = f"## Test plan\n\n- [x] Unit tests\n- [ ] {item}\n"
+        events = extract_validation({"pull": {"body": body}, "checks": {}})
+        assert events[0]["result"] == "fail", item
+
+
+def test_not_out_of_scope_checkbox_still_blocks():
+    from lib.normalize import extract_validation
+
+    body = (
+        "## Test plan\n\n"
+        "- [x] Unit tests\n"
+        "- [ ] Windows path is not out of scope\n"
+    )
+    events = extract_validation({"pull": {"body": body}, "checks": {}})
+    assert events[0]["result"] == "fail"
+
+
+def test_optional_checkbox_continuation_lines_do_not_fail_section():
+    """Indented continuation under an optional item must be stripped too."""
+    from lib.normalize import extract_validation
+
+    body = (
+        "## Test plan\n\n"
+        "- [x] Core tests\n"
+        "- [ ] Optional upstream benchmark\n"
+        "  Pending hardware; not run\n"
+    )
+    events = extract_validation({"pull": {"body": body}, "checks": {}})
+    assert events[0]["result"] == "pass", events[0]
+
+
 def test_override_lookup_is_case_insensitive():
     """Repo slugs are case-insensitive; overrides must not depend on CLI casing."""
     from lib.normalize import domain_for, enrich_linked_issues, task_type_for

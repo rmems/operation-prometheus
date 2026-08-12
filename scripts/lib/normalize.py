@@ -625,8 +625,11 @@ def _fail_words_all_expected(low: str) -> bool:
 
 
 # Unchecked markdown task items; text capture may be empty (bare `- [ ]`).
-_UNCHECKED_CHECKBOX_LINE = re.compile(r"(?m)^(?P<full>\s*[-*]\s*\[\s\]\s*(?P<text>.*?))\s*$")
-# Affirmative optionality (not "not optional" / "non-optional").
+_UNCHECKED_CHECKBOX_LINE = re.compile(
+    r"^(?P<full>\s*[-*]\s*\[\s\]\s*(?P<text>.*?))\s*$"
+)
+# Affirmative optionality only — bare "follow-up" is NOT optional (required
+# follow-up tasks must still block; CodeRabbit/Codex on #35).
 _OPTIONAL_CHECKBOX_CUE = re.compile(
     r"(?:"
     r"\boptional\b"
@@ -634,27 +637,40 @@ _OPTIONAL_CHECKBOX_CUE = re.compile(
     r"|\bout\s+of\s+scope\b"
     r"|\bif\s+time\s+permits\b"
     r"|\bnice[- ]to[- ]have\b"
-    r"|\bfollow[- ]?up\b"
     r")",
     re.IGNORECASE,
 )
+# Negated / required phrasing that must never be treated as optional.
 _NEGATED_OPTIONAL_CUE = re.compile(
     r"(?:"
     r"\bnot\s+optional\b"
     r"|\bisn'?t\s+optional\b"
     r"|\bnon[- ]optional\b"
     r"|\bno\s+longer\s+optional\b"
+    r"|\bnot\s+out\s+of\s+scope\b"
+    r"|\bisn'?t\s+out\s+of\s+scope\b"
+    r"|\bnot\s+(?:a\s+)?nice[- ]to[- ]have\b"
+    r"|\bnot\s+if\s+time\s+permits\b"
     r")",
     re.IGNORECASE,
 )
+# Explicit "required" (except inside "not required…") forces blocking.
+_REQUIRED_WORK_CUE = re.compile(r"\brequired\b", re.IGNORECASE)
+_NOT_REQUIRED_CUE = re.compile(r"\bnot\s+required\b", re.IGNORECASE)
+# Indented continuation under a list item (not a new list marker).
+_LIST_CONTINUATION = re.compile(r"^(?:[ \t]{2,}|\t+)\S")
+_NEW_LIST_ITEM = re.compile(r"^\s*(?:[-*+]|\d+\.)\s+")
 
 
 def _is_optional_checkbox_text(text: str) -> bool:
-    """True only for affirmative optionality; empty / negated labels stay required."""
+    """True only for affirmative optionality; empty / negated / required stay blocking."""
     item = (text or "").strip()
     if not item:
         return False
     if _NEGATED_OPTIONAL_CUE.search(item):
+        return False
+    # "Required follow-up: …" is required work; "not required for merge" is optional.
+    if _REQUIRED_WORK_CUE.search(item) and not _NOT_REQUIRED_CUE.search(item):
         return False
     return bool(_OPTIONAL_CHECKBOX_CUE.search(item))
 
@@ -662,23 +678,43 @@ def _is_optional_checkbox_text(text: str) -> bool:
 def _has_blocking_unchecked_checkbox(section: str) -> bool:
     """True when an unchecked task item is required (not self-declared optional).
 
-    Bare ``- [ ]`` (no text) is blocking. ``not optional`` / ``non-optional`` are
-    never treated as optional (Codex P2s on operation-prometheus#35).
+    Bare ``- [ ]`` (no text) is blocking. Negated optionality and explicit
+    required work are never treated as optional.
     """
-    for m in _UNCHECKED_CHECKBOX_LINE.finditer(section):
-        if not _is_optional_checkbox_text(m.group("text") or ""):
+    for line in section.splitlines():
+        m = _UNCHECKED_CHECKBOX_LINE.match(line)
+        if m is not None and not _is_optional_checkbox_text(m.group("text") or ""):
             return True
     return False
 
 
 def _strip_optional_unchecked_lines(section: str) -> str:
-    """Drop optional unchecked checkbox lines so deferred wording cannot fail the event."""
+    """Drop optional unchecked items *and* their indented continuations.
+
+    Markdown tasks often put deferred wording on the next indented line
+    (``pending`` / ``not run``); those must leave with the checkbox header.
+    """
+    lines = section.splitlines()
     kept: list[str] = []
-    for line in section.splitlines():
+    i = 0
+    while i < len(lines):
+        line = lines[i]
         m = _UNCHECKED_CHECKBOX_LINE.match(line)
         if m is not None and _is_optional_checkbox_text(m.group("text") or ""):
+            i += 1
+            while i < len(lines):
+                cont = lines[i]
+                if not cont.strip():
+                    break
+                if _NEW_LIST_ITEM.match(cont):
+                    break
+                if _LIST_CONTINUATION.match(cont):
+                    i += 1
+                    continue
+                break
             continue
         kept.append(line)
+        i += 1
     return "\n".join(kept)
 
 
