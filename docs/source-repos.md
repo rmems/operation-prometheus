@@ -127,7 +127,7 @@ allowlist, which raise the problems the maintainer then patches.
 |----|----------------------|---------|---------------|---------|
 | #11 | 103 | 8 | 8 | shortlisted |
 | #33 | 70 | 8 | 8 | **added** |
-| #43 | 59 | 8 | 7 | **added** |
+| #43 | 59 | 8 | 8 | **added** (unique bodies 7→8 after #18 dedupe re-normalize) |
 | #24 | 58 | 8 | 8 | shortlisted |
 | #29 | 54 | 8 | 8 | shortlisted |
 | #42 | 51 | 8 | **8** | **added** 2026-08-12 (#18/#19) — was 1 unique pre-dedupe |
@@ -143,9 +143,10 @@ allowlist, which raise the problems the maintainer then patches.
   trajectory to learn from.
 - **`#42`** (export Grok-1 embedding pickle → `.npy`) — **extracted 2026-08-12** (issue
   [#20](https://github.com/rmems/operation-prometheus/issues/20)). Was deferred because 51 kept
-  signals collapsed to 8 identical `Addressed in <sha>: …` acks and the PR is Python against a
-  Rust card. After [#18](https://github.com/rmems/operation-prometheus/issues/18) (body
-  dedupe / ack deprioritization) and [#19](https://github.com/rmems/operation-prometheus/issues/19)
+  signals filled the emit cap (8) with **1 unique** `Addressed in <sha>: …` ack body (eight
+  emitted copies of the same ack) and the PR is Python against a Rust card. After
+  [#18](https://github.com/rmems/operation-prometheus/issues/18) (body dedupe / ack
+  deprioritization) and [#19](https://github.com/rmems/operation-prometheus/issues/19)
   (`language_by_pr: {"42": "Python"}`), the record emits **8 unique** review signals and
   `language: Python`.
 - **`#54`** (xai-dissect run3 cartography handoff) — adds **164,329 lines** of generated

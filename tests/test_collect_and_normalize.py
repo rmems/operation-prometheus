@@ -1019,6 +1019,33 @@ def test_reporting_verbs_do_not_mask_failures():
         assert events[0]["result"] == "fail", body
 
 
+def test_optional_unchecked_checkbox_does_not_fail_validation():
+    """Optional / not-required unchecked items must not fail the test event (#35 Codex)."""
+    from lib.normalize import extract_validation
+
+    body = (
+        "## Test plan\n\n"
+        "- [x] Tiny synthetic shard export + numpy load assert\n"
+        "- [x] `xai-dissect dissect` parse on real tensor\n"
+        "- [ ] Optional full 3 GiB export (for #39 experiment; not required for merge)\n"
+    )
+    events = extract_validation({"pull": {"body": body}, "checks": {}})
+    assert events[0]["type"] == "test"
+    assert events[0]["result"] == "pass", events[0]
+
+
+def test_required_unchecked_checkbox_still_fails_validation():
+    from lib.normalize import extract_validation
+
+    body = (
+        "## Test plan\n\n"
+        "- [x] Unit tests\n"
+        "- [ ] Fix path traversal in export CLI\n"
+    )
+    events = extract_validation({"pull": {"body": body}, "checks": {}})
+    assert events[0]["result"] == "fail"
+
+
 def test_override_lookup_is_case_insensitive():
     """Repo slugs are case-insensitive; overrides must not depend on CLI casing."""
     from lib.normalize import domain_for, enrich_linked_issues, task_type_for

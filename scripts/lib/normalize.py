@@ -624,6 +624,30 @@ def _fail_words_all_expected(low: str) -> bool:
     )
 
 
+# Unchecked markdown task items in a test-plan section.
+_UNCHECKED_CHECKBOX = re.compile(r"(?m)^\s*[-*]\s*\[\s\]\s*(.+?)\s*$")
+# Self-declared optional / deferred work must not fail the validation event.
+_OPTIONAL_CHECKBOX_CUE = re.compile(
+    r"(?:"
+    r"\boptional\b"
+    r"|\bnot\s+required(?:\s+for\s+merge)?\b"
+    r"|\bout\s+of\s+scope\b"
+    r"|\bif\s+time\s+permits\b"
+    r"|\bnice[- ]to[- ]have\b"
+    r"|\bfollow[- ]?up\b"
+    r")",
+    re.IGNORECASE,
+)
+
+
+def _has_blocking_unchecked_checkbox(section: str) -> bool:
+    """True when an unchecked task item is required (not self-declared optional)."""
+    for item in _UNCHECKED_CHECKBOX.findall(section):
+        if not _OPTIONAL_CHECKBOX_CUE.search(item):
+            return True
+    return False
+
+
 def extract_validation(raw: dict[str, Any]) -> list[dict[str, str]]:
     events: list[dict[str, str]] = []
     pull_body = strip_bot_boilerplate((raw.get("pull") or {}).get("body") or "")
@@ -635,8 +659,13 @@ def extract_validation(raw: dict[str, Any]) -> list[dict[str, str]]:
         low = val_section.lower()
         result = "pass"
         # Anchored/non-pass cues — avoid loose substrings ("not running…").
+        # Unchecked boxes: only *required* incomplete work fails. Lines that
+        # mark themselves optional / not-required / out-of-scope do not flip
+        # the whole test-plan event to fail (Codex P2 on operation-prometheus#35
+        # for grok-ozempic#42's "Optional full 3 GiB export … not required").
+        if _has_blocking_unchecked_checkbox(val_section):
+            result = "fail"
         non_pass_res = (
-            re.compile(r"(?m)^\s*[-*]\s*\[\s\]"),  # unchecked checkbox lines
             re.compile(r"\bnot\s+run\b(?!ning)"),
             re.compile(r"\bnot\s+executed\b"),
             re.compile(r"\buntested\b"),
