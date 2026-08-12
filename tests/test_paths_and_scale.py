@@ -117,6 +117,15 @@ def test_list_merged_prs_filters_unmerged():
     assert items[0]["number"] == 2
 
 
+def test_list_merged_prs_rejects_nonpositive_limit():
+    class FakeClient:
+        def paginate(self, path: str, *, per_page: int = 100):
+            yield []
+
+    with pytest.raises(ValueError, match="limit"):
+        list_merged_prs(FakeClient(), "rmems/corinth-canal", limit=0)
+
+
 def test_github_client_falls_back_to_gh_token(monkeypatch: pytest.MonkeyPatch):
     from lib.github_client import GitHubClient
 

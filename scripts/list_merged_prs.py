@@ -1,7 +1,8 @@
 #!/usr/bin/env python3
 """List merged public PRs for a repository (discovery helper for scale waves).
 
-Read-only. Prints PR numbers and a compact JSON summary to stdout.
+Read-only. Default output is a human table plus a ``# numbers:`` line.
+Use ``--json`` for a JSON array, or ``--numbers-only`` for a comma-separated list.
 
 Examples:
     export GITHUB_TOKEN="$(gh auth token)"
@@ -36,6 +37,8 @@ def list_merged_prs(
     per_page: int = 100,
 ) -> list[dict[str, Any]]:
     """Return up to ``limit`` merged PR summaries (newest first by update time)."""
+    if limit < 1:
+        raise ValueError("limit must be >= 1")
     owner, name = parse_repo(repo)
     full = f"{owner}/{name}"
     path = f"/repos/{full}/pulls?state=closed&sort=updated&direction=desc"
@@ -46,9 +49,12 @@ def list_merged_prs(
                 continue
             if not pr.get("merged_at"):
                 continue
+            num = pr.get("number")
+            if num is None:
+                continue
             found.append(
                 {
-                    "number": pr.get("number"),
+                    "number": num,
                     "title": pr.get("title") or "",
                     "merged_at": pr.get("merged_at"),
                     "user": ((pr.get("user") or {}).get("login")),
@@ -87,7 +93,7 @@ def build_parser() -> argparse.ArgumentParser:
     p.add_argument(
         "--json",
         action="store_true",
-        help="Print full JSON array (default is human table + trailing JSON)",
+        help="Print full JSON array (default is human table + # numbers: line)",
     )
     return p
 
@@ -111,7 +117,9 @@ def main(argv: list[str] | None = None) -> int:
         logger.error("%s", exc)
         return 1
 
-    numbers = [int(i["number"]) for i in items if i.get("number") is not None]
+    numbers = [
+        int(i["number"]) for i in items if "number" in i and i["number"] is not None
+    ]
     if args.numbers_only:
         print(",".join(str(n) for n in numbers))
         return 0

@@ -12,7 +12,7 @@ This directory contains generated artifacts for Operation Prometheus trajectory 
 
 Large data should live outside the repo (e.g. on object storage, Dolt, or a separate private datasets repo) and be referenced via manifests or cards.
 
-### Sibling data root (`PROMETHEUS_DATA_ROOT`)
+## Sibling data root (`PROMETHEUS_DATA_ROOT`)
 
 For scale collects, set a sibling directory so raw dumps never bloat the git tree:
 
