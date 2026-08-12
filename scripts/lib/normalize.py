@@ -105,6 +105,8 @@ LINKED_ISSUE_OVERRIDE: dict[tuple[str, int], tuple[int, ...]] = {
     ("rmems/grok-ozempic", 29): (16, 22, 27),
     ("rmems/grok-ozempic", 33): (28, 20),
     ("rmems/grok-ozempic", 43): (38,),
+    # Body links GH #37 / RM-189 via full URL + "Supports #37", not a close keyword.
+    ("rmems/grok-ozempic", 42): (37,),
 }
 
 DOMAIN_OVERRIDE: dict[tuple[str, int], str] = {

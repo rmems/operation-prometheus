@@ -90,14 +90,16 @@ All trajectories are extracted as JSONL records conforming to [pr_trajectory.sch
 
 **Repo**: [rmems/grok-ozempic](https://github.com/rmems/grok-ozempic)  
 **Description**: SNN-logic ternary quantization for Grok-1 MoE (xai-dissect manifests, GOZ1 packs, SAAQ artifact validation)  
-**Language**: Rust  
-**Status**: v0 **extracted** (2026-08-02) — see [datasets/jsonl/grok-ozempic-v0.jsonl](../datasets/jsonl/grok-ozempic-v0.jsonl)  
+**Language**: Rust (default); Python on `#42` via `language_by_pr`  
+**Status**: v0 **extracted** (2026-08-02; **#42 added 2026-08-12**, issue [#20](https://github.com/rmems/operation-prometheus/issues/20)) — see [datasets/jsonl/grok-ozempic-v0.jsonl](../datasets/jsonl/grok-ozempic-v0.jsonl)  
 **Metadata card**: [datasets/cards/grok-ozempic-v0.json](../datasets/cards/grok-ozempic-v0.json)
 
 > **Shortlist revised 2026-08-02** (issue [#11](https://github.com/rmems/operation-prometheus/issues/11)).
 > The original 6-PR list was written before the collector/normalizer existed and before
 > ~9 further PRs merged. Re-scored against measured pipeline yield: added `#43` and `#33`,
-> dropped `#8`. See [Measured review-signal yield](#measured-review-signal-yield-grok-ozempic).
+> dropped `#8`. **`#42` added 2026-08-12** after [#18](https://github.com/rmems/operation-prometheus/issues/18)
+> (review-signal dedupe) and [#19](https://github.com/rmems/operation-prometheus/issues/19)
+> (`language_by_pr`). See [Measured review-signal yield](#measured-review-signal-yield-grok-ozempic).
 
 ### Shortlisted PRs (grok-ozempic)
 
@@ -110,6 +112,7 @@ All trajectories are extracted as JSONL records conforming to [pr_trajectory.sch
 | [#11](https://github.com/rmems/grok-ozempic/pull/11) | xai-dissect compatible artifact generation | ml-infra | feature | Artifact IR, detector/validator, CLI generate/validate. Closes #10. |
 | [#43](https://github.com/rmems/grok-ozempic/pull/43) | quantize-goz1 CLI for GOZ1 run_quantization | ml-infra | review-to-patch | 17 commits; 6 Codex P2 findings (input-format default, env manifest precedence, GIF threshold validation, lossy path conversion) each answered by a patch. Advances #38. |
 | [#33](https://github.com/rmems/grok-ozempic/pull/33) | refactor(tests): reduce duplication and complexity | testing | review-to-patch | 51 commits; highest filtered review-signal density in the repo. Gemini raises helper duplication / semver break, maintainer answers with `Fixed in <sha>` plus explicit rejected-alternative rationale. Advances #28, #20. |
+| [#42](https://github.com/rmems/grok-ozempic/pull/42) | export Grok-1 embedding pickle → `.npy` | ml-infra | review-to-patch | **Python** (`language_by_pr`). 17 commits; Codex P1/P2 findings (negative offsets, mmap release, empty shape, stem requirements, restricted umask, privilege pin) each answered by a patch. First non-Rust record in the set. Advances #37 / RM-189. |
 
 ### Measured review-signal yield (grok-ozempic)
 
@@ -127,7 +130,7 @@ allowlist, which raise the problems the maintainer then patches.
 | #43 | 59 | 8 | 7 | **added** |
 | #24 | 58 | 8 | 8 | shortlisted |
 | #29 | 54 | 8 | 8 | shortlisted |
-| #42 | 51 | 8 | **1** | deferred — see below |
+| #42 | 51 | 8 | **8** | **added** 2026-08-12 (#18/#19) — was 1 unique pre-dedupe |
 | #26 | 31 | 8 | 8 | shortlisted |
 | #25 | 31 | 8 | 8 | shortlisted |
 | #8 | 3 | 2 | 2 | **dropped** |
@@ -138,11 +141,13 @@ allowlist, which raise the problems the maintainer then patches.
   signals, one of which is `@copilot Make changes to the pull request`. Its phase-1 sibling
   `#7` is no better (2). The pipeline-wiring content is real, but there is no review→patch
   trajectory to learn from.
-- **`#42`** (export Grok-1 embedding pickle → `.npy`) — **deferred, not rejected.** 51 kept
-  signals collapse to 8 byte-identical copies of one `Addressed in <sha>: …` ack, because
-  `_BARE_FIXED_IN_REPLY` only drops *bare* fixed-in replies and nothing dedupes repeated
-  bodies. It is also Python while the card declares Rust, and `language_for` has no
-  `language_by_pr` escape hatch (unlike `domain_by_pr`). Revisit once both are fixed.
+- **`#42`** (export Grok-1 embedding pickle → `.npy`) — **extracted 2026-08-12** (issue
+  [#20](https://github.com/rmems/operation-prometheus/issues/20)). Was deferred because 51 kept
+  signals collapsed to 8 identical `Addressed in <sha>: …` acks and the PR is Python against a
+  Rust card. After [#18](https://github.com/rmems/operation-prometheus/issues/18) (body
+  dedupe / ack deprioritization) and [#19](https://github.com/rmems/operation-prometheus/issues/19)
+  (`language_by_pr: {"42": "Python"}`), the record emits **8 unique** review signals and
+  `language: Python`.
 - **`#54`** (xai-dissect run3 cartography handoff) — adds **164,329 lines** of generated
   export artifacts. Excluded under [data-policy.md](data-policy.md); it is the concrete case
   that issue #14 (sibling data root) exists to handle.
