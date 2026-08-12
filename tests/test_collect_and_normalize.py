@@ -367,6 +367,73 @@ def test_bare_fixed_in_replies_not_review_signals():
     assert "GainCurve" in signals[0]["comment"]
 
 
+def test_review_signal_dedupe_and_ack_deprioritized():
+    """GH #18: identical Addressed-in acks must not fill all slots; problems rank first."""
+    from lib.normalize import extract_review_signals
+
+    ack = (
+        "Addressed in 5ecbe0855124d24533a1cc365274ea2dcb9400c1: portable ~/.models "
+        "paths in docs/help (no hard-coded username), dtype KeyError guard, NPY header "
+        "uses space-pad then trailing newline"
+    )
+    raw = {
+        "reviews": [],
+        "review_comments": [
+            {
+                "user_login": "rmems",
+                "user_type": "User",
+                "body": ack,
+            }
+            for _ in range(8)
+        ]
+        + [
+            {
+                "user_login": "reviewer-x",
+                "user_type": "User",
+                "body": f"Finding {i}: please validate export path edge case {i} before merge.",
+            }
+            for i in range(1, 7)
+        ],
+        "issue_comments": [],
+    }
+    signals = extract_review_signals(raw, max_items=8)
+    comments = [s["comment"] for s in signals]
+    # Dedupe: at most one copy of the ack body (or its rationale key).
+    ack_hits = sum(1 for c in comments if "5ecbe0855124d24533a1cc365274ea2dcb9400c1" in c or "portable ~/.models" in c)
+    assert ack_hits <= 1
+    problem_hits = sum(1 for c in comments if c.startswith("Finding "))
+    assert problem_hits >= 5
+    assert len(signals) <= 8
+    # Problems appear before the reserved ack when both are present.
+    if problem_hits and ack_hits:
+        first_ack = next(
+            i
+            for i, c in enumerate(comments)
+            if "portable ~/.models" in c or "5ecbe08" in c
+        )
+        first_problem = next(i for i, c in enumerate(comments) if c.startswith("Finding "))
+        assert first_problem < first_ack
+
+
+def test_language_by_pr_overrides_card_language():
+    """GH #19: language_by_pr beats card.language for that PR only."""
+    from lib.normalize import language_for
+
+    card = {
+        "language": "Rust",
+        "language_by_pr": {"42": "Python", "99": ""},
+    }
+    raw42 = {"source": {"pr_number": 42}, "files": [{"filename": "scripts/export.py"}]}
+    raw7 = {"source": {"pr_number": 7}, "files": [{"filename": "src/lib.rs"}]}
+    raw99 = {"source": {"pr_number": 99}, "files": [{"filename": "src/lib.rs"}]}
+    assert language_for(card, raw42) == "Python"
+    assert language_for(card, raw7) == "Rust"
+    # Empty override ignored → card language.
+    assert language_for(card, raw99) == "Rust"
+    # No card language → extension sniff.
+    assert language_for({}, {"source": {"pr_number": 1}, "files": [{"filename": "a.py"}]}) == "Python"
+
+
 def test_remotes_txt_stripped_from_patch():
     from lib.normalize import extract_patch
 

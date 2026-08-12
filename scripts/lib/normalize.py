@@ -334,6 +334,15 @@ _BARE_FIXED_IN_REPLY = re.compile(
     r"(?is)^\s*(?:\*\*)?(?:addressed|fixed)\s+in\s+`?[0-9a-f]{7,40}`?"
     r"(?:\*\*)?\s*\.?\s*$"
 )
+# Ack-shaped replies that may still carry fix rationale after the SHA.
+_ACK_SHAPED_PREFIX = re.compile(
+    r"(?is)^\s*(?:\*\*)?(?:addressed|fixed)\s+in\s+(?:commit\s+)?`?[0-9a-f]{7,40}`?"
+)
+# Leading ack prefix stripped for dedupe keys (issue #18).
+_ACK_PREFIX_FOR_KEY = re.compile(
+    r"(?is)^(?:\*\*)?(?:addressed|fixed)\s+in\s+(?:commit\s+)?`?[0-9a-f]{7,40}`?"
+    r"(?:\*\*)?\s*:?\s*"
+)
 
 
 def _is_non_actionable_review_body(body: str) -> bool:
@@ -348,8 +357,100 @@ def _is_non_actionable_review_body(body: str) -> bool:
     return False
 
 
+def _is_ack_shaped_review_body(body: str) -> bool:
+    """True when the body starts as an Addressed/Fixed-in-SHA ack (may have rationale)."""
+    return bool(body and _ACK_SHAPED_PREFIX.match(body.strip()))
+
+
+def _signal_body_key(body: str) -> str:
+    """Normalize body for dedupe: collapse whitespace, strip leading ack prefix."""
+    text = re.sub(r"\s+", " ", (body or "").strip())
+    text = _ACK_PREFIX_FOR_KEY.sub("", text, count=1)
+    return text.strip().lower()
+
+
+def _select_deduped_signals(
+    candidates: list[dict[str, Any]],
+    *,
+    max_items: int,
+) -> list[dict[str, str]]:
+    """Dedupe by body key; prefer problem statements over acks; keep one ack if useful.
+
+    Implements GH #18: identical multi-thread acks must not fill all slots.
+    """
+    if max_items < 1 or not candidates:
+        return []
+
+    # Preserve first-seen order; if same key appears as both ack and problem, keep problem.
+    by_key: dict[str, dict[str, Any]] = {}
+    order: list[str] = []
+    for c in candidates:
+        key = c["key"]
+        if key not in by_key:
+            by_key[key] = c
+            order.append(key)
+            continue
+        prev = by_key[key]
+        if prev.get("ack") and not c.get("ack"):
+            by_key[key] = c
+
+    problems = [by_key[k] for k in order if not by_key[k].get("ack")]
+    acks = [by_key[k] for k in order if by_key[k].get("ack")]
+
+    selected: list[dict[str, Any]] = []
+    # Reserve one slot for a rationale-bearing ack when problems would otherwise monopolize.
+    reserve = 1 if acks else 0
+    for p in problems:
+        if len(selected) >= max_items - reserve:
+            break
+        selected.append(p)
+    if acks:
+        if len(selected) < max_items:
+            selected.append(acks[0])
+        for a in acks[1:]:
+            if len(selected) >= max_items:
+                break
+            selected.append(a)
+
+    out: list[dict[str, str]] = []
+    for s in selected[:max_items]:
+        item: dict[str, str] = {
+            "author": str(s.get("author") or "unknown"),
+            "comment": str(s.get("comment") or "")[:2000],
+        }
+        suggestion = s.get("suggestion")
+        if isinstance(suggestion, str) and suggestion.strip():
+            item["suggestion"] = suggestion.strip()[:2000]
+        out.append(item)
+    return out
+
+
 def extract_review_signals(raw: dict[str, Any], *, max_items: int = 8) -> list[dict[str, str]]:
-    signals: list[dict[str, str]] = []
+    """Collect review-shaped comments, dedupe, and rank problems above acks (GH #18)."""
+    candidates: list[dict[str, Any]] = []
+
+    def _push(
+        author: str | None,
+        body: str,
+        *,
+        suggestion: str | None = None,
+    ) -> None:
+        body = (body or "").strip()
+        if not body or _is_non_actionable_review_body(body):
+            return
+        key = _signal_body_key(body)
+        if not key:
+            return
+        entry: dict[str, Any] = {
+            "author": author or "unknown",
+            "comment": body[:2000],
+            "key": key,
+            "ack": _is_ack_shaped_review_body(body),
+        }
+        if suggestion:
+            entry["suggestion"] = suggestion
+        candidates.append(entry)
+
     # Process reviews first to preserve maintainer approve/request-changes signals
     # (including short LGTM / Approved bodies that still carry decision state).
     for r in raw.get("reviews") or []:
@@ -360,69 +461,44 @@ def extract_review_signals(raw: dict[str, Any], *, max_items: int = 8) -> list[d
         if not body or len(body) < 20:
             if state in ("APPROVED", "CHANGES_REQUESTED", "DISMISSED"):
                 if body:
-                    # Keep short human wording (e.g. LGTM) and annotate state.
                     body = f"{body} (review state: {state})"
                 else:
                     body = f"Review state: {state}"
             else:
                 continue
         body, _ = sanitize_text(strip_bot_boilerplate(body))
+        _push(r.get("user_login"), body)
+
+    for c in raw.get("review_comments") or []:
+        if is_bot_user(c.get("user_login"), c.get("user_type")):
+            continue
+        body = strip_bot_boilerplate((c.get("body") or "").strip())
         if not body or _is_non_actionable_review_body(body):
             continue
-        signals.append(
-            {
-                "author": r.get("user_login") or "unknown",
-                "comment": body[:2000],
-            }
-        )
-        if len(signals) >= max_items:
-            break
-    # Then add inline review_comments if space remains
-    if len(signals) < max_items:
-        for c in raw.get("review_comments") or []:
-            if is_bot_user(c.get("user_login"), c.get("user_type")):
-                continue
-            body = strip_bot_boilerplate((c.get("body") or "").strip())
-            if not body or _is_non_actionable_review_body(body):
-                continue
-            body, _ = sanitize_text(body)
-            if not body or _is_non_actionable_review_body(body):
-                continue
-            item: dict[str, str] = {
-                "author": c.get("user_login") or "unknown",
-                "comment": body[:2000],
-            }
-            if "```suggestion" in body:
-                m = re.search(r"```suggestion\s*\n(.*?)```", body, re.DOTALL)
-                if m:
-                    suggestion = m.group(1).strip()[:2000]
-                    # Empty suggestion blocks (delete-line) must not set the field —
-                    # schema requires minLength 1 on suggestion when present.
-                    if suggestion:
-                        item["suggestion"] = suggestion
-            signals.append(item)
-            if len(signals) >= max_items:
-                break
-    # Finally non-bot PR conversation comments (often carry review signal)
-    if len(signals) < max_items:
-        for c in raw.get("issue_comments") or []:
-            if is_bot_user(c.get("user_login"), c.get("user_type")):
-                continue
-            body = strip_bot_boilerplate((c.get("body") or "").strip())
-            if not body or len(body) < 20 or _is_non_actionable_review_body(body):
-                continue
-            body, _ = sanitize_text(body)
-            if not body or _is_non_actionable_review_body(body):
-                continue
-            signals.append(
-                {
-                    "author": c.get("user_login") or "unknown",
-                    "comment": body[:2000],
-                }
-            )
-            if len(signals) >= max_items:
-                break
-    return signals
+        body, _ = sanitize_text(body)
+        if not body or _is_non_actionable_review_body(body):
+            continue
+        suggestion: str | None = None
+        if "```suggestion" in body:
+            m = re.search(r"```suggestion\s*\n(.*?)```", body, re.DOTALL)
+            if m:
+                sug = m.group(1).strip()[:2000]
+                if sug:
+                    suggestion = sug
+        _push(c.get("user_login"), body, suggestion=suggestion)
+
+    for c in raw.get("issue_comments") or []:
+        if is_bot_user(c.get("user_login"), c.get("user_type")):
+            continue
+        body = strip_bot_boilerplate((c.get("body") or "").strip())
+        if not body or len(body) < 20 or _is_non_actionable_review_body(body):
+            continue
+        body, _ = sanitize_text(body)
+        if not body or _is_non_actionable_review_body(body):
+            continue
+        _push(c.get("user_login"), body)
+
+    return _select_deduped_signals(candidates, max_items=max_items)
 
 
 # Negative-test prose. A fixture that is *supposed* to fail, and did, is evidence
@@ -939,6 +1015,18 @@ def outcome_for(raw: dict[str, Any]) -> str:
 
 
 def language_for(card: dict[str, Any], raw: dict[str, Any]) -> str:
+    """Resolve language: language_by_pr → card language → file extensions (GH #19)."""
+    # Per-PR override (keys may be str or int in JSON), same pattern as domain_for.
+    by_pr = card.get("language_by_pr") or {}
+    if by_pr:
+        pr = int((raw.get("source") or {}).get("pr_number") or 0)
+        if pr:
+            for k, v in by_pr.items():
+                try:
+                    if int(k) == pr and isinstance(v, str) and v.strip():
+                        return v.strip()
+                except (TypeError, ValueError):
+                    continue
     if card.get("language"):
         return str(card["language"])
     files = [f.get("filename") or "" for f in (raw.get("files") or [])]
