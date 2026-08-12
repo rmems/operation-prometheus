@@ -1121,6 +1121,33 @@ def test_optional_checkbox_continuation_lines_do_not_fail_section():
     assert events[0]["result"] == "pass", events[0]
 
 
+def test_optional_nested_sublist_does_not_fail_section():
+    """Nested list under optional must strip with parent (#35 Codex P2)."""
+    from lib.normalize import extract_validation
+
+    body = (
+        "## Test plan\n\n"
+        "- [x] Core tests\n"
+        "- [ ] Optional platform tests\n"
+        "  - [ ] Windows pending\n"
+    )
+    events = extract_validation({"pull": {"body": body}, "checks": {}})
+    assert events[0]["result"] == "pass", events[0]
+
+
+def test_optional_line_with_actual_failure_still_fails():
+    """Observed failures on optional lines must still fail (#35 Codex P2)."""
+    from lib.normalize import extract_validation
+
+    body = (
+        "## Test plan\n\n"
+        "- [x] Core tests\n"
+        "- [ ] Optional Windows smoke test failed with 2 errors\n"
+    )
+    events = extract_validation({"pull": {"body": body}, "checks": {}})
+    assert events[0]["result"] == "fail"
+
+
 def test_override_lookup_is_case_insensitive():
     """Repo slugs are case-insensitive; overrides must not depend on CLI casing."""
     from lib.normalize import domain_for, enrich_linked_issues, task_type_for

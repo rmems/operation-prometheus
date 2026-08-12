@@ -657,9 +657,19 @@ _NEGATED_OPTIONAL_CUE = re.compile(
 # Explicit "required" (except inside "not required…") forces blocking.
 _REQUIRED_WORK_CUE = re.compile(r"\brequired\b", re.IGNORECASE)
 _NOT_REQUIRED_CUE = re.compile(r"\bnot\s+required\b", re.IGNORECASE)
-# Indented continuation under a list item (not a new list marker).
-_LIST_CONTINUATION = re.compile(r"^(?:[ \t]{2,}|\t+)\S")
-_NEW_LIST_ITEM = re.compile(r"^\s*(?:[-*+]|\d+\.)\s+")
+
+
+def _line_indent(line: str) -> int:
+    """Leading whitespace width (tabs count as 2 spaces)."""
+    n = 0
+    for ch in line:
+        if ch == " ":
+            n += 1
+        elif ch == "\t":
+            n += 2
+        else:
+            break
+    return n
 
 
 def _is_optional_checkbox_text(text: str) -> bool:
@@ -679,7 +689,9 @@ def _has_blocking_unchecked_checkbox(section: str) -> bool:
     """True when an unchecked task item is required (not self-declared optional).
 
     Bare ``- [ ]`` (no text) is blocking. Negated optionality and explicit
-    required work are never treated as optional.
+    required work are never treated as optional. Callers should pass a section
+    that already had optional subtrees removed so nested children under optional
+    parents are not double-scanned as required work.
     """
     for line in section.splitlines():
         m = _UNCHECKED_CHECKBOX_LINE.match(line)
@@ -689,10 +701,10 @@ def _has_blocking_unchecked_checkbox(section: str) -> bool:
 
 
 def _strip_optional_unchecked_lines(section: str) -> str:
-    """Drop optional unchecked items *and* their indented continuations.
+    """Drop optional unchecked items and their full indented subtrees.
 
-    Markdown tasks often put deferred wording on the next indented line
-    (``pending`` / ``not run``); those must leave with the checkbox header.
+    Nested sublists (``  - [ ] Windows pending``) stay with the optional parent
+    via deeper indent, not only plain continuation prose.
     """
     lines = section.splitlines()
     kept: list[str] = []
@@ -701,14 +713,13 @@ def _strip_optional_unchecked_lines(section: str) -> str:
         line = lines[i]
         m = _UNCHECKED_CHECKBOX_LINE.match(line)
         if m is not None and _is_optional_checkbox_text(m.group("text") or ""):
+            base_indent = _line_indent(line)
             i += 1
             while i < len(lines):
                 cont = lines[i]
                 if not cont.strip():
                     break
-                if _NEW_LIST_ITEM.match(cont):
-                    break
-                if _LIST_CONTINUATION.match(cont):
+                if _line_indent(cont) > base_indent:
                     i += 1
                     continue
                 break
@@ -726,12 +737,15 @@ def extract_validation(raw: dict[str, Any]) -> list[dict[str, str]]:
         ("validation", "validations", "test plan", "test plans", "verification", "verifications", "testing", "tests"),
     )
     if val_section:
-        # Required incomplete work fails; optional unchecked lines are ignored for
-        # both checkbox and generic deferred-work scans (pending/todo/not run/…).
+        # Optional unchecked subtrees are ignored for deferred-work cues and for
+        # "blocking incomplete checkbox" detection. Actual failure language
+        # (failed/errors) still scans the full section so attempted optional
+        # work that blew up is not misreported as pass (Codex P2s on #35).
         required_section = _strip_optional_unchecked_lines(val_section)
-        low = required_section.lower()
+        low_deferred = required_section.lower()
+        low_full = val_section.lower()
         result = "pass"
-        if _has_blocking_unchecked_checkbox(val_section):
+        if _has_blocking_unchecked_checkbox(required_section):
             result = "fail"
         non_pass_res = (
             re.compile(r"\bnot\s+run\b(?!ning)"),
@@ -742,13 +756,15 @@ def extract_validation(raw: dict[str, Any]) -> list[dict[str, str]]:
             re.compile(r"\btodo\b"),
             re.compile(r"\bpending\b"),
         )
-        if any(rx.search(low) for rx in non_pass_res):
+        if any(rx.search(low_deferred) for rx in non_pass_res):
             result = "fail"
         # "skipped" is non-pass only when not explicitly zero (e.g. "0 skipped").
-        if re.search(r"\bskipped\b", low) and not re.search(r"\b0\s+skipped\b", low):
+        if re.search(r"\bskipped\b", low_deferred) and not re.search(
+            r"\b0\s+skipped\b", low_deferred
+        ):
             result = "fail"
         zero_failures = re.search(
-            r"\b(?:0|no)\s+(?:tests?\s+)?fail(?:ed|ing|ures?)\b", low
+            r"\b(?:0|no)\s+(?:tests?\s+)?fail(?:ed|ing|ures?)\b", low_full
         )
         # Resolved/negated fail* prose should not invert a passing summary.
         resolved_failed = re.search(
@@ -759,24 +775,24 @@ def extract_validation(raw: dict[str, Any]) -> list[dict[str, str]]:
             r"|\bnot\s+fail(?:ed|ing)\b"
             r"|\bnever\s+fail(?:ed|ing)\b"
             r")",
-            low,
+            low_full,
         )
-        # Past-tense failed, active failing, or "failure" wording.
+        # Past-tense failed, active failing, or "failure" wording (full section).
         if (
-            re.search(r"\bfail(?:ed|ing|ures?)?\b", low)
+            re.search(r"\bfail(?:ed|ing|ures?)?\b", low_full)
             and not zero_failures
-            and "no fail" not in low
+            and "no fail" not in low_full
             and not resolved_failed
-            and not _fail_words_all_expected(low)
+            and not _fail_words_all_expected(low_full)
         ):
             # Avoid matching "fail" inside unrelated words; require fail/failed/failing/failure.
-            if re.search(r"\b(?:failed|failing|failures?)\b", low):
+            if re.search(r"\b(?:failed|failing|failures?)\b", low_full):
                 result = "fail"
         # Non-zero error/failure counts (sanitizer / pytest style): "1 error", "2 failures".
-        if re.search(r"\b[1-9]\d*\s+(?:tests?\s+)?(?:errors?|failures?)\b", low):
+        if re.search(r"\b[1-9]\d*\s+(?:tests?\s+)?(?:errors?|failures?)\b", low_full):
             result = "fail"
         # Intent without an observed failure: the negative test itself failed.
-        if _expected_failure_was_contradicted(low):
+        if _expected_failure_was_contradicted(low_full):
             result = "fail"
         truncated = len(val_section) > 1500
         detail, _ = sanitize_text(val_section[:1500])
