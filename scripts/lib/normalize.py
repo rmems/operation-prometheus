@@ -364,10 +364,19 @@ def _is_ack_shaped_review_body(body: str) -> bool:
 
 
 def _signal_body_key(body: str) -> str:
-    """Normalize body for dedupe: collapse whitespace, strip ack prefix + fences."""
+    """Normalize body for dedupe: collapse whitespace, strip ack prefix.
+
+    Only ``suggestion`` fences are removed so a prose review and its inline
+    twin share a key. Other fenced blocks stay part of the signal identity
+    (Bugbot: do not collapse distinct fence-only reviews).
+    """
     text = body or ""
-    # Drop fenced blocks so a review and its inline ```suggestion``` twin share a key.
-    text = re.sub(r"```.*?```", " ", text, flags=re.DOTALL)
+    text = re.sub(
+        r"```suggestion\s*\n.*?```",
+        " ",
+        text,
+        flags=re.DOTALL | re.IGNORECASE,
+    )
     text = re.sub(r"\s+", " ", text.strip())
     text = _ACK_PREFIX_FOR_KEY.sub("", text, count=1)
     key = text.strip().lower()
@@ -453,6 +462,9 @@ def extract_review_signals(raw: dict[str, Any], *, max_items: int = 8) -> list[d
         if not body or _is_non_actionable_review_body(body):
             return
         key = _signal_body_key(body)
+        if not key and suggestion:
+            # Suggestion-only bodies remain valid schema signals.
+            key = "suggestion:" + (_signal_body_key(suggestion) or suggestion.strip().lower()[:120])
         if not key:
             return
         entry: dict[str, Any] = {

@@ -471,6 +471,30 @@ def test_duplicate_merges_suggestion_from_inline():
     assert signals[0].get("suggestion") == "fixed_line = True"
 
 
+def test_distinct_non_suggestion_fences_not_collapsed():
+    """Non-suggestion fences remain part of signal identity (Bugbot)."""
+    from lib.normalize import extract_review_signals
+
+    raw = {
+        "reviews": [],
+        "review_comments": [
+            {
+                "user_login": "reviewer-x",
+                "user_type": "User",
+                "body": "Bad pattern here:\n```rust\nlet x = 1;\n```\n",
+            },
+            {
+                "user_login": "reviewer-x",
+                "user_type": "User",
+                "body": "Bad pattern here:\n```rust\nlet x = 2;\n```\n",
+            },
+        ],
+        "issue_comments": [],
+    }
+    signals = extract_review_signals(raw, max_items=8)
+    assert len(signals) == 2
+
+
 def test_fixed_in_commit_bare_ack_dropped():
     from lib.normalize import extract_review_signals
 
