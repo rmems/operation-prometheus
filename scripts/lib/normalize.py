@@ -764,30 +764,55 @@ def _strip_optional_unchecked_lines(section: str) -> str:
 def _line_has_observed_failure(line: str) -> bool:
     """True when this single line reports an actual failed run / nonzero errors.
 
-    Bare nouns like ``failure-recovery`` are not enough. A ``0 failures``
-    summary on *this* line suppresses only this line (Codex P2s on #35).
+    Order matters: expected/resolved handling first, then nonzero error counts and
+    observed fail verbs, and only then zero-failure suppression for the *verb*
+    path. That way ``0 failures, 1 error`` still fails, and a ``0 failures``
+    summary cannot mask evidence on another line (line-scoped callers).
     """
     low = line.lower()
     if not low.strip():
         return False
-    if _ZERO_FAIL_SUMMARY.search(low) or "no fail" in low:
-        return False
+    # 1) Expected / resolved — not an observed product failure.
     if _RESOLVED_FAILED_LINE.search(low):
         return False
     if _fail_words_all_expected(low):
         return False
     if _expected_failure_was_contradicted(low):
         return True
+    # 2) Nonzero error/failure counts win over a co-located zero-fail phrase.
     if _NONZERO_ERROR_COUNT.search(low):
         return True
+    # 3) Observed fail verbs — suppressed only by a zero-fail summary *on this line*.
+    if _ZERO_FAIL_SUMMARY.search(low) or "no fail" in low:
+        return False
     if _OBSERVED_FAIL_VERB.search(low):
         return True
     return False
 
 
+def _line_has_bare_failure_noun(line: str) -> bool:
+    """Bare ``failure(s)`` on this line (required text only; line-scoped)."""
+    low = line.lower()
+    if not re.search(r"\bfailures?\b", low):
+        return False
+    if _RESOLVED_FAILED_LINE.search(low):
+        return False
+    if _fail_words_all_expected(low):
+        return False
+    # Zero-fail summary on *this* line only (not another required line).
+    if _ZERO_FAIL_SUMMARY.search(low) or "no fail" in low:
+        return False
+    return True
+
+
 def _section_has_observed_failure(section: str) -> bool:
     """Line-scoped observed-failure scan (does not let one zero-fail line mask another)."""
     return any(_line_has_observed_failure(line) for line in section.splitlines())
+
+
+def _section_has_bare_failure_noun(section: str) -> bool:
+    """Line-scoped bare failure-noun scan on required (already stripped) text."""
+    return any(_line_has_bare_failure_noun(line) for line in section.splitlines())
 
 
 def extract_validation(raw: dict[str, Any]) -> list[dict[str, str]]:
@@ -824,18 +849,13 @@ def extract_validation(raw: dict[str, Any]) -> list[dict[str, str]]:
         ):
             result = "fail"
         # Observed failed/failing / nonzero error counts — line-scoped on full text
-        # so one "0 failures" line cannot mask "Optional X failed" elsewhere.
+        # so one "0 failures" line cannot mask "Optional X failed" / "1 error" elsewhere.
         if _section_has_observed_failure(val_section):
             result = "fail"
         # Bare "failure(s)" nouns on *required* text only (optional deferred
         # titles like "failure-recovery benchmark; not run" are stripped).
-        if (
-            re.search(r"\bfailures?\b", low_deferred)
-            and not _ZERO_FAIL_SUMMARY.search(low_deferred)
-            and "no fail" not in low_deferred
-            and not _RESOLVED_FAILED_LINE.search(low_deferred)
-            and not _fail_words_all_expected(low_deferred)
-        ):
+        # Line-scoped: "0 failures" on line A must not suppress "reported failures" on B.
+        if _section_has_bare_failure_noun(required_section):
             result = "fail"
         if _expected_failure_was_contradicted(low_deferred) or (
             _expected_failure_was_contradicted(val_section.lower())

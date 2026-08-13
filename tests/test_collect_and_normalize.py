@@ -1199,6 +1199,28 @@ def test_zero_failures_line_does_not_mask_other_failed_line():
     assert events[0]["result"] == "fail"
 
 
+def test_zero_failures_same_line_as_one_error_is_fail():
+    """Zero-fail summary must not suppress a co-located nonzero error count."""
+    from lib.normalize import extract_validation
+
+    body = "## Validation\n\nSuite: 0 failures, 1 error\n"
+    events = extract_validation({"pull": {"body": body}, "checks": {}})
+    assert events[0]["result"] == "fail"
+
+
+def test_zero_failures_line_does_not_mask_reported_failures_line():
+    """Section-wide zero-fail must not suppress bare failure nouns on another line."""
+    from lib.normalize import extract_validation
+
+    body = (
+        "## Validation\n\n"
+        "Core suite: 0 failures\n"
+        "Sanitizer reported failures on the GPU path\n"
+    )
+    events = extract_validation({"pull": {"body": body}, "checks": {}})
+    assert events[0]["result"] == "fail"
+
+
 def test_override_lookup_is_case_insensitive():
     """Repo slugs are case-insensitive; overrides must not depend on CLI casing."""
     from lib.normalize import domain_for, enrich_linked_issues, task_type_for
