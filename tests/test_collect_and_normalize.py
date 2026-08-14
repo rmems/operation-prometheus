@@ -929,6 +929,7 @@ def test_linked_issue_override_adds_referenced_issues():
     from lib.normalize import LINKED_ISSUE_OVERRIDE, normalize_record
 
     assert LINKED_ISSUE_OVERRIDE[("rmems/grok-ozempic", 26)] == (22,)
+    assert LINKED_ISSUE_OVERRIDE[("rmems/grok-ozempic", 42)] == (37,)
     raw = {
         "source": {"repo": "rmems/grok-ozempic", "pr_number": 26},
         "pull": {
@@ -953,6 +954,57 @@ def test_linked_issue_override_adds_referenced_issues():
     ]
 
 
+def test_linked_issue_override_grok_ozempic_42_supports_37():
+    """GH #20: PR #42 names #37 via URL / Supports, not a close keyword."""
+    from lib.normalize import normalize_record
+
+    raw = {
+        "source": {"repo": "rmems/grok-ozempic", "pr_number": 42},
+        "pull": {
+            "title": "feat: export Grok-1 embedding pickle → .npy (#37 / RM-189)",
+            "body": (
+                "Supports #37 / RM-189.\n"
+                "https://github.com/rmems/grok-ozempic/issues/37\n"
+            ),
+            "state": "closed",
+            "merged": True,
+            "draft": False,
+        },
+        "linked_issues": [],
+        "reviews": [],
+        "review_comments": [
+            {
+                "user": {"login": "chatgpt-codex-connector[bot]"},
+                "body": "P2: Reject negative payload offsets before mmap slice.",
+                "path": "scripts/export_grok1_embedding_npy.py",
+                "line": 10,
+            }
+        ],
+        "issue_comments": [],
+        "files": [
+            {
+                "filename": "scripts/export_grok1_embedding_npy.py",
+                "status": "added",
+                "patch": "+def main():\n+    pass\n",
+            }
+        ],
+        "checks": {},
+        "commits": [],
+    }
+    card = {
+        "language": "Rust",
+        "language_by_pr": {"42": "Python"},
+        "domain_by_pr": {"42": "ml-infra"},
+        "training_use_buckets": {"review-to-patch": [42]},
+    }
+    traj = normalize_record(raw, card)
+    assert traj["language"] == "Python"
+    assert traj["domain"] == "ml-infra"
+    assert traj["training_use"] == "review-to-patch"
+    assert "https://github.com/rmems/grok-ozempic/issues/37" in traj["source_urls"]
+    assert traj["review_signals"]
+
+
 def test_reporting_verbs_do_not_mask_failures():
     """A reporting verb is not an expected-failure marker (Codex P1 on #17)."""
     from lib.normalize import extract_validation
@@ -965,6 +1017,208 @@ def test_reporting_verbs_do_not_mask_failures():
     ):
         events = extract_validation({"pull": {"body": body}, "checks": {}})
         assert events[0]["result"] == "fail", body
+
+
+def test_optional_unchecked_checkbox_does_not_fail_validation():
+    """Optional / not-required unchecked items must not fail the test event (#35 Codex)."""
+    from lib.normalize import extract_validation
+
+    body = (
+        "## Test plan\n\n"
+        "- [x] Tiny synthetic shard export + numpy load assert\n"
+        "- [x] `xai-dissect dissect` parse on real tensor\n"
+        "- [ ] Optional full 3 GiB export (for #39 experiment; not required for merge)\n"
+    )
+    events = extract_validation({"pull": {"body": body}, "checks": {}})
+    assert events[0]["type"] == "test"
+    assert events[0]["result"] == "pass", events[0]
+
+
+def test_required_unchecked_checkbox_still_fails_validation():
+    from lib.normalize import extract_validation
+
+    body = (
+        "## Test plan\n\n"
+        "- [x] Unit tests\n"
+        "- [ ] Fix path traversal in export CLI\n"
+    )
+    events = extract_validation({"pull": {"body": body}, "checks": {}})
+    assert events[0]["result"] == "fail"
+
+
+def test_negated_optional_checkbox_still_blocks():
+    """'not optional' must not be treated as optional (#35 Codex P2)."""
+    from lib.normalize import extract_validation
+
+    body = (
+        "## Test plan\n\n"
+        "- [x] Unit tests\n"
+        "- [ ] Windows test is not optional\n"
+    )
+    events = extract_validation({"pull": {"body": body}, "checks": {}})
+    assert events[0]["result"] == "fail"
+
+
+def test_bare_unchecked_checkbox_still_blocks():
+    """Empty `- [ ]` lines remain required (#35 Codex P2)."""
+    from lib.normalize import extract_validation
+
+    body = "## Test plan\n\n- [x] Unit tests\n- [ ]\n"
+    events = extract_validation({"pull": {"body": body}, "checks": {}})
+    assert events[0]["result"] == "fail"
+
+
+def test_optional_checkbox_deferred_wording_does_not_fail_section():
+    """Optional lines with pending/todo/not executed must not fail via section scan."""
+    from lib.normalize import extract_validation
+
+    for item in (
+        "Optional follow-up pending upstream benchmark",
+        "Out of scope; not executed",
+        "Optional path not run on CI",
+    ):
+        body = f"## Test plan\n\n- [x] Core tests\n- [ ] {item}\n"
+        events = extract_validation({"pull": {"body": body}, "checks": {}})
+        assert events[0]["result"] == "pass", item
+
+
+def test_required_follow_up_checkbox_still_blocks():
+    """Bare 'follow-up' / 'Required follow-up' must not be treated as optional."""
+    from lib.normalize import extract_validation
+
+    for item in (
+        "Required follow-up: run Windows tests before merge",
+        "Follow-up: run integration tests",
+    ):
+        body = f"## Test plan\n\n- [x] Unit tests\n- [ ] {item}\n"
+        events = extract_validation({"pull": {"body": body}, "checks": {}})
+        assert events[0]["result"] == "fail", item
+
+
+def test_not_out_of_scope_checkbox_still_blocks():
+    from lib.normalize import extract_validation
+
+    body = (
+        "## Test plan\n\n"
+        "- [x] Unit tests\n"
+        "- [ ] Windows path is not out of scope\n"
+    )
+    events = extract_validation({"pull": {"body": body}, "checks": {}})
+    assert events[0]["result"] == "fail"
+
+
+def test_optional_checkbox_continuation_lines_do_not_fail_section():
+    """Indented continuation under an optional item must be stripped too."""
+    from lib.normalize import extract_validation
+
+    body = (
+        "## Test plan\n\n"
+        "- [x] Core tests\n"
+        "- [ ] Optional upstream benchmark\n"
+        "  Pending hardware; not run\n"
+    )
+    events = extract_validation({"pull": {"body": body}, "checks": {}})
+    assert events[0]["result"] == "pass", events[0]
+
+
+def test_optional_nested_sublist_does_not_fail_section():
+    """Nested list under optional must strip with parent (#35 Codex P2)."""
+    from lib.normalize import extract_validation
+
+    body = (
+        "## Test plan\n\n"
+        "- [x] Core tests\n"
+        "- [ ] Optional platform tests\n"
+        "  - [ ] Windows pending\n"
+    )
+    events = extract_validation({"pull": {"body": body}, "checks": {}})
+    assert events[0]["result"] == "pass", events[0]
+
+
+def test_optional_line_with_actual_failure_still_fails():
+    """Observed failures on optional lines must still fail (#35 Codex P2)."""
+    from lib.normalize import extract_validation
+
+    body = (
+        "## Test plan\n\n"
+        "- [x] Core tests\n"
+        "- [ ] Optional Windows smoke test failed with 2 errors\n"
+    )
+    events = extract_validation({"pull": {"body": body}, "checks": {}})
+    assert events[0]["result"] == "fail"
+
+
+def test_optional_blank_then_nested_sublist_does_not_fail():
+    from lib.normalize import extract_validation
+
+    body = (
+        "## Test plan\n\n"
+        "- [x] Core tests\n"
+        "- [ ] Optional platform tests\n"
+        "\n"
+        "  - [ ] Windows pending\n"
+    )
+    events = extract_validation({"pull": {"body": body}, "checks": {}})
+    assert events[0]["result"] == "pass", events[0]
+
+
+def test_mid_sentence_optional_mention_does_not_exempt_task():
+    from lib.normalize import extract_validation
+
+    for item in (
+        "Run release tests with optional coverage reporting",
+        "Run release tests (GPU not required)",
+    ):
+        body = f"## Test plan\n\n- [x] Core\n- [ ] {item}\n"
+        events = extract_validation({"pull": {"body": body}, "checks": {}})
+        assert events[0]["result"] == "fail", item
+
+
+def test_optional_failure_recovery_name_not_run_is_pass():
+    """Bare 'failure' in a deferred optional task name is not an observed fail."""
+    from lib.normalize import extract_validation
+
+    body = (
+        "## Test plan\n\n"
+        "- [x] Core tests\n"
+        "- [ ] Optional failure-recovery benchmark; not run\n"
+    )
+    events = extract_validation({"pull": {"body": body}, "checks": {}})
+    assert events[0]["result"] == "pass", events[0]
+
+
+def test_zero_failures_line_does_not_mask_other_failed_line():
+    from lib.normalize import extract_validation
+
+    body = (
+        "## Test plan\n\n"
+        "- [x] Core suite: 0 failures\n"
+        "- [ ] Optional Windows smoke test failed\n"
+    )
+    events = extract_validation({"pull": {"body": body}, "checks": {}})
+    assert events[0]["result"] == "fail"
+
+
+def test_zero_failures_same_line_as_one_error_is_fail():
+    """Zero-fail summary must not suppress a co-located nonzero error count."""
+    from lib.normalize import extract_validation
+
+    body = "## Validation\n\nSuite: 0 failures, 1 error\n"
+    events = extract_validation({"pull": {"body": body}, "checks": {}})
+    assert events[0]["result"] == "fail"
+
+
+def test_zero_failures_line_does_not_mask_reported_failures_line():
+    """Section-wide zero-fail must not suppress bare failure nouns on another line."""
+    from lib.normalize import extract_validation
+
+    body = (
+        "## Validation\n\n"
+        "Core suite: 0 failures\n"
+        "Sanitizer reported failures on the GPU path\n"
+    )
+    events = extract_validation({"pull": {"body": body}, "checks": {}})
+    assert events[0]["result"] == "fail"
 
 
 def test_override_lookup_is_case_insensitive():

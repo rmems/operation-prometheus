@@ -1,6 +1,6 @@
 # STATUS — Operation Prometheus
 
-**Last updated:** 2026-08-11  
+**Last updated:** 2026-08-12  
 **By:** Grok Build Agent: Grok 4.5 (xAI)
 
 ## Accomplished this sprint
@@ -12,32 +12,30 @@
    - JSONL: `datasets/jsonl/limen-axon-encoder-v0.jsonl`  
    - Card/manifest under `datasets/cards/` and `datasets/manifests/`  
    - Source: `docs/source-repos.md` (Limen-Neural section)  
-5. **grok-ozempic-v0** — 7 trajectories extracted (#11)  
-6. **Tracker** — GH #13/#15 + Linear RM-172/RM-173  
+5. **grok-ozempic-v0** — **8** trajectories (was 7; **#42** Python export added via #20)  
+6. **#18/#19** — review_signals dedupe + `language_by_pr` (merged #34)  
+7. **#14** — `PROMETHEUS_DATA_ROOT` sibling layout (merged #22); package **0.4.0** tagged  
+8. **Tracker** — GH #13/#15 + Linear RM-172/RM-173  
 
-## Trajectory quality (limen-axon-encoder-v0)
+## Trajectory quality (grok-ozempic-v0 #42)
 
-| PR | training_use | quality | Notes |
-|----|--------------|---------|--------|
-| #37 | review-to-patch | 0.95 | Gain curves; closes #26; strong review density |
-| #50 | repair | 0.95 | RNG security swap |
-| #41 | review-to-patch | 0.95 | Encoder standardize; bot-heavy |
+| PR | language | training_use | quality | Notes |
+|----|----------|--------------|---------|--------|
+| #42 | **Python** | review-to-patch | 0.90 | pickle→`.npy` export; 8 unique signals post-dedupe; advances #37 |
 
 ## Remaining gaps
 
 - Schema v0 lacks `training_use: feature` (mapped to `other`)  
-- **#14** sibling data root — implemented on `feat/issue-14-prometheus-data-root` (`PROMETHEUS_DATA_ROOT`, `--skip-existing`, `list_merged_prs.py`); package version **0.4.0**  
 - Later Limen waves (neuromod, SpikeStream, kinetic-signals, limbic-critic) not extracted  
 - Large patches still truncated; bot review noise high on Limen PRs  
 - Manual human re-inspection sample still recommended before training runs  
 
 ## Next-sprint roadmap (prioritized)
 
-1. **Review-signal dedupe** (#18) + **`language_by_pr`** (#19) — both block grok-ozempic#42 (#20)  
-2. **Sibling data root** (#14) — PR in progress (`feat/issue-14-prometheus-data-root`)  
-3. **Limen Wave B** — neuromod #5/#8/#9 or SpikeStream #22/#25  
-4. **Schema v0.1** — add `feature` to `training_use`  
-5. **SFT export adapter** — JSONL → chat/process-supervision pairs  
+1. **Close v0.5 epic #31** once #20 lands  
+2. **v0.6 fleet extracts** — myelin-accelerator (#21), shortlist refreshes, Limen Wave B+  
+3. **Schema v0.1** — add `feature` to `training_use`  
+4. **SFT / preference pairs** — v0.7 (#23)  
 
 ## Verification checklist
 
