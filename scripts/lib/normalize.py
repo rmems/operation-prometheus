@@ -91,6 +91,9 @@ TASK_TYPE_OVERRIDE: dict[tuple[str, int], str] = {
     # inventory") falls through to "other"; the PR adds grok1_inventory.rs and
     # alignment.rs, so feature is the accurate label.
     ("rmems/grok-ozempic", 26): "feature",
+    # WIP title + mostly-doc path mix falls to "docs"; PR lands CUDA/cust code.
+    ("rmems/myelin-accelerator", 7): "feature",
+    ("rmems/myelin-accelerator", 6): "feature",
 }
 
 # Per-PR issue provenance for bodies that name their originating issue without a
@@ -107,6 +110,10 @@ LINKED_ISSUE_OVERRIDE: dict[tuple[str, int], tuple[int, ...]] = {
     ("rmems/grok-ozempic", 43): (38,),
     # Body links GH #37 / RM-189 via full URL + "Supports #37", not a close keyword.
     ("rmems/grok-ozempic", 42): (37,),
+    # Title lists Implement #16,#13,#12,#10,#11 without close keywords.
+    ("rmems/myelin-accelerator", 18): (16, 13, 12, 10, 11),
+    # Body references GH #9 / LIM-890 for packed ternary kernels.
+    ("rmems/myelin-accelerator", 26): (9,),
 }
 
 DOMAIN_OVERRIDE: dict[tuple[str, int], str] = {

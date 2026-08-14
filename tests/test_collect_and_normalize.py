@@ -930,6 +930,8 @@ def test_linked_issue_override_adds_referenced_issues():
 
     assert LINKED_ISSUE_OVERRIDE[("rmems/grok-ozempic", 26)] == (22,)
     assert LINKED_ISSUE_OVERRIDE[("rmems/grok-ozempic", 42)] == (37,)
+    assert LINKED_ISSUE_OVERRIDE[("rmems/myelin-accelerator", 18)] == (16, 13, 12, 10, 11)
+    assert LINKED_ISSUE_OVERRIDE[("rmems/myelin-accelerator", 26)] == (9,)
     raw = {
         "source": {"repo": "rmems/grok-ozempic", "pr_number": 26},
         "pull": {

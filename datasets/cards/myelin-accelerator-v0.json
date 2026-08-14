@@ -1,0 +1,36 @@
+{
+  "name": "myelin-accelerator-v0",
+  "source_repo": "rmems/myelin-accelerator",
+  "source_repo_url": "https://github.com/rmems/myelin-accelerator",
+  "source_repo_description": "CUDA kernels and bitpacking for ternary/SNN acceleration (GOZ1 / grok-ozempic backend path)",
+  "schema_version": "pr_trajectory_v0",
+  "schema_url": "https://github.com/rmems/operation-prometheus/blob/main/schemas/pr_trajectory.schema.json",
+  "language": "Rust",
+  "domains": ["gpu-compute", "cuda", "ml-infra"],
+  "domain_by_pr": {
+    "26": "gpu-compute",
+    "18": "gpu-compute",
+    "22": "cuda",
+    "7": "cuda",
+    "6": "cuda"
+  },
+  "pr_count": 5,
+  "pr_numbers": [26, 18, 22, 7, 6],
+  "training_use_buckets": {
+    "feature": [26, 18],
+    "repair": [22],
+    "review-to-patch": [7, 6]
+  },
+  "extracted_at": "2026-08-14",
+  "status": "extracted-v0",
+  "created_at": "2026-08-14",
+  "created_by": "Grok Build Agent: Grok 4.5",
+  "jsonl_path": "datasets/jsonl/myelin-accelerator-v0.jsonl",
+  "manifest_path": "datasets/manifests/myelin-accelerator-v0.manifest.json",
+  "notes": "First myelin-accelerator extract (GH #21). Shortlist re-scored 2026-08-02 against measured review-signal yield: #26 (packed ternary GEMV/GEMM + CUDA 13.3.1 CI), #18 (bitpacking + GPU CI + tests/benches), #22 (CUDA quality gate), #7/#6 (Corinth Canal CUDA/cust review→patch). Dropped #4 (0 kept signals) and #2 (noise across target/ files). Extends the CUDA ownership boundary already present via grok-ozempic#25. Schema maps feature → training_use other.",
+  "source_doc": "docs/source-repos.md",
+  "related_issues": {
+    "operation_prometheus": [21, 11],
+    "myelin_accelerator": [9, 16, 13, 12, 10, 11]
+  }
+}
