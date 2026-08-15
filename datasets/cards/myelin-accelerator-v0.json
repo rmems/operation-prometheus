@@ -31,6 +31,6 @@
   "source_doc": "docs/source-repos.md",
   "related_issues": {
     "operation_prometheus": [21, 11],
-    "myelin_accelerator": [9, 16, 13, 12, 10, 11]
+    "myelin_accelerator": [9, 16, 13, 12, 10, 11, 21]
   }
 }

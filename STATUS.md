@@ -12,7 +12,7 @@
 5. **grok-ozempic-v0** — **8** trajectories (incl. Python **#42** via #20 / PR #35)  
 6. **#18/#19** — review_signals dedupe + `language_by_pr` (merged #34)  
 7. **#14** — `PROMETHEUS_DATA_ROOT` sibling layout (merged #22); package **0.4.0** tagged  
-8. **v0.5 epic #31** closed; **myelin-accelerator-v0** extract in flight (#21)  
+8. **v0.5 epic #31** closed; **myelin-accelerator-v0** extracted (#21) — 5 trajectories  
 
 ## Trajectory quality (myelin-accelerator-v0)
 
@@ -32,10 +32,9 @@
 
 ## Next-sprint roadmap (prioritized)
 
-1. **Land #21** myelin-accelerator-v0  
-2. **v0.6 fleet** — shortlist refreshes (#24/#25), docs inventory (#30), waves B/C  
-3. **Schema v0.1** — add `feature` to `training_use`  
-4. **SFT / preference pairs** — v0.7 (#23)  
+1. **v0.6 fleet** — shortlist refreshes (#24/#25), docs inventory (#30), waves B/C  
+2. **Schema v0.1** — add `feature` to `training_use`  
+3. **SFT / preference pairs** — v0.7 (#23)  
 
 ## Verification checklist
 
