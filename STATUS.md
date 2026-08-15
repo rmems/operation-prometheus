@@ -1,6 +1,6 @@
 # STATUS — Operation Prometheus
 
-**Last updated:** 2026-08-12  
+**Last updated:** 2026-08-14  
 **By:** Grok Build Agent: Grok 4.5 (xAI)
 
 ## Accomplished this sprint
@@ -9,19 +9,19 @@
 2. **Normalizer** → schema-valid JSONL with quality scores, bot filter, secret redaction  
 3. **corinth-canal-v0** — 6 trajectories extracted and merged  
 4. **Limen-Neural Wave A pilot** — shortlist docs + **limen-axon-encoder-v0** (3 PRs)  
-   - JSONL: `datasets/jsonl/limen-axon-encoder-v0.jsonl`  
-   - Card/manifest under `datasets/cards/` and `datasets/manifests/`  
-   - Source: `docs/source-repos.md` (Limen-Neural section)  
-5. **grok-ozempic-v0** — **8** trajectories (was 7; **#42** Python export added via #20)  
+5. **grok-ozempic-v0** — **8** trajectories (incl. Python **#42** via #20 / PR #35)  
 6. **#18/#19** — review_signals dedupe + `language_by_pr` (merged #34)  
 7. **#14** — `PROMETHEUS_DATA_ROOT` sibling layout (merged #22); package **0.4.0** tagged  
-8. **Tracker** — GH #13/#15 + Linear RM-172/RM-173  
+8. **v0.5 epic #31** closed; **myelin-accelerator-v0** extracted (#21) — 5 trajectories  
 
-## Trajectory quality (grok-ozempic-v0 #42)
+## Trajectory quality (myelin-accelerator-v0)
 
-| PR | language | training_use | quality | Notes |
-|----|----------|--------------|---------|--------|
-| #42 | **Python** | review-to-patch | 0.90 | pickle→`.npy` export; 8 unique signals post-dedupe; advances #37 |
+| PR | domain | training_use | quality | Notes |
+|----|--------|--------------|---------|--------|
+| #26 | gpu-compute | other (feature) | 0.90 | packed ternary GEMV/GEMM; 8 unique signals |
+| #18 | gpu-compute | other (feature) | 0.90 | bitpacking + CI + tests/benches |
+| #22 | cuda | repair | 0.90 | local CUDA quality gate (sm_120 / 13.3) |
+| #7 / #6 | cuda | review-to-patch | 0.95 | Corinth Canal CUDA/cust path |
 
 ## Remaining gaps
 
@@ -32,10 +32,9 @@
 
 ## Next-sprint roadmap (prioritized)
 
-1. **Close v0.5 epic #31** once #20 lands  
-2. **v0.6 fleet extracts** — myelin-accelerator (#21), shortlist refreshes, Limen Wave B+  
-3. **Schema v0.1** — add `feature` to `training_use`  
-4. **SFT / preference pairs** — v0.7 (#23)  
+1. **v0.6 fleet** — shortlist refreshes (#24/#25), docs inventory (#30), waves B/C  
+2. **Schema v0.1** — add `feature` to `training_use`  
+3. **SFT / preference pairs** — v0.7 (#23)  
 
 ## Verification checklist
 
