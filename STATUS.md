@@ -1,7 +1,68 @@
 # STATUS — Operation Prometheus
 
-**Last updated:** 2026-08-14  
 **By:** Grok Build Agent: Grok 4.5 (xAI)
+
+<!-- BEGIN GENERATED: scripts/build_status.py -->
+
+**Last updated:** 2026-08-14  
+**Extracts:** 4 · **Trajectories:** 22  
+
+<!-- Derived from datasets/manifests/*.manifest.json — do not edit by hand. -->
+
+## Extracted datasets
+
+| dataset | source repo | records | schema | extracted |
+|---------|-------------|---------|--------|-----------|
+| `corinth-canal-v0` | rmems/corinth-canal | 6 | pr_trajectory_v0 | 2026-07-22 |
+| `limen-axon-encoder-v0` | Limen-Neural/axon-encoder | 3 | pr_trajectory_v0 | 2026-07-24 |
+| `grok-ozempic-v0` | rmems/grok-ozempic | 8 | pr_trajectory_v0 | 2026-08-12 |
+| `myelin-accelerator-v0` | rmems/myelin-accelerator | 5 | pr_trajectory_v0 | 2026-08-14 |
+
+## Trajectory quality
+
+### corinth-canal-v0
+
+| PR | domain | training_use | task_type | quality | signals | validation |
+|----|--------|--------------|-----------|---------|---------|------------|
+| #96 | tools | validation | feature | 0.78 | 8 | 3 |
+| #95 | ml-infra | other | feature | 0.58 | 8 | 3 |
+| #94 | ml-infra | repair | feature | 0.94 | 8 | 3 |
+| #91 | ml-infra | other | feature | 0.62 | 8 | 3 |
+| #89 | gpu-compute | validation | test | 0.92 | 8 | 3 |
+| #82 | gpu-compute | repair | feature | 0.86 | 8 | 3 |
+
+### limen-axon-encoder-v0
+
+| PR | domain | training_use | task_type | quality | signals | validation |
+|----|--------|--------------|-----------|---------|---------|------------|
+| #50 | security | repair | security | 0.95 | 8 | 4 |
+| #41 | api | review-to-patch | bugfix | 0.95 | 8 | 3 |
+| #37 | snn | review-to-patch | feature | 0.95 | 8 | 4 |
+
+### grok-ozempic-v0
+
+| PR | domain | training_use | task_type | quality | signals | validation |
+|----|--------|--------------|-----------|---------|---------|------------|
+| #43 | ml-infra | review-to-patch | feature | 0.95 | 8 | 4 |
+| #42 | ml-infra | review-to-patch | feature | 0.90 | 8 | 4 |
+| #33 | testing | review-to-patch | refactor | 0.90 | 8 | 3 |
+| #29 | validation | validation | test | 0.90 | 8 | 4 |
+| #26 | validation | validation | feature | 0.95 | 8 | 3 |
+| #25 | ml-infra | other | feature | 0.95 | 8 | 2 |
+| #24 | validation | validation | feature | 0.95 | 8 | 3 |
+| #11 | ml-infra | other | feature | 0.95 | 8 | 3 |
+
+### myelin-accelerator-v0
+
+| PR | domain | training_use | task_type | quality | signals | validation |
+|----|--------|--------------|-----------|---------|---------|------------|
+| #26 | gpu-compute | other | feature | 0.90 | 8 | 4 |
+| #22 | cuda | repair | bugfix | 0.90 | 8 | 4 |
+| #18 | gpu-compute | other | feature | 0.90 | 8 | 3 |
+| #7 | cuda | review-to-patch | feature | 0.95 | 8 | 2 |
+| #6 | cuda | review-to-patch | feature | 0.95 | 8 | 2 |
+
+<!-- END GENERATED -->
 
 ## Accomplished this sprint
 
@@ -13,15 +74,6 @@
 6. **#18/#19** — review_signals dedupe + `language_by_pr` (merged #34)  
 7. **#14** — `PROMETHEUS_DATA_ROOT` sibling layout (merged #22); package **0.4.0** tagged  
 8. **v0.5 epic #31** closed; **myelin-accelerator-v0** extracted (#21) — 5 trajectories  
-
-## Trajectory quality (myelin-accelerator-v0)
-
-| PR | domain | training_use | quality | Notes |
-|----|--------|--------------|---------|--------|
-| #26 | gpu-compute | other (feature) | 0.90 | packed ternary GEMV/GEMM; 8 unique signals |
-| #18 | gpu-compute | other (feature) | 0.90 | bitpacking + CI + tests/benches |
-| #22 | cuda | repair | 0.90 | local CUDA quality gate (sm_120 / 13.3) |
-| #7 / #6 | cuda | review-to-patch | 0.95 | Corinth Canal CUDA/cust path |
 
 ## Remaining gaps
 

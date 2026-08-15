@@ -1,0 +1,70 @@
+# Source Repositories and Extraction Shortlists
+
+Operation Prometheus extracts trajectory datasets from public repositories. This
+directory tracks which repos and PRs are targeted for extraction.
+
+**One file per source repo.** A new extract adds its own file here and edits nothing
+else in this directory — that is what lets extract PRs land in parallel (GH #37).
+Cross-repo policy and the index below are the only shared content.
+
+## Extraction Format
+
+All trajectories are extracted as JSONL records conforming to
+[pr_trajectory.schema.json](../../schemas/pr_trajectory.schema.json) (schema v0).
+One record per PR. See [datasets/README.md](../../datasets/README.md) for commit rules.
+
+## Index
+
+| Source repo | Doc | Status |
+|-------------|-----|--------|
+| [rmems/corinth-canal](https://github.com/rmems/corinth-canal) | [corinth-canal.md](corinth-canal.md) | v0 extracted |
+| [rmems/grok-ozempic](https://github.com/rmems/grok-ozempic) | [grok-ozempic.md](grok-ozempic.md) | v0 extracted |
+| [rmems/myelin-accelerator](https://github.com/rmems/myelin-accelerator) | [myelin-accelerator.md](myelin-accelerator.md) | v0 extracted |
+| [Limen-Neural](https://github.com/Limen-Neural) (org) | [limen-neural.md](limen-neural.md) | Wave A extracted (axon-encoder) |
+
+Per-dataset record counts and quality tables are generated into
+[STATUS.md](../../STATUS.md) from `datasets/manifests/` — not duplicated here.
+
+## Selection criteria
+
+A PR belongs on a shortlist when it has:
+
+1. **Issue linkage** — a close keyword or a documented reference, so the trajectory
+   starts from a stated problem rather than a bare diff.
+2. **Review density** — engineering review signal that survives the
+   [`is_bot_user`](../../scripts/lib/bots.py) filter and
+   [`extract_review_signals`](../../scripts/lib/normalize.py) (hard cap `max_items=8`).
+3. **Validation evidence** — CI, tests, or a documented validation ladder.
+4. **Public-only history** — owner access to a private repo does not make it eligible.
+
+## Avoid for v0 training
+
+- Dependabot / Renovate dependency-only merges
+- REUSE / CHANGELOG / publish-prep only
+- Pure docs (Sentry guides, cloud AGENTS notes) without code delta
+- Bulk CI modernization multi-issue monsters without domain signal
+
+## Adding New Source Repos
+
+To add a new source repository:
+
+1. Create `docs/source-repos/<repo>.md` from an existing file's shape — metadata
+   header, shortlist table, measured review-signal yield, considered-and-rejected.
+2. Add one row to the [Index](#index) above.
+3. Shortlist at least 5 high-signal PRs (Wave A pilots may ship fewer; say so explicitly).
+4. Assign each PR a dataset bucket (`repair`, `validation`, `feature`, `review-to-patch`, …).
+5. Create a metadata card in `datasets/cards/`, and put per-PR labelling overrides on the
+   card (`domain_by_pr`, `task_type_by_pr`, `linked_issues_by_pr`) rather than in
+   `scripts/lib/normalize.py`.
+6. Reference this doc from the card via `source_doc`.
+
+See [data-policy.md](../data-policy.md) for allowed sources and exclusions.
+
+**Schema note:** card buckets may say `feature`, but schema v0 `training_use` has no
+`feature` value — the normalizer maps `feature` → `other` and keeps `task_type: feature`.
+
+## Data root
+
+Raw records are written under `$PROMETHEUS_DATA_ROOT/raw/<owner>_<repo>/` when the env
+var is set, otherwise `datasets/raw/<owner>_<repo>/` in-repo (gitignored either way).
+See [`scripts/lib/paths.py`](../../scripts/lib/paths.py).

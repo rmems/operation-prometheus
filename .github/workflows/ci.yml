@@ -5,6 +5,9 @@ on:
     branches: [main]
   pull_request:
     branches: [main]
+    # labeled/unlabeled are not in the default set; without them, adding or
+    # removing the `data` label would never re-run the shared-files guard.
+    types: [opened, synchronize, reopened, labeled, unlabeled]
 
 jobs:
   lint:
@@ -49,4 +52,50 @@ jobs:
           else
             echo "No JSONL files to validate yet"
           fi
+
+  status-up-to-date:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: STATUS.md matches datasets/manifests/
+        run: python scripts/build_status.py --check
+
+  # A data extract must confine itself to its own files. The shared files below
+  # are edited by every extract, so two parallel extract PRs conflict on them —
+  # that is the whole reason this guard exists (GH #37). Pipeline and schema
+  # changes legitimately touch them, so they are exempt via label.
+  shared-files-guard:
+    if: >-
+      github.event_name == 'pull_request' &&
+      contains(github.event.pull_request.labels.*.name, 'data') &&
+      !contains(github.event.pull_request.labels.*.name, 'pipeline') &&
+      !contains(github.event.pull_request.labels.*.name, 'schema')
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: Reject edits to shared files
+        env:
+          BASE_SHA: ${{ github.event.pull_request.base.sha }}
+          HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+        run: |
+          # Keep in sync with the table in AGENTS.md.
+          DENYLIST='^(STATUS\.md|README\.md|docs/source-repos\.md|docs/source-repos/_index\.md|schemas/|scripts/lib/normalize\.py|scripts/lib/bots\.py|scripts/lib/quality\.py|tests/test_collect_and_normalize\.py|\.github/workflows/)'
+          changed=$(git diff --name-only "$BASE_SHA" "$HEAD_SHA")
+          offenders=$(echo "$changed" | grep -E "$DENYLIST" || true)
+          if [ -n "$offenders" ]; then
+            echo "::error::A data-labeled PR may not edit shared files. Offending paths:"
+            echo "$offenders" | sed 's/^/  /'
+            echo ""
+            echo "Put per-PR labelling on the dataset card (domain_by_pr / task_type_by_pr /"
+            echo "linked_issues_by_pr), add repo-specific tests to tests/test_overrides_<repo>.py,"
+            echo "document the repo in docs/source-repos/<repo>.md, and let STATUS.md regenerate."
+            echo "If this really is a pipeline or schema change, add the 'pipeline' or 'schema' label."
+            exit 1
+          fi
+          echo "No shared files touched."
 

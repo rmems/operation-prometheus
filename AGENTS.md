@@ -24,6 +24,26 @@ issue/review signal → code state → patch/fix → validation → outcome
 - Do not use raw closed-model chat logs as the primary training corpus.
 - Do not overwrite existing project structure unless explicitly asked.
 
+## Data extracts stay in their own lane
+
+Extract PRs run in parallel, so an extract must touch **only its own files**. A
+data-labeled PR that edits a shared file is rejected by the `shared-files-guard`
+CI job.
+
+| Instead of editing… | Do this |
+|---------------------|---------|
+| `STATUS.md` | Nothing — it is generated. Run `python scripts/build_status.py` after adding your manifest. |
+| `scripts/lib/normalize.py` override dicts | Put `domain_by_pr` / `task_type_by_pr` / `linked_issues_by_pr` on your dataset card. |
+| `tests/test_collect_and_normalize.py` | Add `tests/test_overrides_<repo>.py`. |
+| `docs/source-repos.md` / `_index.md` | Add `docs/source-repos/<repo>.md`, plus one index row. |
+| `README.md` shortlist bullets | Nothing — link from your `docs/source-repos/<repo>.md`. |
+
+So a new extract adds: a card, a JSONL, a manifest, `docs/source-repos/<repo>.md`,
+and optionally `tests/test_overrides_<repo>.py`. Nothing else.
+
+Pipeline or schema work legitimately edits the shared files — label those PRs
+`pipeline` or `schema` and the guard stands down.
+
 ## Validation
 
 Before committing, run:
