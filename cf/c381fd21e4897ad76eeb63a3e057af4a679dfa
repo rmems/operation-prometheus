@@ -1,0 +1,66 @@
+.gitignore
+  s_c96c20f8346870::t_91f76e3f8a1860 84-87
+AGENTS.md
+  s_c96c20f8346870::t_b18d4b20e86735 27-46
+docs/source-repos/myelin-accelerator.md
+  s_c96c20f8346870::t_68955fd247501b 1-33
+.github/workflows/ci.yml
+  s_c96c20f8346870::t_ee99ee108e9498 8-10
+  s_c96c20f8346870::t_0b5ec56997a5dc 56-101
+tests/conftest.py
+  s_c96c20f8346870::t_7bbd895ee53314 1-14
+tests/test_card_overrides.py
+  s_c96c20f8346870::t_fc5e7b7bb6a3e1 1-142
+STATUS.md
+  s_c96c20f8346870::t_94b3137aca366a 6-64
+  s_c96c20f8346870::t_cab6ee65a85414 5,65
+tests/test_overrides_limen_axon_encoder.py
+  s_c96c20f8346870::t_15050709def172 1-28
+docs/source-repos/limen-neural.md
+  s_c96c20f8346870::t_68955fd247501b 1-42
+  s_c96c20f8346870::t_260f2ac975a0e7 43
+tests/test_build_status.py
+  s_c96c20f8346870::t_d6146acbee75b6 1-122
+docs/source-repos.md
+  s_c96c20f8346870::t_0fdeb72f3182b0 3-4,6,8-13,15-17
+scripts/lib/normalize.py
+  s_c96c20f8346870::t_4996b279d27474 73-104
+  s_c96c20f8346870::t_748a6938f8fa18 139
+  s_c96c20f8346870::t_8e3d299e9005bb 115
+  s_c96c20f8346870::t_f380424963cbd7 153
+  s_c96c20f8346870::t_6d910aa042a6e4 1341
+  s_c96c20f8346870::t_0b8548839c6f70 340-350
+  s_c96c20f8346870::t_9cc483bd7bfca5 213-216
+  s_c96c20f8346870::t_3bf35ba402a731 229-235
+  s_c96c20f8346870::t_6f30512bd40451 267-269
+  s_c96c20f8346870::t_37bae0057d60f4 1324
+scripts/build_status.py
+  s_c96c20f8346870::t_ed527a8a997861 1-174
+docs/source-repos/_index.md
+  s_c96c20f8346870::t_00ea00452a56da 1-70
+tests/test_overrides_grok_ozempic.py
+  s_c96c20f8346870::t_158fd579ad0ff7 1-92
+docs/source-repos/grok-ozempic.md
+  s_c96c20f8346870::t_68955fd247501b 1-79
+tests/test_overrides_myelin_accelerator.py
+  s_c96c20f8346870::t_9c487848ea04ac 1-79
+docs/source-repos/corinth-canal.md
+  s_c96c20f8346870::t_260f2ac975a0e7 21,30,39,48,57,66
+  s_c96c20f8346870::t_68955fd247501b 1-20,22-29,31-38,40-47,49-56,58-65,67-73
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.5.2",
+  "base_commit_sha": "cfc381fd21e4897ad76eeb63a3e057af4a679dfa",
+  "prompts": {},
+  "sessions": {
+    "s_c96c20f8346870": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "ab4b0e8b-681d-47b8-b4e1-3c57b0573a5e",
+        "model": "claude-opus-5"
+      },
+      "human_author": "Raul Montoya Cardenas <montoyaraul34@gmail.com>"
+    }
+  }
+}
