@@ -49,20 +49,24 @@ allowlist, which raise the problems the maintainer then patches.
 | #25 | 31 | 8 | 8 | shortlisted |
 | #8 | 3 | 2 | 2 | **dropped** |
 
+## Deferred, later extracted
+
+- **`#42`** (export Grok-1 embedding pickle → `.npy`) — **extracted 2026-08-12** (issue
+  [#20](https://github.com/rmems/operation-prometheus/issues/20)); now in the shortlist above.
+  Was deferred because 51 kept signals filled the emit cap (8) with **1 unique**
+  `Addressed in <sha>: …` ack body (eight emitted copies of the same ack) and the PR is
+  Python against a Rust card. After
+  [#18](https://github.com/rmems/operation-prometheus/issues/18) (body dedupe / ack
+  deprioritization) and [#19](https://github.com/rmems/operation-prometheus/issues/19)
+  (`language_by_pr: {"42": "Python"}`), the record emits **8 unique** review signals and
+  `language: Python`.
+
 ## Considered and rejected
 
 - **`#8`** (wire manifest into pipeline) — was shortlisted, now dropped. Yields only 2 review
   signals, one of which is `@copilot Make changes to the pull request`. Its phase-1 sibling
   `#7` is no better (2). The pipeline-wiring content is real, but there is no review→patch
   trajectory to learn from.
-- **`#42`** (export Grok-1 embedding pickle → `.npy`) — **extracted 2026-08-12** (issue
-  [#20](https://github.com/rmems/operation-prometheus/issues/20)). Was deferred because 51 kept
-  signals filled the emit cap (8) with **1 unique** `Addressed in <sha>: …` ack body (eight
-  emitted copies of the same ack) and the PR is Python against a Rust card. After
-  [#18](https://github.com/rmems/operation-prometheus/issues/18) (body dedupe / ack
-  deprioritization) and [#19](https://github.com/rmems/operation-prometheus/issues/19)
-  (`language_by_pr: {"42": "Python"}`), the record emits **8 unique** review signals and
-  `language: Python`.
 - **`#54`** (xai-dissect run3 cartography handoff) — adds **164,329 lines** of generated
   export artifacts. Excluded under [data-policy.md](../data-policy.md); it is the concrete case
   that issue #14 (sibling data root) exists to handle.
