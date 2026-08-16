@@ -61,7 +61,7 @@ def test_domain_by_pr_beats_shared_dict():
 
 
 def test_linked_issues_by_pr_on_card_adds_stubs():
-    from lib.normalize import normalize_record
+    from lib.normalize import enrich_linked_issues, normalize_record
 
     raw = {
         "source": {"repo": "rmems/widget", "pr_number": 12},
@@ -87,6 +87,10 @@ def test_linked_issues_by_pr_on_card_adds_stubs():
         "https://github.com/rmems/widget/issues/4",
         "https://github.com/rmems/widget/issues/5",
     ]
+    # Card-declared refs are provenance links, not close-keyword evidence.
+    stubs = enrich_linked_issues(raw, card)
+    assert [s["number"] for s in stubs] == [4, 5]
+    assert all(s["closed_by_pr"] is False for s in stubs)
 
 
 def test_linked_issues_by_pr_rejects_non_positive_numbers():
@@ -110,7 +114,7 @@ def test_linked_issues_by_pr_rejects_non_positive_numbers():
         "checks": {},
         "commits": [],
     }
-    card = {"linked_issues_by_pr": {"12": [0, -1, "-3", 5, "junk"]}}
+    card = {"linked_issues_by_pr": {"12": [0, -1, "-3", 5, "junk", "²"]}}
     urls = normalize_record(raw, card)["source_urls"]
     assert urls == [
         "https://github.com/rmems/widget/pull/12",

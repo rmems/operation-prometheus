@@ -19,6 +19,7 @@
 ## PR Details
 
 ### PR #82 — Q6_K dequantized GPU synapse path
+
 - **URL**: https://github.com/rmems/corinth-canal/pull/82
 - **Merged**: 2026-05-25
 - **Commits**: 17
@@ -28,6 +29,7 @@
 - **Closes**: rmems/corinth-canal#39
 
 ### PR #89 — CUDA validation ladder
+
 - **URL**: https://github.com/rmems/corinth-canal/pull/89
 - **Merged**: 2026-05-27
 - **Commits**: 3
@@ -37,6 +39,7 @@
 - **Closes**: rmems/corinth-canal#74
 
 ### PR #91 — Safetensors backend + experiment schema
+
 - **URL**: https://github.com/rmems/corinth-canal/pull/91
 - **Merged**: 2026-05-27
 - **Commits**: 6
@@ -46,6 +49,7 @@
 - **Closes**: rmems/corinth-canal#75, rmems/corinth-canal#76, rmems/corinth-canal#85
 
 ### PR #94 — IQ3_M and Int4 dequantization pathways
+
 - **URL**: https://github.com/rmems/corinth-canal/pull/94
 - **Merged**: 2026-05-27
 - **Commits**: 11
@@ -55,6 +59,7 @@
 - **Closes**: rmems/corinth-canal#92
 
 ### PR #95 — Model adapter configs + SAAQ run matrix
+
 - **URL**: https://github.com/rmems/corinth-canal/pull/95
 - **Merged**: 2026-05-28
 - **Commits**: 4
@@ -64,6 +69,7 @@
 - **Closes**: rmems/corinth-canal#80, rmems/corinth-canal#83, rmems/corinth-canal#84
 
 ### PR #96 — Local SAAQ validator and sprint summarizer
+
 - **URL**: https://github.com/rmems/corinth-canal/pull/96
 - **Merged**: 2026-05-28
 - **Commits**: 4

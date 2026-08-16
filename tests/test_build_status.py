@@ -98,6 +98,32 @@ def test_splice_without_markers_is_an_error():
         splice("# Title\n\nno markers here\n", "block")
 
 
+def test_splice_rejects_duplicate_marker_pairs():
+    """Two generated blocks would leave the second stale while --check passes."""
+    from build_status import BEGIN_MARKER, END_MARKER, splice
+
+    doc = (
+        f"{BEGIN_MARKER}\ncurrent\n{END_MARKER}\n\n"
+        f"{BEGIN_MARKER}\nstale\n{END_MARKER}\n"
+    )
+    with pytest.raises(SystemExit, match="more than one generated block"):
+        splice(doc, f"{BEGIN_MARKER}\ncurrent\n{END_MARKER}")
+
+
+def test_check_fails_when_no_manifests_found(tmp_path):
+    """A typo'd --manifest-dir must fail the gate, not silently pass it."""
+    from build_status import main
+
+    empty = tmp_path / "manifests"
+    empty.mkdir()
+    status = tmp_path / "STATUS.md"
+    status.write_text((ROOT / "STATUS.md").read_text(encoding="utf-8"), encoding="utf-8")
+
+    assert main(["--check", "--manifest-dir", str(empty), "--status", str(status)]) == 1
+    # Without --check an empty directory is still a no-op, not an error.
+    assert main(["--manifest-dir", str(empty), "--status", str(status)]) == 0
+
+
 def test_status_regenerates_without_committed_rewrite():
     """Data extracts must not commit STATUS.md (shared-files-guard).
 

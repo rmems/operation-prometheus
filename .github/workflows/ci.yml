@@ -9,6 +9,12 @@ on:
     # removing the `data` label would never re-run the shared-files guard.
     types: [opened, synchronize, reopened, labeled, unlabeled]
 
+# labeled/unlabeled can fire in quick succession; only the newest run of a PR
+# matters. Pushes to main are never cancelled mid-run.
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
 # Every job only reads the repo; nothing here pushes or comments.
 permissions:
   contents: read
@@ -114,7 +120,9 @@ jobs:
         run: |
           # Keep in sync with the table in AGENTS.md.
           DENYLIST='^(STATUS\.md|README\.md|docs/source-repos\.md|schemas/|scripts/lib/normalize\.py|scripts/lib/bots\.py|scripts/lib/quality\.py|tests/test_collect_and_normalize\.py|\.github/workflows/)'
-          changed=$(git diff --name-only "$BASE_SHA" "$HEAD_SHA")
+          # Three-dot: diff from the merge base, so an advanced base branch
+          # neither leaks unrelated base changes in nor masks a real edit.
+          changed=$(git diff --name-only "$BASE_SHA...$HEAD_SHA")
           offenders=$(echo "$changed" | grep -E "$DENYLIST" || true)
           if [ -n "$offenders" ]; then
             echo "::error::A data-labeled PR may not edit shared files. Offending paths:"

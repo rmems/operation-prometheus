@@ -50,6 +50,8 @@ def _fmt_signals(record: dict[str, Any]) -> str:
     unique = record.get("unique_review_signal_count")
     if total is None and unique is None:
         return "—"
+    if total is None:
+        return str(unique)
     if unique is None or unique == total:
         return str(total)
     return f"{unique} of {total}"
@@ -127,6 +129,13 @@ def splice(status_text: str, block: str) -> str:
             f"         {BEGIN_MARKER}\n"
             f"         {END_MARKER}"
         )
+    if status_text.count(BEGIN_MARKER) > 1 or status_text.count(END_MARKER) > 1:
+        # With two blocks, only the first would be refreshed — the second would
+        # stay stale forever while --check reports success.
+        raise SystemExit(
+            f"ERROR: {STATUS_PATH.name} contains more than one generated block; "
+            f"keep exactly one {BEGIN_MARKER} / {END_MARKER} pair."
+        )
     if end < start:
         raise SystemExit(f"ERROR: {STATUS_PATH.name} markers are out of order.")
     return status_text[:start] + block + status_text[end + len(END_MARKER) :]
@@ -145,6 +154,14 @@ def main(argv: list[str] | None = None) -> int:
 
     manifests = load_manifests(args.manifest_dir)
     if not manifests:
+        if args.check:
+            # Fail closed: a typo'd --manifest-dir must not pass the gate.
+            print(
+                f"ERROR: no manifests found in {args.manifest_dir}; "
+                f"refusing to report {args.status.name} as up to date.",
+                file=sys.stderr,
+            )
+            return 1
         print(f"No manifests in {args.manifest_dir}; nothing to generate.", file=sys.stderr)
         return 0
 
