@@ -1,0 +1,21 @@
+tests/test_card_overrides.py
+  s_c96c20f8346870::t_d40c319c9f869a 125-145
+scripts/lib/normalize.py
+  s_c96c20f8346870::t_299c2e8b2721de 344-349
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.5.2",
+  "base_commit_sha": "cfd417063a9923236d635da3c5afba5aede9914a",
+  "prompts": {},
+  "sessions": {
+    "s_c96c20f8346870": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "ab4b0e8b-681d-47b8-b4e1-3c57b0573a5e",
+        "model": "claude-fable-5"
+      },
+      "human_author": "Raul Montoya Cardenas <montoyaraul34@gmail.com>"
+    }
+  }
+}
