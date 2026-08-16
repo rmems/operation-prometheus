@@ -73,11 +73,23 @@ jobs:
         with:
           python-version: "3.12"
       # Data extracts cannot commit STATUS.md (shared-files-guard denylist),
-      # so --check would fail every correctly labeled extract PR. Prove the
-      # generator can rebuild from this PR's manifests instead; the committed
-      # snapshot is refreshed by a pipeline PR, not by the extract.
+      # so --check would fail every correctly labeled extract PR. Those PRs
+      # only prove the generator can rebuild from this PR's manifests. A
+      # pipeline PR (or a push to main) still has to refresh the snapshot.
       - name: STATUS.md regenerates from datasets/manifests/
+        if: >-
+          github.event_name == 'pull_request' &&
+          contains(github.event.pull_request.labels.*.name, 'data') &&
+          !contains(github.event.pull_request.labels.*.name, 'pipeline') &&
+          !contains(github.event.pull_request.labels.*.name, 'schema')
         run: python scripts/build_status.py
+      - name: STATUS.md matches datasets/manifests/
+        if: >-
+          github.event_name != 'pull_request' ||
+          !contains(github.event.pull_request.labels.*.name, 'data') ||
+          contains(github.event.pull_request.labels.*.name, 'pipeline') ||
+          contains(github.event.pull_request.labels.*.name, 'schema')
+        run: python scripts/build_status.py --check
 
   # A data extract must confine itself to its own files. The shared files below
   # are edited by every extract, so two parallel extract PRs conflict on them —

@@ -135,6 +135,26 @@ def test_new_manifest_is_allowed_to_leave_committed_status_stale(tmp_path):
     assert updated != status
 
 
+def test_check_fails_when_status_lags_manifests(tmp_path):
+    """Pipeline gate: --check must fail when STATUS.md lags the manifests."""
+    from build_status import main
+
+    dest = tmp_path / "manifests"
+    dest.mkdir()
+    for path in (ROOT / "datasets" / "manifests").glob("*.manifest.json"):
+        (dest / path.name).write_text(path.read_text(encoding="utf-8"), encoding="utf-8")
+    extra = _manifest("new-extract-v0", "2099-01-01", [_record(99)])
+    (dest / "new-extract-v0.manifest.json").write_text(
+        json.dumps(extra), encoding="utf-8"
+    )
+    status = tmp_path / "STATUS.md"
+    committed = (ROOT / "STATUS.md").read_text(encoding="utf-8")
+    status.write_text(committed, encoding="utf-8")
+
+    assert main(["--check", "--manifest-dir", str(dest), "--status", str(status)]) == 1
+    assert status.read_text(encoding="utf-8") == committed
+
+
 def test_generated_totals_match_the_jsonl_on_disk():
     """The generated record counts must reflect real data, not just the manifests."""
     from build_status import load_manifests
