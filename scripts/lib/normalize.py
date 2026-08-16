@@ -342,8 +342,12 @@ def enrich_linked_issues(
             card or {}, CARD_OVERRIDE_KEYS["linked_issues"], self_pr
         )
         if isinstance(carded, (list, tuple)):
+            # Positive issue numbers only: a card typo like 0 or -1 would
+            # otherwise mint an invalid issues/0 provenance URL.
             refs: tuple[int, ...] = tuple(
-                int(n) for n in carded if str(n).strip().lstrip("-").isdigit()
+                int(s)
+                for s in (str(n).strip() for n in carded)
+                if s.isdigit() and int(s) > 0
             )
         else:
             refs = LINKED_ISSUE_OVERRIDE.get(_override_key(self_repo, self_pr), ())

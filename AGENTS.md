@@ -26,20 +26,22 @@ issue/review signal → code state → patch/fix → validation → outcome
 
 ## Data extracts stay in their own lane
 
-Extract PRs run in parallel, so an extract must touch **only its own files**. A
-data-labeled PR that edits a shared file is rejected by the `shared-files-guard`
-CI job.
+Extract PRs run in parallel, so an extract must touch **only its own files**. The
+`shared-files-guard` CI job enforces the shared-file part of that rule: a
+data-labeled PR that edits any file on its denylist is rejected.
 
 | Instead of editing… | Do this |
 |---------------------|---------|
 | `STATUS.md` | Nothing — it is generated. Run `python scripts/build_status.py` after adding your manifest. |
 | `scripts/lib/normalize.py` override dicts | Put `domain_by_pr` / `task_type_by_pr` / `linked_issues_by_pr` on your dataset card. |
 | `tests/test_collect_and_normalize.py` | Add `tests/test_overrides_<repo>.py`. |
-| `docs/source-repos.md` / `_index.md` | Add `docs/source-repos/<repo>.md`, plus one index row. |
+| `docs/source-repos.md` (stub) | Add `docs/source-repos/<repo>.md`, plus your one row in `_index.md`'s Index table. |
 | `README.md` shortlist bullets | Nothing — link from your `docs/source-repos/<repo>.md`. |
 
 So a new extract adds: a card, a JSONL, a manifest, `docs/source-repos/<repo>.md`,
-and optionally `tests/test_overrides_<repo>.py`. Nothing else.
+one Index row in `docs/source-repos/_index.md`, and optionally
+`tests/test_overrides_<repo>.py`. Nothing else — the index row is the one shared
+touch point, and it is a single-line table insert, not a rewrite.
 
 Pipeline or schema work legitimately edits the shared files — label those PRs
 `pipeline` or `schema` and the guard stands down.

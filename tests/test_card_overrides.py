@@ -89,6 +89,35 @@ def test_linked_issues_by_pr_on_card_adds_stubs():
     ]
 
 
+def test_linked_issues_by_pr_rejects_non_positive_numbers():
+    """A card typo like 0 or -1 must not mint an issues/0 provenance URL."""
+    from lib.normalize import normalize_record
+
+    raw = {
+        "source": {"repo": "rmems/widget", "pr_number": 12},
+        "pull": {
+            "title": "feat: add thing",
+            "body": "No close keywords here.",
+            "state": "closed",
+            "merged": True,
+            "draft": False,
+        },
+        "linked_issues": [],
+        "reviews": [],
+        "review_comments": [],
+        "issue_comments": [],
+        "files": [{"filename": "src/lib.rs", "status": "modified", "patch": "+x\n"}],
+        "checks": {},
+        "commits": [],
+    }
+    card = {"linked_issues_by_pr": {"12": [0, -1, "-3", 5, "junk"]}}
+    urls = normalize_record(raw, card)["source_urls"]
+    assert urls == [
+        "https://github.com/rmems/widget/pull/12",
+        "https://github.com/rmems/widget/issues/5",
+    ]
+
+
 def test_linked_issues_by_pr_beats_shared_dict():
     from lib.normalize import enrich_linked_issues
 

@@ -3,9 +3,11 @@
 Operation Prometheus extracts trajectory datasets from public repositories. This
 directory tracks which repos and PRs are targeted for extraction.
 
-**One file per source repo.** A new extract adds its own file here and edits nothing
-else in this directory — that is what lets extract PRs land in parallel (GH #37).
-Cross-repo policy and the index below are the only shared content.
+**One file per source repo.** A new extract adds its own file here plus one row in
+the [Index](#index) table below, and edits nothing else in this directory — that is
+what lets extract PRs land in parallel (GH #37). This index file is shared, but the
+only permitted extract edit is that single-line row insert; everything else in it is
+cross-repo policy maintained by pipeline PRs.
 
 ## Extraction Format
 
