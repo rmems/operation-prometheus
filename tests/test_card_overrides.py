@@ -122,6 +122,27 @@ def test_linked_issues_by_pr_rejects_non_positive_numbers():
     ]
 
 
+def test_linked_issues_by_pr_scalar_value_is_coerced_not_dropped():
+    """A card writing "22" or 22 instead of [22] must not silently fall back
+    to the legacy table with a different issue set (Devin review on #38)."""
+    from lib.normalize import enrich_linked_issues
+
+    raw = {
+        "source": {"repo": "rmems/grok-ozempic", "pr_number": 26},
+        "pull": {"number": 26, "body": "No close keywords."},
+        "linked_issues": [],
+        "commits": [],
+    }
+    # The legacy table maps grok-ozempic#26 to issue 22; a scalar card value
+    # naming a different issue must win, as the list form does.
+    for scalar in ("99", 99):
+        card = {"linked_issues_by_pr": {"26": scalar}}
+        assert [i["number"] for i in enrich_linked_issues(raw, card)] == [99]
+    # true/false is a card bug, not issue 1/0 — falls back to the legacy table.
+    card = {"linked_issues_by_pr": {"26": True}}
+    assert [i["number"] for i in enrich_linked_issues(raw, card)] == [22]
+
+
 def test_linked_issues_by_pr_beats_shared_dict():
     from lib.normalize import enrich_linked_issues
 

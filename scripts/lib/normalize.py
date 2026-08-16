@@ -341,6 +341,12 @@ def enrich_linked_issues(
         carded = card_override(
             card or {}, CARD_OVERRIDE_KEYS["linked_issues"], self_pr
         )
+        # A bare "22" or 22 on the card means [22]: without this coercion the
+        # scalar would fail the sequence check below and silently fall back to
+        # the legacy table, dropping the card author's intent. bool is excluded
+        # because it is an int subclass (true would become issues/1).
+        if isinstance(carded, (str, int)) and not isinstance(carded, bool):
+            carded = (carded,)
         if isinstance(carded, (list, tuple)):
             # Positive issue numbers only: a card typo like 0 or -1 would
             # otherwise mint an invalid issues/0 provenance URL. Parsed via
