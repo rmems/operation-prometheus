@@ -32,7 +32,7 @@ data-labeled PR that edits any file on its denylist is rejected.
 
 | Instead of editing… | Do this |
 |---------------------|---------|
-| `STATUS.md` | Nothing — generated from `datasets/manifests/`. Do not commit it (the guard rejects that). |
+| `STATUS.md` | Nothing — generated from `datasets/manifests/`. Do not commit it (the guard rejects that); CI refreshes it on `main` after your extract merges. |
 | `scripts/lib/normalize.py` override dicts | Put `domain_by_pr` / `task_type_by_pr` / `linked_issues_by_pr` on your dataset card. |
 | `scripts/lib/bots.py` / `scripts/lib/quality.py` | Nothing — bot stripping and quality scoring are pipeline code. Label the PR `pipeline` if they genuinely need to change. |
 | `tests/test_collect_and_normalize.py` | Add `tests/test_overrides_<repo>.py`. |

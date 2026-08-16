@@ -15,7 +15,8 @@ concurrency:
   group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
   cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
-# Every job only reads the repo; nothing here pushes or comments.
+# Read-only by default; the one exception is status-refresh, which pushes the
+# regenerated derived docs on main and carries its own job-level write grant.
 permissions:
   contents: read
 
@@ -70,6 +71,7 @@ jobs:
           fi
 
   status-up-to-date:
+    if: github.event_name == 'pull_request'
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -81,22 +83,48 @@ jobs:
       # Data extracts cannot commit STATUS.md or docs/source-repos/_index.md
       # (shared-files-guard denylist), so --check would fail every correctly
       # labeled extract PR. Those PRs only prove the generator can rebuild from
-      # this PR's manifests and docs. A pipeline PR (or a push to main) still
-      # has to refresh the snapshots.
+      # this PR's manifests and docs; status-refresh commits the real snapshots
+      # after merge. A pipeline PR still has to refresh them itself.
       - name: STATUS.md and docs index regenerate from manifests and docs
         if: >-
-          github.event_name == 'pull_request' &&
           contains(github.event.pull_request.labels.*.name, 'data') &&
           !contains(github.event.pull_request.labels.*.name, 'pipeline') &&
           !contains(github.event.pull_request.labels.*.name, 'schema')
         run: python scripts/build_status.py
       - name: STATUS.md and docs index match manifests and docs
         if: >-
-          github.event_name != 'pull_request' ||
           !contains(github.event.pull_request.labels.*.name, 'data') ||
           contains(github.event.pull_request.labels.*.name, 'pipeline') ||
           contains(github.event.pull_request.labels.*.name, 'schema')
         run: python scripts/build_status.py --check
+
+  # A merged data extract leaves the committed STATUS.md and docs index one
+  # dataset behind (extract PRs may not edit them). Instead of letting main go
+  # red on staleness, regenerate on every push to main and commit the refreshed
+  # snapshots as a bot commit. The regeneration is deterministic and the second
+  # run would find nothing to write, so this cannot loop.
+  status-refresh:
+    if: github.event_name == 'push'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Regenerate derived docs and commit if stale
+        run: |
+          python scripts/build_status.py
+          if git diff --quiet -- STATUS.md docs/source-repos/_index.md; then
+            echo "Derived docs already fresh."
+            exit 0
+          fi
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add STATUS.md docs/source-repos/_index.md
+          git commit -m "chore: regenerate STATUS.md and docs index [skip ci]"
+          git push
 
   # A data extract must confine itself to its own files. The shared files below
   # are edited by every extract, so two parallel extract PRs conflict on them —
