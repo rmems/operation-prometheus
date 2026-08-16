@@ -26,9 +26,11 @@ issue/review signal → code state → patch/fix → validation → outcome
 
 ## Data extracts stay in their own lane
 
-Extract PRs run in parallel, so an extract must touch **only its own files**. The
-`shared-files-guard` CI job enforces the shared-file part of that rule: a
-data-labeled PR that edits any file on its denylist is rejected.
+Extract PRs run in parallel, so an extract must touch **only its own files** —
+the one exception is a PR also labeled `pipeline` or `schema`, which may edit
+shared files because that is its job. The `shared-files-guard` CI job enforces
+the shared-file part of that rule: a data-labeled PR that edits any file on its
+denylist is rejected unless it carries one of those exempt labels.
 
 | Instead of editing… | Do this |
 |---------------------|---------|
