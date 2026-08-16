@@ -36,13 +36,13 @@ data-labeled PR that edits any file on its denylist is rejected.
 | `scripts/lib/normalize.py` override dicts | Put `domain_by_pr` / `task_type_by_pr` / `linked_issues_by_pr` on your dataset card. |
 | `scripts/lib/bots.py` / `scripts/lib/quality.py` | Nothing — bot stripping and quality scoring are pipeline code. Label the PR `pipeline` if they genuinely need to change. |
 | `tests/test_collect_and_normalize.py` | Add `tests/test_overrides_<repo>.py`. |
-| `docs/source-repos.md` (stub) | Add `docs/source-repos/<repo>.md`, plus your one row in `_index.md`'s Index table. |
+| `docs/source-repos.md` (stub) | Add `docs/source-repos/<repo>.md` with an `<!-- index: … -->` line near the top. |
+| `docs/source-repos/_index.md` | Nothing — its Index table is generated from the per-repo docs' index lines. |
 | `README.md` shortlist bullets | Nothing — link from your `docs/source-repos/<repo>.md`. |
 
-So a new extract adds: a card, a JSONL, a manifest, `docs/source-repos/<repo>.md`,
-one Index row in `docs/source-repos/_index.md`, and optionally
-`tests/test_overrides_<repo>.py`. Nothing else — the index row is the one shared
-touch point, and it is a single-line table insert, not a rewrite.
+So a new extract adds: a card, a JSONL, a manifest, `docs/source-repos/<repo>.md`
+(carrying its own index line), and optionally `tests/test_overrides_<repo>.py`.
+Nothing shared at all.
 
 Pipeline or schema work legitimately edits the shared files — label those PRs
 `pipeline` or `schema` and the guard stands down.

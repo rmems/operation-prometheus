@@ -1,5 +1,7 @@
 # corinth-canal
 
+<!-- index: [rmems/corinth-canal](https://github.com/rmems/corinth-canal) | v0 extracted -->
+
 **Repo**: [rmems/corinth-canal](https://github.com/rmems/corinth-canal)
 **Description**: Turning MOE architecture into SNN quantization
 **Language**: Rust

@@ -78,18 +78,19 @@ jobs:
       - uses: actions/setup-python@v5
         with:
           python-version: "3.12"
-      # Data extracts cannot commit STATUS.md (shared-files-guard denylist),
-      # so --check would fail every correctly labeled extract PR. Those PRs
-      # only prove the generator can rebuild from this PR's manifests. A
-      # pipeline PR (or a push to main) still has to refresh the snapshot.
-      - name: STATUS.md regenerates from datasets/manifests/
+      # Data extracts cannot commit STATUS.md or docs/source-repos/_index.md
+      # (shared-files-guard denylist), so --check would fail every correctly
+      # labeled extract PR. Those PRs only prove the generator can rebuild from
+      # this PR's manifests and docs. A pipeline PR (or a push to main) still
+      # has to refresh the snapshots.
+      - name: STATUS.md and docs index regenerate from manifests and docs
         if: >-
           github.event_name == 'pull_request' &&
           contains(github.event.pull_request.labels.*.name, 'data') &&
           !contains(github.event.pull_request.labels.*.name, 'pipeline') &&
           !contains(github.event.pull_request.labels.*.name, 'schema')
         run: python scripts/build_status.py
-      - name: STATUS.md matches datasets/manifests/
+      - name: STATUS.md and docs index match manifests and docs
         if: >-
           github.event_name != 'pull_request' ||
           !contains(github.event.pull_request.labels.*.name, 'data') ||
@@ -119,7 +120,7 @@ jobs:
           HEAD_SHA: ${{ github.event.pull_request.head.sha }}
         run: |
           # Keep in sync with the table in AGENTS.md.
-          DENYLIST='^(STATUS\.md|README\.md|docs/source-repos\.md|schemas/|scripts/lib/normalize\.py|scripts/lib/bots\.py|scripts/lib/quality\.py|tests/test_collect_and_normalize\.py|\.github/workflows/)'
+          DENYLIST='^(STATUS\.md|README\.md|docs/source-repos\.md|docs/source-repos/_index\.md|schemas/|scripts/lib/normalize\.py|scripts/lib/bots\.py|scripts/lib/quality\.py|tests/test_collect_and_normalize\.py|\.github/workflows/)'
           # Three-dot: diff from the merge base, so an advanced base branch
           # neither leaks unrelated base changes in nor masks a real edit.
           changed=$(git diff --name-only "$BASE_SHA...$HEAD_SHA")

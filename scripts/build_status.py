@@ -1,9 +1,9 @@
 #!/usr/bin/env python3
-"""Regenerate the derived section of STATUS.md from datasets/manifests/*.json.
+"""Regenerate the derived docs: STATUS.md and docs/source-repos/_index.md.
 
 Usage:
-    python scripts/build_status.py            # rewrite the generated block
-    python scripts/build_status.py --check    # fail if the block is stale (pipeline)
+    python scripts/build_status.py            # rewrite the generated blocks
+    python scripts/build_status.py --check    # fail if any block is stale (pipeline)
 
 Every data extract used to hand-edit STATUS.md: it rewrote the "Last updated"
 line, renumbered the accomplishments list, and *replaced* the trajectory-quality
@@ -14,12 +14,17 @@ So the inventory is derived instead. Everything between the BEGIN/END markers is
 generated from the manifests each extract already ships; the narrative sections
 outside the markers stay hand-written, because "what we accomplished" and "what
 is still missing" are not derivable from a manifest.
+
+The Index table in docs/source-repos/_index.md is derived the same way — from an
+``<!-- index: <repo link> | <status> -->`` line each per-repo doc carries — so an
+extract adds only its own doc file and never edits the shared index.
 """
 
 from __future__ import annotations
 
 import argparse
 import json
+import re
 import sys
 from pathlib import Path
 from typing import Any
@@ -27,9 +32,13 @@ from typing import Any
 ROOT = Path(__file__).resolve().parent.parent
 MANIFEST_DIR = ROOT / "datasets" / "manifests"
 STATUS_PATH = ROOT / "STATUS.md"
+DOCS_DIR = ROOT / "docs" / "source-repos"
 
 BEGIN_MARKER = "<!-- BEGIN GENERATED: scripts/build_status.py -->"
 END_MARKER = "<!-- END GENERATED -->"
+INDEX_BEGIN_MARKER = "<!-- BEGIN GENERATED INDEX: scripts/build_status.py -->"
+INDEX_END_MARKER = "<!-- END GENERATED INDEX -->"
+INDEX_ENTRY_RE = re.compile(r"<!--\s*index:\s*(.+?)\s*\|\s*(.+?)\s*-->")
 
 
 def load_manifests(manifest_dir: Path) -> list[dict[str, Any]]:
@@ -118,27 +127,65 @@ def render_block(manifests: list[dict[str, Any]]) -> str:
     return "\n".join(out)
 
 
-def splice(status_text: str, block: str) -> str:
-    """Replace the marked region of STATUS.md with a freshly rendered block."""
-    start = status_text.find(BEGIN_MARKER)
-    end = status_text.find(END_MARKER)
+def load_index_entries(docs_dir: Path) -> list[tuple[str, str, str]]:
+    """(source-repo cell, doc filename, status cell) for every per-repo doc."""
+    entries: list[tuple[str, str, str]] = []
+    for path in sorted(docs_dir.glob("*.md")):
+        if path.name == "_index.md":
+            continue
+        match = INDEX_ENTRY_RE.search(path.read_text(encoding="utf-8"))
+        if not match:
+            raise SystemExit(
+                f"ERROR: {path} has no index line, so it would silently drop out of\n"
+                f"       the generated Index table. Add one near the top, e.g.:\n"
+                f"         <!-- index: [owner/repo](https://github.com/owner/repo)"
+                f" | v0 extracted -->"
+            )
+        entries.append((match.group(1), path.name, match.group(2)))
+    return entries
+
+
+def render_index_block(entries: list[tuple[str, str, str]]) -> str:
+    """Build the generated Index table for _index.md (markers included)."""
+    out: list[str] = [INDEX_BEGIN_MARKER, ""]
+    out.append("<!-- Derived from the index line in each per-repo doc - do not edit by hand. -->")
+    out.append("")
+    out.append("| Source repo | Doc | Status |")
+    out.append("|-------------|-----|--------|")
+    for repo, doc, status in entries:
+        out.append(f"| {repo} | [{doc}]({doc}) | {status} |")
+    out.append("")
+    out.append(INDEX_END_MARKER)
+    return "\n".join(out)
+
+
+def splice(
+    text: str,
+    block: str,
+    begin: str = BEGIN_MARKER,
+    end_marker: str = END_MARKER,
+    name: str = "STATUS.md",
+) -> str:
+    """Replace the marked region of a derived doc with a freshly rendered block."""
+    start = text.find(begin)
+    end = text.find(end_marker)
     if start == -1 or end == -1:
         raise SystemExit(
-            f"ERROR: {STATUS_PATH.name} is missing the generated-block markers.\n"
-            f"       Add these two lines where the inventory belongs:\n"
-            f"         {BEGIN_MARKER}\n"
-            f"         {END_MARKER}"
+            f"ERROR: {name} is missing the generated-block markers.\n"
+            f"       Add these two lines where the generated content belongs:\n"
+            f"         {begin}\n"
+            f"         {end_marker}"
         )
-    if status_text.count(BEGIN_MARKER) > 1 or status_text.count(END_MARKER) > 1:
+    if text.count(begin) > 1 or text.count(end_marker) > 1:
         # With two blocks, only the first would be refreshed — the second would
         # stay stale forever while --check reports success.
         raise SystemExit(
-            f"ERROR: {STATUS_PATH.name} contains more than one generated block; "
-            f"keep exactly one {BEGIN_MARKER} / {END_MARKER} pair."
+            f"ERROR: {name} contains more than one generated block; "
+            f"keep exactly one {begin} / {end_marker} pair."
         )
     if end < start:
-        raise SystemExit(f"ERROR: {STATUS_PATH.name} markers are out of order.")
-    return status_text[:start] + block + status_text[end + len(END_MARKER) :]
+        raise SystemExit(f"ERROR: {name} markers are out of order.")
+    return text[:start] + block + text[end + len(end_marker) :]
 
 
 def main(argv: list[str] | None = None) -> int:
@@ -150,40 +197,60 @@ def main(argv: list[str] | None = None) -> int:
     )
     parser.add_argument("--manifest-dir", type=Path, default=MANIFEST_DIR)
     parser.add_argument("--status", type=Path, default=STATUS_PATH)
+    parser.add_argument("--docs-dir", type=Path, default=DOCS_DIR)
     args = parser.parse_args(argv)
 
     manifests = load_manifests(args.manifest_dir)
-    if not manifests:
-        if args.check:
-            # Fail closed: a typo'd --manifest-dir must not pass the gate.
-            print(
-                f"ERROR: no manifests found in {args.manifest_dir}; "
-                f"refusing to report {args.status.name} as up to date.",
-                file=sys.stderr,
-            )
-            return 1
-        print(f"No manifests in {args.manifest_dir}; nothing to generate.", file=sys.stderr)
-        return 0
+    if not manifests and args.check:
+        # Fail closed: a typo'd --manifest-dir must not pass the gate.
+        print(
+            f"ERROR: no manifests found in {args.manifest_dir}; "
+            f"refusing to report {args.status.name} as up to date.",
+            file=sys.stderr,
+        )
+        return 1
 
-    current = args.status.read_text(encoding="utf-8")
-    updated = splice(current, render_block(manifests))
+    # (path, current text, freshly rendered text) per derived doc.
+    targets: list[tuple[Path, str, str]] = []
+    if manifests:
+        current = args.status.read_text(encoding="utf-8")
+        targets.append(
+            (args.status, current, splice(current, render_block(manifests), name=args.status.name))
+        )
+    else:
+        print(f"No manifests in {args.manifest_dir}; skipping {args.status.name}.", file=sys.stderr)
 
+    index_path = args.docs_dir / "_index.md"
+    index_current = index_path.read_text(encoding="utf-8")
+    index_block = render_index_block(load_index_entries(args.docs_dir))
+    targets.append(
+        (
+            index_path,
+            index_current,
+            splice(
+                index_current, index_block, INDEX_BEGIN_MARKER, INDEX_END_MARKER, index_path.name
+            ),
+        )
+    )
+
+    stale = [path.name for path, current, updated in targets if updated != current]
     if args.check:
-        if updated != current:
+        if stale:
             print(
-                f"ERROR: {args.status.name} is out of date with "
-                f"{args.manifest_dir.name}/. Run: python scripts/build_status.py",
+                f"ERROR: {', '.join(stale)} out of date with the source files. "
+                f"Run: python scripts/build_status.py",
                 file=sys.stderr,
             )
             return 1
-        print(f"{args.status.name} is up to date ({len(manifests)} extracts).")
+        print(f"{', '.join(p.name for p, _, _ in targets)} up to date ({len(manifests)} extracts).")
         return 0
 
-    if updated == current:
-        print(f"{args.status.name} already up to date ({len(manifests)} extracts).")
-        return 0
-    args.status.write_text(updated, encoding="utf-8")
-    print(f"Wrote {args.status.name} ({len(manifests)} extracts).")
+    for path, current, updated in targets:
+        if updated == current:
+            print(f"{path.name} already up to date.")
+        else:
+            path.write_text(updated, encoding="utf-8")
+            print(f"Wrote {path.name}.")
     return 0
 
 

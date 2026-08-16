@@ -1,5 +1,7 @@
 # Limen-Neural (organization)
 
+<!-- index: [Limen-Neural](https://github.com/Limen-Neural) (org) | Wave A extracted (axon-encoder) -->
+
 **Org**: [Limen-Neural](https://github.com/Limen-Neural) — public SNN / neuromorphic research stack (owner: rmems).  
 **Inventory (2026-07)**: ~23 public repos; ~250–293 merged PRs org-wide; ~15% Dependabot noise.  
 **Languages**: Rust-majority (axon-encoder, neuromod, kinetic-signals, limbic-critic, …) + Julia (SpikeStream, TemporalFocus, NeuroPulse, LiquidCortex, …) + SystemVerilog (`silicon-hdl`).  

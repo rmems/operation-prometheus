@@ -21,6 +21,24 @@ def _manifest(name: str, created: str, records: list[dict]) -> dict:
     }
 
 
+def _docs_dir(tmp_path: Path) -> Path:
+    """A minimal docs/source-repos layout: one per-repo doc plus a marked index."""
+    from build_status import INDEX_BEGIN_MARKER, INDEX_END_MARKER
+
+    docs = tmp_path / "source-repos"
+    docs.mkdir()
+    (docs / "widget.md").write_text(
+        "# widget\n\n"
+        "<!-- index: [rmems/widget](https://github.com/rmems/widget) | v0 extracted -->\n",
+        encoding="utf-8",
+    )
+    (docs / "_index.md").write_text(
+        f"# Index\n\n{INDEX_BEGIN_MARKER}\n{INDEX_END_MARKER}\n",
+        encoding="utf-8",
+    )
+    return docs
+
+
 def _record(pr: int, **over) -> dict:
     base = {
         "id": f"rmems-widget-{pr}",
@@ -118,10 +136,54 @@ def test_check_fails_when_no_manifests_found(tmp_path):
     empty.mkdir()
     status = tmp_path / "STATUS.md"
     status.write_text((ROOT / "STATUS.md").read_text(encoding="utf-8"), encoding="utf-8")
+    docs = _docs_dir(tmp_path)
 
-    assert main(["--check", "--manifest-dir", str(empty), "--status", str(status)]) == 1
-    # Without --check an empty directory is still a no-op, not an error.
-    assert main(["--manifest-dir", str(empty), "--status", str(status)]) == 0
+    args = ["--manifest-dir", str(empty), "--status", str(status), "--docs-dir", str(docs)]
+    assert main(["--check", *args]) == 1
+    # Without --check an empty directory skips STATUS.md, not an error.
+    assert main(args) == 0
+
+
+def test_index_generated_from_per_repo_doc_lines(tmp_path):
+    """The Index table derives from each doc's index line — no shared hand edit."""
+    from build_status import main
+
+    dest = tmp_path / "manifests"
+    dest.mkdir()
+    (dest / "alpha-v0.manifest.json").write_text(
+        json.dumps(_manifest("alpha-v0", "2026-01-01", [_record(1)])), encoding="utf-8"
+    )
+    status = tmp_path / "STATUS.md"
+    status.write_text((ROOT / "STATUS.md").read_text(encoding="utf-8"), encoding="utf-8")
+    docs = _docs_dir(tmp_path)
+    (docs / "gadget.md").write_text(
+        "# gadget\n\n"
+        "<!-- index: [rmems/gadget](https://github.com/rmems/gadget) | shortlisted -->\n",
+        encoding="utf-8",
+    )
+
+    args = ["--manifest-dir", str(dest), "--status", str(status), "--docs-dir", str(docs)]
+    assert main(args) == 0
+    index = (docs / "_index.md").read_text(encoding="utf-8")
+    assert "| [rmems/widget](https://github.com/rmems/widget) | [widget.md](widget.md) | v0 extracted |" in index
+    assert "| [rmems/gadget](https://github.com/rmems/gadget) | [gadget.md](gadget.md) | shortlisted |" in index
+    # Now up to date; a doc added later makes --check fail until regenerated.
+    assert main(["--check", *args]) == 0
+    (docs / "zeta.md").write_text(
+        "# zeta\n\n<!-- index: [rmems/zeta](https://github.com/rmems/zeta) | shortlisted -->\n",
+        encoding="utf-8",
+    )
+    assert main(["--check", *args]) == 1
+
+
+def test_doc_without_index_line_is_an_error(tmp_path):
+    """A doc missing its index line must fail loudly, not vanish from the Index."""
+    from build_status import load_index_entries
+
+    docs = _docs_dir(tmp_path)
+    (docs / "gadget.md").write_text("# gadget\n\nno index line here\n", encoding="utf-8")
+    with pytest.raises(SystemExit, match="has no index line"):
+        load_index_entries(docs)
 
 
 def test_status_regenerates_without_committed_rewrite():
@@ -176,8 +238,10 @@ def test_check_fails_when_status_lags_manifests(tmp_path):
     status = tmp_path / "STATUS.md"
     committed = (ROOT / "STATUS.md").read_text(encoding="utf-8")
     status.write_text(committed, encoding="utf-8")
+    docs = _docs_dir(tmp_path)
 
-    assert main(["--check", "--manifest-dir", str(dest), "--status", str(status)]) == 1
+    args = ["--manifest-dir", str(dest), "--status", str(status), "--docs-dir", str(docs)]
+    assert main(["--check", *args]) == 1
     assert status.read_text(encoding="utf-8") == committed
 
 

@@ -1,5 +1,7 @@
 # grok-ozempic
 
+<!-- index: [rmems/grok-ozempic](https://github.com/rmems/grok-ozempic) | v0 extracted -->
+
 **Repo**: [rmems/grok-ozempic](https://github.com/rmems/grok-ozempic)  
 **Description**: SNN-logic ternary quantization for Grok-1 MoE (xai-dissect manifests, GOZ1 packs, SAAQ artifact validation)  
 **Language**: Rust (default); Python on `#42` via `language_by_pr`  

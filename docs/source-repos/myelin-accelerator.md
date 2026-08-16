@@ -1,5 +1,7 @@
 # myelin-accelerator
 
+<!-- index: [rmems/myelin-accelerator](https://github.com/rmems/myelin-accelerator) | v0 extracted -->
+
 **Repo**: [rmems/myelin-accelerator](https://github.com/rmems/myelin-accelerator)  
 **Description**: CUDA kernels and bitpacking for ternary/SNN acceleration (backend path used by grok-ozempic#25)  
 **Language**: Rust (+ CUDA `.cu` kernels)  
