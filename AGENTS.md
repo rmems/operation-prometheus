@@ -32,7 +32,7 @@ data-labeled PR that edits any file on its denylist is rejected.
 
 | Instead of editing… | Do this |
 |---------------------|---------|
-| `STATUS.md` | Nothing — it is generated. Run `python scripts/build_status.py` after adding your manifest. |
+| `STATUS.md` | Nothing — generated from `datasets/manifests/`. Do not commit it (the guard rejects that). |
 | `scripts/lib/normalize.py` override dicts | Put `domain_by_pr` / `task_type_by_pr` / `linked_issues_by_pr` on your dataset card. |
 | `tests/test_collect_and_normalize.py` | Add `tests/test_overrides_<repo>.py`. |
 | `docs/source-repos.md` (stub) | Add `docs/source-repos/<repo>.md`, plus your one row in `_index.md`'s Index table. |

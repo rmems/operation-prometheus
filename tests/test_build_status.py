@@ -98,16 +98,41 @@ def test_splice_without_markers_is_an_error():
         splice("# Title\n\nno markers here\n", "block")
 
 
-def test_committed_status_is_up_to_date():
-    """CI runs `build_status.py --check`; fail here too so it is caught locally."""
-    from build_status import load_manifests, render_block, splice
+def test_status_regenerates_without_committed_rewrite():
+    """Data extracts must not commit STATUS.md (shared-files-guard).
+
+    Adding a manifest is enough: the generator splices a complete block into
+    the existing marked region. Requiring the committed file to already match
+    would make every data-labeled extract fail CI.
+    """
+    from build_status import BEGIN_MARKER, END_MARKER, load_manifests, render_block, splice
 
     status = (ROOT / "STATUS.md").read_text(encoding="utf-8")
     manifests = load_manifests(ROOT / "datasets" / "manifests")
     assert manifests, "no manifests found"
-    assert splice(status, render_block(manifests)) == status, (
-        "STATUS.md is stale — run: python scripts/build_status.py"
+    updated = splice(status, render_block(manifests))
+    assert BEGIN_MARKER in updated and END_MARKER in updated
+    for manifest in manifests:
+        assert f"### {manifest['name']}" in updated
+
+
+def test_new_manifest_is_allowed_to_leave_committed_status_stale(tmp_path):
+    """An extract PR adds a manifest and leaves STATUS.md untouched."""
+    from build_status import load_manifests, render_block, splice
+
+    status = (ROOT / "STATUS.md").read_text(encoding="utf-8")
+    dest = tmp_path / "manifests"
+    dest.mkdir()
+    for path in (ROOT / "datasets" / "manifests").glob("*.manifest.json"):
+        (dest / path.name).write_text(path.read_text(encoding="utf-8"), encoding="utf-8")
+    extra = _manifest("new-extract-v0", "2099-01-01", [_record(99)])
+    (dest / "new-extract-v0.manifest.json").write_text(
+        json.dumps(extra), encoding="utf-8"
     )
+
+    updated = splice(status, render_block(load_manifests(dest)))
+    assert "### new-extract-v0" in updated
+    assert updated != status
 
 
 def test_generated_totals_match_the_jsonl_on_disk():

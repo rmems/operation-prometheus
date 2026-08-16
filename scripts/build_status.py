@@ -3,7 +3,7 @@
 
 Usage:
     python scripts/build_status.py            # rewrite the generated block
-    python scripts/build_status.py --check    # fail if the block is stale (CI)
+    python scripts/build_status.py --check    # fail if the block is stale (pipeline)
 
 Every data extract used to hand-edit STATUS.md: it rewrote the "Last updated"
 line, renumbered the accomplishments list, and *replaced* the trajectory-quality
