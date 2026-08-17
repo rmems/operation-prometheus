@@ -5,12 +5,28 @@ on:
     branches: [main]
   pull_request:
     branches: [main]
+    # labeled/unlabeled are not in the default set; without them, adding or
+    # removing the `data` label would never re-run the shared-files guard.
+    types: [opened, synchronize, reopened, labeled, unlabeled]
+
+# labeled/unlabeled can fire in quick succession; only the newest run of a PR
+# matters. Pushes to main are never cancelled mid-run.
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+# Read-only by default; the one exception is status-refresh, which pushes the
+# regenerated derived docs on main and carries its own job-level write grant.
+permissions:
+  contents: read
 
 jobs:
   lint:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
       - uses: actions/setup-python@v5
         with:
           python-version: "3.12"
@@ -21,6 +37,8 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
       - uses: actions/setup-python@v5
         with:
           python-version: "3.12"
@@ -38,6 +56,8 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
       - uses: actions/setup-python@v5
         with:
           python-version: "3.12"
@@ -50,3 +70,97 @@ jobs:
             echo "No JSONL files to validate yet"
           fi
 
+  status-up-to-date:
+    if: github.event_name == 'pull_request'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      # Data extracts cannot commit STATUS.md or docs/source-repos/_index.md
+      # (shared-files-guard denylist), so --check would fail every correctly
+      # labeled extract PR. Those PRs only prove the generator can rebuild from
+      # this PR's manifests and docs; status-refresh commits the real snapshots
+      # after merge. A pipeline PR still has to refresh them itself.
+      - name: STATUS.md and docs index regenerate from manifests and docs
+        if: >-
+          contains(github.event.pull_request.labels.*.name, 'data') &&
+          !contains(github.event.pull_request.labels.*.name, 'pipeline') &&
+          !contains(github.event.pull_request.labels.*.name, 'schema')
+        run: python scripts/build_status.py
+      - name: STATUS.md and docs index match manifests and docs
+        if: >-
+          !contains(github.event.pull_request.labels.*.name, 'data') ||
+          contains(github.event.pull_request.labels.*.name, 'pipeline') ||
+          contains(github.event.pull_request.labels.*.name, 'schema')
+        run: python scripts/build_status.py --check
+
+  # A merged data extract leaves the committed STATUS.md and docs index one
+  # dataset behind (extract PRs may not edit them). Instead of letting main go
+  # red on staleness, regenerate on every push to main and commit the refreshed
+  # snapshots as a bot commit. The regeneration is deterministic and the second
+  # run would find nothing to write, so this cannot loop.
+  status-refresh:
+    if: github.event_name == 'push'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Regenerate derived docs and commit if stale
+        run: |
+          python scripts/build_status.py
+          if git diff --quiet -- STATUS.md docs/source-repos/_index.md; then
+            echo "Derived docs already fresh."
+            exit 0
+          fi
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add STATUS.md docs/source-repos/_index.md
+          git commit -m "chore: regenerate STATUS.md and docs index [skip ci]"
+          git push
+
+  # A data extract must confine itself to its own files. The shared files below
+  # are edited by every extract, so two parallel extract PRs conflict on them —
+  # that is the whole reason this guard exists (GH #37). Pipeline and schema
+  # changes legitimately touch them, so they are exempt via label.
+  shared-files-guard:
+    if: >-
+      github.event_name == 'pull_request' &&
+      contains(github.event.pull_request.labels.*.name, 'data') &&
+      !contains(github.event.pull_request.labels.*.name, 'pipeline') &&
+      !contains(github.event.pull_request.labels.*.name, 'schema')
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+      - name: Reject edits to shared files
+        env:
+          BASE_SHA: ${{ github.event.pull_request.base.sha }}
+          HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+        run: |
+          # Keep in sync with the table in AGENTS.md.
+          DENYLIST='^(STATUS\.md|README\.md|docs/source-repos\.md|docs/source-repos/_index\.md|schemas/|scripts/lib/normalize\.py|scripts/lib/bots\.py|scripts/lib/quality\.py|tests/test_collect_and_normalize\.py|\.github/workflows/)'
+          # Three-dot: diff from the merge base, so an advanced base branch
+          # neither leaks unrelated base changes in nor masks a real edit.
+          changed=$(git diff --name-only "$BASE_SHA...$HEAD_SHA")
+          offenders=$(echo "$changed" | grep -E "$DENYLIST" || true)
+          if [ -n "$offenders" ]; then
+            echo "::error::A data-labeled PR may not edit shared files. Offending paths:"
+            echo "$offenders" | sed 's/^/  /'
+            echo ""
+            echo "Put per-PR labelling on the dataset card (domain_by_pr / task_type_by_pr /"
+            echo "linked_issues_by_pr), add repo-specific tests to tests/test_overrides_<repo>.py,"
+            echo "document the repo in docs/source-repos/<repo>.md, and let STATUS.md regenerate."
+            echo "If this really is a pipeline or schema change, add the 'pipeline' or 'schema' label."
+            exit 1
+          fi
+          echo "No shared files touched."

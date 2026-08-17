@@ -81,3 +81,7 @@ Thumbs.db
 # Only the documentation README is tracked here.
 .beads/*
 !.beads/README.md
+
+# Local agent scratch state (already filtered out of curated patches by
+# _NOISE_PATCH_DIRS in scripts/lib/normalize.py).
+.kilo/

@@ -70,6 +70,38 @@ def _override_key(repo: str, pr: int) -> tuple[str, int]:
     return (str(repo).strip().lower(), pr)
 
 
+# Per-PR overrides live on the dataset card first, so a new extract ships its
+# labelling decisions in its own card JSON instead of appending to the shared
+# tables below — that is what lets extracts land in parallel without touching a
+# common file. The module-level dicts remain as the fallback for the extracts
+# that predate card-based overrides. A (repo, pr) pair must never appear in both
+# sources; ``test_no_card_and_dict_override_overlap`` enforces that.
+CARD_OVERRIDE_KEYS: dict[str, str] = {
+    "domain": "domain_by_pr",
+    "task_type": "task_type_by_pr",
+    "linked_issues": "linked_issues_by_pr",
+}
+
+
+def card_pr_map(card: dict[str, Any], key: str) -> dict[int, Any]:
+    """Read a per-PR override map off the card (JSON keys may be str or int)."""
+    raw_map = card.get(key)
+    if not isinstance(raw_map, dict):
+        return {}
+    out: dict[int, Any] = {}
+    for k, v in raw_map.items():
+        try:
+            out[int(k)] = v
+        except (TypeError, ValueError):
+            continue
+    return out
+
+
+def card_override(card: dict[str, Any], key: str, pr: int) -> Any:
+    """Look up one per-PR card override; ``None`` means "not set on the card"."""
+    return card_pr_map(card, key).get(pr)
+
+
 # Per-PR overrides for corinth-canal shortlist training_use (schema enums).
 TRAINING_USE_OVERRIDE: dict[tuple[str, int], str] = {
     ("rmems/corinth-canal", 82): "repair",
@@ -80,6 +112,7 @@ TRAINING_USE_OVERRIDE: dict[tuple[str, int], str] = {
     ("rmems/corinth-canal", 96): "validation",
 }
 
+# Fallback only — new extracts set ``task_type_by_pr`` on their card instead.
 TASK_TYPE_OVERRIDE: dict[tuple[str, int], str] = {
     ("rmems/corinth-canal", 82): "feature",
     ("rmems/corinth-canal", 89): "test",
@@ -103,6 +136,7 @@ TASK_TYPE_OVERRIDE: dict[tuple[str, int], str] = {
 # Numbers are the ones documented in docs/source-repos.md and each dataset card's
 # ``related_issues``; entries here are references, not close-links, so the stubs
 # they produce carry ``closed_by_pr: False``.
+# Fallback only — new extracts set ``linked_issues_by_pr`` on their card instead.
 LINKED_ISSUE_OVERRIDE: dict[tuple[str, int], tuple[int, ...]] = {
     ("rmems/grok-ozempic", 26): (22,),
     ("rmems/grok-ozempic", 29): (16, 22, 27),
@@ -116,6 +150,7 @@ LINKED_ISSUE_OVERRIDE: dict[tuple[str, int], tuple[int, ...]] = {
     ("rmems/myelin-accelerator", 26): (9,),
 }
 
+# Fallback only — new extracts set ``domain_by_pr`` on their card instead.
 DOMAIN_OVERRIDE: dict[tuple[str, int], str] = {
     ("rmems/corinth-canal", 82): "gpu-compute",
     ("rmems/corinth-canal", 89): "gpu-compute",
@@ -175,18 +210,13 @@ def training_use_for(repo: str, pr: int, card: dict[str, Any]) -> str:
 
 
 def domain_for(repo: str, pr: int, card: dict[str, Any], raw: dict[str, Any]) -> str:
+    # Card first, then the legacy shared table (see CARD_OVERRIDE_KEYS).
+    carded = card_override(card, CARD_OVERRIDE_KEYS["domain"], pr)
+    if isinstance(carded, str) and carded.strip():
+        return carded.strip()
     key = _override_key(repo, pr)
     if key in DOMAIN_OVERRIDE:
         return DOMAIN_OVERRIDE[key]
-    # Per-PR domain map on the card (keys may be str or int in JSON).
-    by_pr = card.get("domain_by_pr") or {}
-    if by_pr:
-        for k, v in by_pr.items():
-            try:
-                if int(k) == pr and isinstance(v, str) and v.strip():
-                    return v.strip()
-            except (TypeError, ValueError):
-                continue
     domains = card.get("domains") or []
     if domains:
         return str(domains[0])
@@ -196,7 +226,13 @@ def domain_for(repo: str, pr: int, card: dict[str, Any], raw: dict[str, Any]) ->
     return "systems"
 
 
-def task_type_for(repo: str, pr: int, raw: dict[str, Any]) -> str:
+def task_type_for(
+    repo: str, pr: int, raw: dict[str, Any], card: dict[str, Any] | None = None
+) -> str:
+    # Card first, then the legacy shared table (see CARD_OVERRIDE_KEYS).
+    carded = card_override(card or {}, CARD_OVERRIDE_KEYS["task_type"], pr)
+    if isinstance(carded, str) and carded.strip():
+        return carded.strip()
     key = _override_key(repo, pr)
     if key in TASK_TYPE_OVERRIDE:
         return TASK_TYPE_OVERRIDE[key]
@@ -228,7 +264,9 @@ def build_source_urls(repo: str, pr: int, linked_issues: list[dict[str, Any]]) -
     return urls
 
 
-def enrich_linked_issues(raw: dict[str, Any]) -> list[dict[str, Any]]:
+def enrich_linked_issues(
+    raw: dict[str, Any], card: dict[str, Any] | None = None
+) -> list[dict[str, Any]]:
     """Merge API-fetched linked issues with close-keyword refs from PR/commits.
 
     Older raw records may have empty ``linked_issues`` when bodies used multi-issue
@@ -299,7 +337,33 @@ def enrich_linked_issues(raw: dict[str, Any]) -> list[dict[str, Any]]:
         _stub(i_owner, i_repo, num, closed_by_pr=True)
 
     if self_pr is not None:
-        for num in LINKED_ISSUE_OVERRIDE.get(_override_key(self_repo, self_pr), ()):
+        # Card first, then the legacy shared table (see CARD_OVERRIDE_KEYS).
+        carded = card_override(
+            card or {}, CARD_OVERRIDE_KEYS["linked_issues"], self_pr
+        )
+        # A bare "22" or 22 on the card means [22]: without this coercion the
+        # scalar would fail the sequence check below and silently fall back to
+        # the legacy table, dropping the card author's intent. bool is excluded
+        # because it is an int subclass (true would become issues/1).
+        if isinstance(carded, (str, int)) and not isinstance(carded, bool):
+            carded = (carded,)
+        if isinstance(carded, (list, tuple)):
+            # Positive issue numbers only: a card typo like 0 or -1 would
+            # otherwise mint an invalid issues/0 provenance URL. Parsed via
+            # int() under try/except, not isdigit(): isdigit() accepts
+            # digit-like glyphs such as "²" that int() then rejects.
+            parsed: list[int] = []
+            for n in carded:
+                try:
+                    num = int(str(n).strip())
+                except ValueError:
+                    continue
+                if num > 0:
+                    parsed.append(num)
+            refs: tuple[int, ...] = tuple(parsed)
+        else:
+            refs = LINKED_ISSUE_OVERRIDE.get(_override_key(self_repo, self_pr), ())
+        for num in refs:
             _stub(owner, name, num, closed_by_pr=False)
     return linked
 
@@ -1273,7 +1337,7 @@ def normalize_record(
     owner_repo = repo.replace("/", "-") if "/" in repo else repo
     traj_id = f"{owner_repo}-{pr}"
 
-    linked_issues = enrich_linked_issues(raw)
+    linked_issues = enrich_linked_issues(raw, card)
     # Prefer enriched list for context/URLs without mutating caller's raw dict.
     raw_for_ctx = {**raw, "linked_issues": linked_issues}
     issue_context = extract_issue_context(raw_for_ctx)
@@ -1290,7 +1354,7 @@ def normalize_record(
         "source_urls": build_source_urls(repo, pr, linked_issues),
         "language": language_for(card, raw),
         "domain": domain_for(repo, pr, card, raw),
-        "task_type": task_type_for(repo, pr, raw),
+        "task_type": task_type_for(repo, pr, raw, card),
         "before_context": extract_before_context(raw),
         "patch": extract_patch(raw, raw_path=raw_path, max_bytes=max_patch_bytes),
         "validation": extract_validation(raw),
