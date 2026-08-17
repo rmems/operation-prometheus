@@ -1,0 +1,47 @@
+STATUS.md
+  s_c96c20f8346870::t_b9b5fdcbeab764 87
+  s_c96c20f8346870::t_8ee0ac629b4b30 28,30,43,45,59,61
+datasets/jsonl/grok-ozempic-v0.jsonl
+  s_c96c20f8346870::t_8ee0ac629b4b30 1,3
+datasets/jsonl/myelin-accelerator-v0.jsonl
+  s_c96c20f8346870::t_8ee0ac629b4b30 1,3
+datasets/manifests/myelin-accelerator-v0.manifest.json
+  s_c96c20f8346870::t_8ee0ac629b4b30 9-10,15,47
+datasets/jsonl/corinth-canal-v0.jsonl
+  s_c96c20f8346870::t_8ee0ac629b4b30 3,5
+datasets/cards/grok-ozempic-v0.json
+  s_c96c20f8346870::t_359d703c247976 36
+docs/source-repos/_index.md
+  s_c96c20f8346870::t_a6058bdf033db5 74-76
+datasets/manifests/grok-ozempic-v0.manifest.json
+  s_c96c20f8346870::t_8ee0ac629b4b30 9-10,15,47
+datasets/manifests/corinth-canal-v0.manifest.json
+  s_c96c20f8346870::t_8ee0ac629b4b30 9-10,47,79
+datasets/cards/myelin-accelerator-v0.json
+  s_c96c20f8346870::t_359d703c247976 30
+tests/test_collect_and_normalize.py
+  s_c96c20f8346870::t_b4251f0dc0df48 96-97,110-113
+scripts/lib/normalize.py
+  s_c96c20f8346870::t_66ba7d73b32db5 58
+  s_c96c20f8346870::t_aa02035025c312 106-109
+datasets/cards/corinth-canal-v0.json
+  s_c96c20f8346870::t_359d703c247976 24
+schemas/pr_trajectory.schema.json
+  s_c96c20f8346870::t_e97310e84ba3d3 179,182
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.5.2",
+  "base_commit_sha": "fa40cbfa3d50fbb6036ed680d5f9c46859da35c5",
+  "prompts": {},
+  "sessions": {
+    "s_c96c20f8346870": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "ab4b0e8b-681d-47b8-b4e1-3c57b0573a5e",
+        "model": "claude-fable-5"
+      },
+      "human_author": "Raul Montoya Cardenas <montoyaraul34@gmail.com>"
+    }
+  }
+}
