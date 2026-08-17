@@ -49,7 +49,7 @@
 | PR | domain | training_use | task_type | quality | signals | validation |
 |----|--------|--------------|-----------|---------|---------|------------|
 | #50 | security | repair | security | 0.95 | 8 | 4 |
-| #41 | api | review-to-patch | bugfix | 0.95 | 7 of 8 | 3 |
+| #41 | api | review-to-patch | bugfix | 0.95 | 8 | 3 |
 | #37 | snn | review-to-patch | feature | 0.95 | 8 | 4 |
 
 ### myelin-accelerator-v0
