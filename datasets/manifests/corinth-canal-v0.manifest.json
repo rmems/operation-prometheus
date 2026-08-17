@@ -6,8 +6,8 @@
   "source_repo": "rmems/corinth-canal",
   "jsonl_path": "datasets/jsonl/corinth-canal-v0.jsonl",
   "record_count": 6,
-  "sha256": "4fa04e0ad19003c2d085eb3e7ec36c3a5d35e9bc0779510c74789af436ff60f8",
-  "bytes": 403083,
+  "sha256": "35e10f1b71a7124ed605ede96a4e4092d30e8edbfc075428f23eb64d82e4589b",
+  "bytes": 403087,
   "records": [
     {
       "id": "rmems-corinth-canal-82",
@@ -44,7 +44,7 @@
     {
       "id": "rmems-corinth-canal-91",
       "pr_number": 91,
-      "training_use": "other",
+      "training_use": "feature",
       "task_type": "feature",
       "domain": "ml-infra",
       "language": "Rust",
@@ -76,7 +76,7 @@
     {
       "id": "rmems-corinth-canal-95",
       "pr_number": 95,
-      "training_use": "other",
+      "training_use": "feature",
       "task_type": "feature",
       "domain": "ml-infra",
       "language": "Rust",

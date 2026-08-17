@@ -176,9 +176,10 @@
         "review-to-patch",
         "bug-prediction",
         "validation",
+        "feature",
         "other"
       ],
-      "description": "Intended primary training signal this trajectory provides."
+      "description": "Intended primary training signal this trajectory provides. feature added in v0.1 (GH #39); records labeled before then carry other."
     },
     "quality_score": {
       "type": "number",

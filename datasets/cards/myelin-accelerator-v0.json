@@ -27,7 +27,7 @@
   "created_by": "Grok Build Agent: Grok 4.5",
   "jsonl_path": "datasets/jsonl/myelin-accelerator-v0.jsonl",
   "manifest_path": "datasets/manifests/myelin-accelerator-v0.manifest.json",
-  "notes": "First myelin-accelerator extract (GH #21). Shortlist re-scored 2026-08-02 against measured review-signal yield: #26 (packed ternary GEMV/GEMM + CUDA 13.3.1 CI), #18 (bitpacking + GPU CI + tests/benches), #22 (CUDA quality gate), #7/#6 (Corinth Canal CUDA/cust review→patch). Dropped #4 (0 kept signals) and #2 (noise across target/ files). Extends the CUDA ownership boundary already present via grok-ozempic#25. Schema maps feature → training_use other.",
+  "notes": "First myelin-accelerator extract (GH #21). Shortlist re-scored 2026-08-02 against measured review-signal yield: #26 (packed ternary GEMV/GEMM + CUDA 13.3.1 CI), #18 (bitpacking + GPU CI + tests/benches), #22 (CUDA quality gate), #7/#6 (Corinth Canal CUDA/cust review→patch). Dropped #4 (0 kept signals) and #2 (noise across target/ files). Extends the CUDA ownership boundary already present via grok-ozempic#25. Schema v0.1 training_use has feature (GH #39); #18/#26 carry it.",
   "source_doc": "docs/source-repos.md",
   "related_issues": {
     "operation_prometheus": [21, 11],

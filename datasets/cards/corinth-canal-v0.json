@@ -21,7 +21,7 @@
   "jsonl_path": "datasets/jsonl/corinth-canal-v0.jsonl",
   "markdown_card": "datasets/cards/corinth-canal-trajectories-v0.md",
   "manifest_path": "datasets/manifests/corinth-canal-v0.manifest.json",
-  "notes": "High-signal merged PRs with meaningful review/fix/validation loops. Extracted to datasets/jsonl/corinth-canal-v0.jsonl (6 lines). Schema training_use maps feature→other; #96 mapped to validation. Absolute home paths and secrets redacted. See markdown card for limitations.",
+  "notes": "High-signal merged PRs with meaningful review/fix/validation loops. Extracted to datasets/jsonl/corinth-canal-v0.jsonl (6 lines). Schema v0.1 training_use has feature (GH #39); #91/#95 carry it, #96 is deliberately mapped to validation. Absolute home paths and secrets redacted. See markdown card for limitations.",
   "source_doc": "docs/source-repos.md",
   "related_issues": {
     "operation_prometheus": [4, 5, 6, 7],

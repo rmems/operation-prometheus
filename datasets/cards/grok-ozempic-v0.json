@@ -33,7 +33,7 @@
   "created_by": "Grok Build Agent: Grok 4.5",
   "jsonl_path": "datasets/jsonl/grok-ozempic-v0.jsonl",
   "manifest_path": "datasets/manifests/grok-ozempic-v0.manifest.json",
-  "notes": "High-signal merged PRs for ternary quantization, alignment inventory, SAAQ artifact ladder, myelin CUDA backend boundary, xai-dissect pipeline wiring, GOZ1 quantization CLI, test-suite refactor, and Grok-1 embedding pickle→.npy export. Shortlist revised 2026-08-02 against measured review-signal yield (see docs/source-repos.md): added #43 and #33 (review-to-patch), dropped #8 (only 2 kept signals). #42 added 2026-08-12 after #18 review_signals dedupe and #19 language_by_pr (first Python record via language_by_pr). rmems is the repo's only human account; engineering review signal comes largely from the gemini-code-assist / chatgpt-codex-connector allowlist. Schema maps feature -> training_use other.",
+  "notes": "High-signal merged PRs for ternary quantization, alignment inventory, SAAQ artifact ladder, myelin CUDA backend boundary, xai-dissect pipeline wiring, GOZ1 quantization CLI, test-suite refactor, and Grok-1 embedding pickle→.npy export. Shortlist revised 2026-08-02 against measured review-signal yield (see docs/source-repos.md): added #43 and #33 (review-to-patch), dropped #8 (only 2 kept signals). #42 added 2026-08-12 after #18 review_signals dedupe and #19 language_by_pr (first Python record via language_by_pr). rmems is the repo's only human account; engineering review signal comes largely from the gemini-code-assist / chatgpt-codex-connector allowlist. Schema v0.1 training_use has feature (GH #39); #11/#25 carry it.",
   "source_doc": "docs/source-repos.md",
   "related_issues": {
     "operation_prometheus": [11, 18, 19, 20],

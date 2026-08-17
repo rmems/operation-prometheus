@@ -71,8 +71,9 @@ To add a new source repository:
 
 See [data-policy.md](../data-policy.md) for allowed sources and exclusions.
 
-**Schema note:** card buckets may say `feature`, but schema v0 `training_use` has no
-`feature` value — the normalizer maps `feature` → `other` and keeps `task_type: feature`.
+**Schema note:** as of schema v0.1 (GH #39), `training_use` includes `feature`, so a
+`feature` card bucket maps through directly. Records extracted before v0.1 carried
+`other` and were regenerated when the enum landed.
 
 ## Data root
 

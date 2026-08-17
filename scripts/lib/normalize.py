@@ -55,7 +55,7 @@ def _is_review_app_check(name: str | None) -> bool:
 FEATURE_BUCKET_TO_TRAINING = {
     "repair": "repair",
     "validation": "validation",
-    "feature": "other",
+    "feature": "feature",
     "review-to-patch": "review-to-patch",
     "autocomplete": "autocomplete",
     "bug-prediction": "bug-prediction",
@@ -103,12 +103,14 @@ def card_override(card: dict[str, Any], key: str, pr: int) -> Any:
 
 
 # Per-PR overrides for corinth-canal shortlist training_use (schema enums).
+# 91/95 were forced to "other" only because schema v0 lacked "feature"; with the
+# v0.1 enum their card bucket resolves correctly and the entries are gone (GH #39).
+# 96 stays: its card bucket says feature, but the validator/summarizer CLI work is
+# deliberately labeled validation.
 TRAINING_USE_OVERRIDE: dict[tuple[str, int], str] = {
     ("rmems/corinth-canal", 82): "repair",
     ("rmems/corinth-canal", 89): "validation",
-    ("rmems/corinth-canal", 91): "other",
     ("rmems/corinth-canal", 94): "repair",
-    ("rmems/corinth-canal", 95): "other",
     ("rmems/corinth-canal", 96): "validation",
 }
 

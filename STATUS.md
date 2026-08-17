@@ -25,9 +25,9 @@
 | PR | domain | training_use | task_type | quality | signals | validation |
 |----|--------|--------------|-----------|---------|---------|------------|
 | #96 | tools | validation | feature | 0.78 | 8 | 3 |
-| #95 | ml-infra | other | feature | 0.58 | 8 | 3 |
+| #95 | ml-infra | feature | feature | 0.58 | 8 | 3 |
 | #94 | ml-infra | repair | feature | 0.94 | 8 | 3 |
-| #91 | ml-infra | other | feature | 0.62 | 8 | 3 |
+| #91 | ml-infra | feature | feature | 0.62 | 8 | 3 |
 | #89 | gpu-compute | validation | test | 0.92 | 8 | 3 |
 | #82 | gpu-compute | repair | feature | 0.86 | 8 | 3 |
 
@@ -40,9 +40,9 @@
 | #33 | testing | review-to-patch | refactor | 0.90 | 8 | 3 |
 | #29 | validation | validation | test | 0.90 | 8 | 4 |
 | #26 | validation | validation | feature | 0.95 | 8 | 3 |
-| #25 | ml-infra | other | feature | 0.95 | 8 | 2 |
+| #25 | ml-infra | feature | feature | 0.95 | 8 | 2 |
 | #24 | validation | validation | feature | 0.95 | 8 | 3 |
-| #11 | ml-infra | other | feature | 0.95 | 8 | 3 |
+| #11 | ml-infra | feature | feature | 0.95 | 8 | 3 |
 
 ### limen-axon-encoder-v0
 
@@ -56,9 +56,9 @@
 
 | PR | domain | training_use | task_type | quality | signals | validation |
 |----|--------|--------------|-----------|---------|---------|------------|
-| #26 | gpu-compute | other | feature | 0.90 | 8 | 4 |
+| #26 | gpu-compute | feature | feature | 0.90 | 8 | 4 |
 | #22 | cuda | repair | bugfix | 0.90 | 8 | 4 |
-| #18 | gpu-compute | other | feature | 0.90 | 8 | 3 |
+| #18 | gpu-compute | feature | feature | 0.90 | 8 | 3 |
 | #7 | cuda | review-to-patch | feature | 0.95 | 8 | 2 |
 | #6 | cuda | review-to-patch | feature | 0.95 | 8 | 2 |
 
@@ -77,7 +77,6 @@
 
 ## Remaining gaps
 
-- Schema v0 lacks `training_use: feature` (mapped to `other`)  
 - Later Limen waves (neuromod, SpikeStream, kinetic-signals, limbic-critic) not extracted  
 - Large patches still truncated; bot review noise high on Limen PRs  
 - Manual human re-inspection sample still recommended before training runs  
@@ -85,8 +84,7 @@
 ## Next-sprint roadmap (prioritized)
 
 1. **v0.6 fleet** — shortlist refreshes (#24/#25), docs inventory (#30), waves B/C  
-2. **Schema v0.1** — add `feature` to `training_use`  
-3. **SFT / preference pairs** — v0.7 (#23)  
+2. **SFT / preference pairs** — v0.7 (#23)  
 
 ## Verification checklist
 

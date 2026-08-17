@@ -93,7 +93,8 @@ def test_normalize_validates_against_schema():
     assert "https://github.com/rmems/corinth-canal/pull/89" in traj["source_urls"]
 
 
-def test_feature_bucket_maps_to_other_training_use():
+def test_feature_bucket_maps_to_feature_training_use():
+    """Schema v0.1 (GH #39): the feature bucket is a first-class training_use."""
     if not (FIXTURES / "pull_89.json").exists():
         pytest.skip("fixtures missing")
     raw = collect_pr(FakeClient(), "rmems/corinth-canal", 89)
@@ -106,7 +107,10 @@ def test_feature_bucket_maps_to_other_training_use():
         "domains": ["ml-infra"],
     }
     traj = normalize_record(raw, card)
-    assert traj["training_use"] == "other"
+    assert traj["training_use"] == "feature"
+    # The record must validate against the schema carrying the new enum value.
+    schema = json.loads(SCHEMA.read_text())
+    jsonschema.Draft7Validator(schema).validate(traj)
     assert traj["task_type"] in ("feature", "test", "other")
 
 
