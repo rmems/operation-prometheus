@@ -1,0 +1,27 @@
+datasets/manifests/limen-axon-encoder-v0.manifest.json
+  s_c96c20f8346870::t_ae266de099b42c 9-10,39
+datasets/jsonl/corinth-canal-v0.jsonl
+  s_c96c20f8346870::t_ae266de099b42c 1-6
+datasets/manifests/corinth-canal-v0.manifest.json
+  s_c96c20f8346870::t_ae266de099b42c 9-10,104
+datasets/jsonl/limen-axon-encoder-v0.jsonl
+  s_c96c20f8346870::t_ae266de099b42c 1-3
+STATUS.md
+  s_c96c20f8346870::t_ae266de099b42c 52
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.5.2",
+  "base_commit_sha": "0b3c759f4361c6905c120006a5fd7a11a463ca1f",
+  "prompts": {},
+  "sessions": {
+    "s_c96c20f8346870": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "ab4b0e8b-681d-47b8-b4e1-3c57b0573a5e",
+        "model": "claude-fable-5"
+      },
+      "human_author": "Raul Montoya Cardenas <montoyaraul34@gmail.com>"
+    }
+  }
+}
