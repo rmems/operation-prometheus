@@ -4,7 +4,7 @@
 
 <!-- BEGIN GENERATED: scripts/build_status.py -->
 
-**Last updated:** 2026-08-14  
+**Last updated:** 2026-08-16  
 **Extracts:** 4 · **Trajectories:** 22  
 
 <!-- Derived from datasets/manifests/*.manifest.json — do not edit by hand. -->
@@ -13,10 +13,10 @@
 
 | dataset | source repo | records | schema | extracted |
 |---------|-------------|---------|--------|-----------|
-| `corinth-canal-v0` | rmems/corinth-canal | 6 | pr_trajectory_v0 | 2026-07-22 |
-| `limen-axon-encoder-v0` | Limen-Neural/axon-encoder | 3 | pr_trajectory_v0 | 2026-07-24 |
-| `grok-ozempic-v0` | rmems/grok-ozempic | 8 | pr_trajectory_v0 | 2026-08-12 |
-| `myelin-accelerator-v0` | rmems/myelin-accelerator | 5 | pr_trajectory_v0 | 2026-08-14 |
+| `corinth-canal-v0` | rmems/corinth-canal | 6 | pr_trajectory_v0 | 2026-08-16 |
+| `grok-ozempic-v0` | rmems/grok-ozempic | 8 | pr_trajectory_v0 | 2026-08-16 |
+| `limen-axon-encoder-v0` | Limen-Neural/axon-encoder | 3 | pr_trajectory_v0 | 2026-08-16 |
+| `myelin-accelerator-v0` | rmems/myelin-accelerator | 5 | pr_trajectory_v0 | 2026-08-16 |
 
 ## Trajectory quality
 
@@ -31,14 +31,6 @@
 | #89 | gpu-compute | validation | test | 0.92 | 8 | 3 |
 | #82 | gpu-compute | repair | feature | 0.86 | 8 | 3 |
 
-### limen-axon-encoder-v0
-
-| PR | domain | training_use | task_type | quality | signals | validation |
-|----|--------|--------------|-----------|---------|---------|------------|
-| #50 | security | repair | security | 0.95 | 8 | 4 |
-| #41 | api | review-to-patch | bugfix | 0.95 | 8 | 3 |
-| #37 | snn | review-to-patch | feature | 0.95 | 8 | 4 |
-
 ### grok-ozempic-v0
 
 | PR | domain | training_use | task_type | quality | signals | validation |
@@ -51,6 +43,14 @@
 | #25 | ml-infra | other | feature | 0.95 | 8 | 2 |
 | #24 | validation | validation | feature | 0.95 | 8 | 3 |
 | #11 | ml-infra | other | feature | 0.95 | 8 | 3 |
+
+### limen-axon-encoder-v0
+
+| PR | domain | training_use | task_type | quality | signals | validation |
+|----|--------|--------------|-----------|---------|---------|------------|
+| #50 | security | repair | security | 0.95 | 8 | 4 |
+| #41 | api | review-to-patch | bugfix | 0.95 | 7 of 8 | 3 |
+| #37 | snn | review-to-patch | feature | 0.95 | 8 | 4 |
 
 ### myelin-accelerator-v0
 
