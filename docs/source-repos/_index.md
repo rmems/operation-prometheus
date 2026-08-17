@@ -28,6 +28,9 @@ One record per PR. See [datasets/README.md](../../datasets/README.md) for commit
 | [rmems/grok-ozempic](https://github.com/rmems/grok-ozempic) | [grok-ozempic.md](grok-ozempic.md) | v0 extracted |
 | [Limen-Neural](https://github.com/Limen-Neural) (org) | [limen-neural.md](limen-neural.md) | Wave A extracted (axon-encoder) |
 | [rmems/myelin-accelerator](https://github.com/rmems/myelin-accelerator) | [myelin-accelerator.md](myelin-accelerator.md) | v0 extracted |
+| [rmems/Theseus-Quarry](https://github.com/rmems/Theseus-Quarry) | [theseus-quarry.md](theseus-quarry.md) | shortlist drafted |
+| [rmems (org)](https://github.com/rmems) | [wave-c.md](wave-c.md) | pointers only |
+| [rmems/worktrees-hives](https://github.com/rmems/worktrees-hives) | [worktrees-hives.md](worktrees-hives.md) | shortlist drafted |
 
 <!-- END GENERATED INDEX -->
 
@@ -45,6 +48,18 @@ A PR belongs on a shortlist when it has:
    [`extract_review_signals`](../../scripts/lib/normalize.py) (hard cap `max_items=8`).
 3. **Validation evidence** — CI, tests, or a documented validation ladder.
 4. **Public-only history** — owner access to a private repo does not make it eligible.
+
+## Parked (Tier C)
+
+Repos deliberately **not** being extracted (live scan 2026-08-16). Parked repos have
+no per-repo doc and no index line; unparking one means giving it a doc per
+[Adding New Source Repos](#adding-new-source-repos).
+
+| Repo | Why parked | Revisit when |
+|------|-----------|--------------|
+| [rmems/blackwell-kernel-lab](https://github.com/rmems/blackwell-kernel-lab) | Merged PRs now exist (#22–#28, 2026-08) but are bench/experiment logs, and the repo boundary is in flux — issue #32 wants the agent harness removed ("this repo is CUDA kernels") | Harness split settles and an issue-linked kernel wave merges |
+| Dependabot-dominated repos (e.g. [plasticity-lab](https://github.com/Limen-Neural/plasticity-lab)) | Merge history is dependency-bump noise — nothing survives the [Avoid list](#avoid-for-v0-training) | A non-chore code wave lands |
+| Docs-only / config-only repos | No code delta to learn from (pure-docs exclusion) | They grow reviewed code PRs |
 
 ## Avoid for v0 training
 

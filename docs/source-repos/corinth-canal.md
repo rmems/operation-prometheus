@@ -79,3 +79,30 @@
 - **Why high-signal**: Adds `validate_local_saaq` (dry-run matrix validator with `--check-paths`) and `summarize_local_saaq` (markdown sprint summary from run artifacts). Tools-for-tools trajectory.
 - **Dataset bucket**: `feature` — CLI tooling for experiment validation and reporting
 - **Closes**: rmems/corinth-canal#90 (partial — Lane A + D)
+
+## Candidate next wave (2026-08-16 scan — not extracted)
+
+The v0 shortlist above predates the GH#118 GGUF/Safetensors refactor wave. Live
+merged candidates, with **raw** GitHub API counts (`reviews` / review threads /
+issue comments — *pre* bot-filter; pipeline yield is measured at extraction time):
+
+| PR | Title | Reviews | Threads | Comments | Size | Merged | Closes |
+|----|-------|---------|---------|----------|------|--------|--------|
+| [#125](https://github.com/rmems/corinth-canal/pull/125) | Unify GGUF/Safetensors family inference (GH#118 PR-1) | 81 | 44 | 29 | +1139/−230, 11 files | 2026-07-23 | #133 |
+| [#142](https://github.com/rmems/corinth-canal/pull/142) | Accept dense_sim/stub_uniform in ROUTING_MODE | 33 | 14 | 10 | +139/−23, 3 files | 2026-08-11 | #140 |
+| [#138](https://github.com/rmems/corinth-canal/pull/138) | Recover priority-ordered GGUF synapse source selection (GH#118 PR-2) | 11 | 13 | 19 | +891/−143, 6 files | 2026-08-08 | #134 |
+| [#128](https://github.com/rmems/corinth-canal/pull/128) | Split checkpoint.rs into private gguf/ modules (GH#118 PR-4) | 9 | 6 | 15 | +1329/−1207, 11 files | 2026-07-21 | — |
+| [#127](https://github.com/rmems/corinth-canal/pull/127) | Extract config validation helpers (GH#118 PR-3) | 7 | 2 | 12 | +49/−30, 1 file | 2026-07-22 | #135 |
+| [#126](https://github.com/rmems/corinth-canal/pull/126) | Priority-ordered GGUF synapse source selection (GH#118 PR-2) | 6 | 2 | 20 | +597/−130, 3 files | 2026-07-22 | — |
+
+Notes from the scan:
+
+- `#125` and `#142` carry the strongest review→fix signal; `#125` alone has 81
+  reviews over 16 commits.
+- `#138` is a *recovery* of `#126`'s change (same GH#118 PR-2 label) — the pair is a
+  potential regression→repair trajectory; extract together or prefer `#138`.
+- A newer safetensors module-extraction series (GH#147: [#152](https://github.com/rmems/corinth-canal/pull/152),
+  [#153](https://github.com/rmems/corinth-canal/pull/153), [#154](https://github.com/rmems/corinth-canal/pull/154),
+  merged 2026-08-12/13, reviews 2/10/13) plus [#156](https://github.com/rmems/corinth-canal/pull/156)
+  (GH#116 retarget to engram-parser) landed after this wave — lower measured density,
+  re-check when the next-wave extract is scoped.
