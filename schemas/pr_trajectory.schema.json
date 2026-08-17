@@ -179,7 +179,7 @@
         "feature",
         "other"
       ],
-      "description": "Intended primary training signal this trajectory provides. feature added in v0.1 (GH #39); records labeled before then carry other."
+      "description": "Intended primary training signal this trajectory provides. feature added in v0.1 (GH #39); feature-bucket records labeled before then carried other."
     },
     "quality_score": {
       "type": "number",

@@ -72,8 +72,8 @@ To add a new source repository:
 See [data-policy.md](../data-policy.md) for allowed sources and exclusions.
 
 **Schema note:** as of schema v0.1 (GH #39), `training_use` includes `feature`, so a
-`feature` card bucket maps through directly. Records extracted before v0.1 carried
-`other` and were regenerated when the enum landed.
+`feature` card bucket maps through directly. Records from `feature` card buckets
+extracted before v0.1 carried `other` and were regenerated when the enum landed.
 
 ## Data root
 

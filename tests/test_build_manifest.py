@@ -29,14 +29,16 @@ def test_record_row_shape_and_unique_signals():
             {"author": "a", "comment": "same"},
             {"author": "b", "comment": "same"},
             {"author": "c", "comment": "different"},
+            {"author": "d", "suggestion": "suggestion one"},
+            {"author": "e", "suggestion": "suggestion two"},
         ],
         "patch": "diff",
         "validation": [{"type": "ci", "result": "pass", "detail": "x"}],
         "source_urls": ["u1", "u2"],
     }
     row = record_row(rec)
-    assert row["review_signal_count"] == 3
-    assert row["unique_review_signal_count"] == 2
+    assert row["review_signal_count"] == 5
+    assert row["unique_review_signal_count"] == 4
     assert row["has_issue_context"] is True
     assert row["patch_chars"] == 4
     assert row["validation_count"] == 1

@@ -41,7 +41,7 @@ def record_row(rec: dict[str, Any]) -> dict[str, Any]:
         "has_issue_context": bool(rec.get("issue_context")),
         "review_signal_count": len(signals),
         "unique_review_signal_count": len(
-            {(s.get("comment") or "") for s in signals}
+            {(s.get("comment") or s.get("suggestion") or "") for s in signals}
         ),
         "patch_chars": len(rec.get("patch") or ""),
         "validation_count": len(rec.get("validation") or []),
