@@ -1,0 +1,31 @@
+datasets/manifests/corinth-canal-v0.manifest.json
+  s_c96c20f8346870::t_7126bc09b01735 4,18,23,34,39,50,55,66,71,82,87,98,103
+datasets/manifests/limen-axon-encoder-v0.manifest.json
+  s_c96c20f8346870::t_7126bc09b01735 4,9-10,18,23,34,39,50,55
+datasets/manifests/myelin-accelerator-v0.manifest.json
+  s_c96c20f8346870::t_7126bc09b01735 4
+datasets/manifests/grok-ozempic-v0.manifest.json
+  s_c96c20f8346870::t_7126bc09b01735 4
+tests/test_build_manifest.py
+  s_c96c20f8346870::t_9084e363ed9074 1-83
+scripts/build_manifest.py
+  s_c96c20f8346870::t_c06d6efc8d5895 1-145
+STATUS.md
+  ai_agent 7,16-19,47-53
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.5.2",
+  "base_commit_sha": "4a6cac9bb6dc4797eb1c808a6332ae7870525234",
+  "prompts": {},
+  "sessions": {
+    "s_c96c20f8346870": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "ab4b0e8b-681d-47b8-b4e1-3c57b0573a5e",
+        "model": "claude-fable-5"
+      },
+      "human_author": "Raul Montoya Cardenas <montoyaraul34@gmail.com>"
+    }
+  }
+}
