@@ -83,3 +83,32 @@ cleanest review→fix trajectory in the repo. Only `#11` reaches the 96 KiB patc
 carries the `# … truncated …` footer; `#24` (77,970 chars) and `#26` (50,149) are complete.
 `#26` is smaller than its raw diff because `.beads/` and `.claude/` agent state is filtered
 out of curated patches — see [`_NOISE_PATCH_DIRS`](../../scripts/lib/normalize.py).
+
+## Candidate next wave (2026-08-16 scan — not extracted)
+
+The v0 extract stops at `#43`. A GOZ1 v2/v3 + expert-remedy wave (`#69`–`#79`) has
+merged since, with heavy Codex/Gemini review→patch traffic. **Raw** GitHub API counts
+(`reviews` / review threads / issue comments — *pre* bot-filter; pipeline yield is
+measured at extraction time):
+
+| PR | Title | Reviews | Threads | Comments | Size | Merged | Closes |
+|----|-------|---------|---------|----------|------|--------|--------|
+| [#74](https://github.com/rmems/grok-ozempic/pull/74) | Expert higher-precision remedies for multi-block residual fidelity | 63 | 33 | 10 | +3714/−77, 9 files | 2026-08-08 | #73 |
+| [#72](https://github.com/rmems/grok-ozempic/pull/72) | Expert-only ternary multi-block residual fidelity | 54 | 32 | 11 | +2422/−3, 7 files | 2026-08-08 | #68 |
+| [#69](https://github.com/rmems/grok-ozempic/pull/69) | GOZ1 v2 persists the per-tensor ternary scale | 40 | 46 | 22 | +1588/−72, 22 files | 2026-08-07 | #65 |
+| [#71](https://github.com/rmems/grok-ozempic/pull/71) | GOZ1 v3 persists the applied per-tensor gif_threshold | 25 | 26 | 12 | +817/−121, 10 files | 2026-08-08 | #66 |
+| [#76](https://github.com/rmems/grok-ozempic/pull/76) | Measure stacked and denser expert remedies | 18 | 44 | 10 | +9059/−38, 22 files | 2026-08-11 | #75 |
+| [#77](https://github.com/rmems/grok-ozempic/pull/77) | Harden co-author hooks (Codex & Muse) + regression tests | 16 | 28 | 9 | +594/−36, 8 files | 2026-08-11 | — |
+| [#79](https://github.com/rmems/grok-ozempic/pull/79) | Harden #75 secondary evidence validation (PR #76 bot review) | 6 | 8 | 8 | +193/−24, 5 files | 2026-08-11 | — |
+
+Notes from the scan:
+
+- `#76` → `#79` is a merged review→patch pair (`#79` exists solely to answer `#76`'s
+  bot review) — extract together, mirroring the `#78`/`#79` pattern in worktrees-hives.
+- Beyond the wave: [#83](https://github.com/rmems/grok-ozempic/pull/83) (INT4 expert
+  middle-ground, **112 reviews / 65 threads** — the highest raw review count in the
+  repo, merged 2026-08-13) and [#86](https://github.com/rmems/grok-ozempic/pull/86)
+  (#85 harness, 37 reviews / 60 threads, merged 2026-08-15) are prime candidates for
+  the wave after this one.
+- `#76`'s +9059 lines are dominated by measurement artifacts — check the
+  [data-policy.md](../data-policy.md) generated-artifact exclusion before extracting.
