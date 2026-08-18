@@ -32,7 +32,9 @@ def test_resolve_raw_out_dir_in_tree_default(monkeypatch: pytest.MonkeyPatch):
     out = resolve_raw_out_dir("rmems/corinth-canal", None)
     assert out.name == "rmems_corinth-canal"
     assert out.parent.name == "raw"
-    assert "operation-prometheus" in str(out)
+    from lib.paths import repo_root
+
+    assert out == repo_root() / "datasets" / "raw" / "rmems_corinth-canal"
 
 
 def test_data_root_from_env_empty(monkeypatch: pytest.MonkeyPatch):

@@ -159,6 +159,29 @@ def test_linked_issues_by_pr_beats_shared_dict():
     assert [i["number"] for i in enrich_linked_issues(raw, card)] == [99]
 
 
+def test_language_override_and_language_by_pr_beat_card_language():
+    """GH #19: LANGUAGE_OVERRIDE and language_by_pr both beat card.language.
+
+    Card wins when both per-PR sources name the same PR (same card-first
+    order as domain_for after GH #37).
+    """
+    from lib.normalize import LANGUAGE_OVERRIDE, language_for
+
+    key = ("rmems/widget-lang", 3)
+    raw = {"files": [{"filename": "src/lib.rs"}]}
+    LANGUAGE_OVERRIDE[key] = "CUDA"
+    try:
+        card = {"language": "Rust"}
+        assert language_for("rmems/widget-lang", 3, card, raw) == "CUDA"
+        # A PR without a dict entry falls back to the card language.
+        assert language_for("rmems/widget-lang", 4, card, raw) == "Rust"
+        # Card language_by_pr beats the shared dict.
+        card_pr = {"language": "Rust", "language_by_pr": {"3": "Python"}}
+        assert language_for("rmems/widget-lang", 3, card_pr, raw) == "Python"
+    finally:
+        LANGUAGE_OVERRIDE.pop(key, None)
+
+
 def test_no_card_and_dict_override_overlap():
     """A (repo, pr) pair must be declared in exactly one place, never both.
 
@@ -169,6 +192,7 @@ def test_no_card_and_dict_override_overlap():
     from lib.normalize import (
         CARD_OVERRIDE_KEYS,
         DOMAIN_OVERRIDE,
+        LANGUAGE_OVERRIDE,
         LINKED_ISSUE_OVERRIDE,
         TASK_TYPE_OVERRIDE,
         card_pr_map,
@@ -178,6 +202,7 @@ def test_no_card_and_dict_override_overlap():
         CARD_OVERRIDE_KEYS["domain"]: DOMAIN_OVERRIDE,
         CARD_OVERRIDE_KEYS["task_type"]: TASK_TYPE_OVERRIDE,
         CARD_OVERRIDE_KEYS["linked_issues"]: LINKED_ISSUE_OVERRIDE,
+        CARD_OVERRIDE_KEYS["language"]: LANGUAGE_OVERRIDE,
     }
 
     overlaps: list[str] = []

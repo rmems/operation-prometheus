@@ -513,13 +513,79 @@ def test_language_by_pr_overrides_card_language():
     raw42 = {"source": {"pr_number": 42}, "files": [{"filename": "scripts/export.py"}]}
     raw7 = {"source": {"pr_number": 7}, "files": [{"filename": "src/lib.rs"}]}
     raw99 = {"source": {"pr_number": 99}, "files": [{"filename": "src/lib.rs"}]}
-    assert language_for(card, raw42) == "Python"
+    assert language_for("rmems/grok-ozempic", 42, card, raw42) == "Python"
     # Integer key in language_by_pr
-    assert language_for(card, raw7) == "Julia"
+    assert language_for("rmems/grok-ozempic", 7, card, raw7) == "Julia"
     # Empty override ignored → card language.
-    assert language_for(card, raw99) == "Rust"
+    assert language_for("rmems/grok-ozempic", 99, card, raw99) == "Rust"
     # No card language → extension sniff.
-    assert language_for({}, {"source": {"pr_number": 1}, "files": [{"filename": "a.py"}]}) == "Python"
+    assert (
+        language_for(
+            "rmems/widget",
+            1,
+            {},
+            {"source": {"pr_number": 1}, "files": [{"filename": "a.py"}]},
+        )
+        == "Python"
+    )
+
+
+def test_review_signal_dedupe_across_three_sources():
+    """GH #18: SHA-normalized acks from reviews / review_comments / issue_comments collapse."""
+    from lib.normalize import extract_review_signals
+
+    def ack(sha: str) -> str:
+        return (
+            f"Addressed in {sha}: reject negative payload offsets before mmap slice "
+            "and pin the export umask."
+        )
+
+    raw = {
+        "reviews": [
+            {
+                "user_login": "rmems",
+                "user_type": "User",
+                "state": "COMMENTED",
+                "body": ack("aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"),
+            }
+        ],
+        "review_comments": [
+            {
+                "user_login": "rmems",
+                "user_type": "User",
+                "body": ack("bbbbbbb"),
+            }
+            for _ in range(6)
+        ],
+        "issue_comments": [
+            {
+                "user_login": "rmems",
+                "user_type": "User",
+                "body": ack("cccccccc"),
+            }
+        ],
+    }
+    signals = extract_review_signals(raw, max_items=8)
+    assert len(signals) == 1
+    assert signals[0]["author"] == "rmems"
+    # First occurrence (reviews are processed first) keeps its original SHA.
+    assert "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa" in signals[0]["comment"]
+
+    extra_findings = [
+        {
+            "user_login": "reviewer-x",
+            "user_type": "User",
+            "body": f"Finding {i}: please validate export path edge case {i} before merge.",
+        }
+        for i in range(1, 12)
+    ]
+    capped = extract_review_signals(
+        {**raw, "review_comments": raw["review_comments"] + extra_findings},
+        max_items=8,
+    )
+    assert len(capped) == 8
+    unique = {(s.get("comment") or "") for s in capped}
+    assert len(unique) == 8
 
 
 def test_remotes_txt_stripped_from_patch():

@@ -1,0 +1,23 @@
+{
+  "name": "Operation Prometheus",
+  "build": {
+    "dockerfile": "../.cursor/Dockerfile",
+    "context": ".."
+  },
+  "customizations": {
+    "vscode": {
+      "extensions": [
+        "ms-python.python",
+        "ms-python.vscode-pylance",
+        "charliermarsh.ruff"
+      ],
+      "settings": {
+        "python.defaultInterpreterPath": "/usr/local/bin/python",
+        "python.testing.pytestEnabled": true,
+        "python.testing.pytestArgs": ["tests"]
+      }
+    }
+  },
+  "postCreateCommand": "python -m pip install --upgrade pip && pip install -r requirements.txt 'pytest==8.4.1' 'ruff==0.11.12'",
+  "remoteUser": "root"
+}

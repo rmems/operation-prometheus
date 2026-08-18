@@ -1,0 +1,8 @@
+{
+  "name": "operation-prometheus",
+  "build": {
+    "dockerfile": "Dockerfile",
+    "context": "."
+  },
+  "install": "python -m pip install --upgrade pip && pip install -r requirements.txt 'pytest==8.4.1' 'ruff==0.11.12'"
+}
