@@ -1,18 +1,18 @@
 {
   "name": "grok-ozempic-v0",
   "schema_version": "pr_trajectory_v0",
-  "created_at": "2026-08-12",
+  "created_at": "2026-08-16",
   "created_by": "Grok Build Agent: Grok 4.5",
   "source_repo": "rmems/grok-ozempic",
   "jsonl_path": "datasets/jsonl/grok-ozempic-v0.jsonl",
   "record_count": 8,
-  "sha256": "1b464fe1f9d88f699f57544686976ff610470fdc66c1454e97b2ead3275b571a",
-  "bytes": 531232,
+  "sha256": "0ff9af87193ee96678de487c81c3e1b4a841b152363c505a99cbb0e7a763c780",
+  "bytes": 531236,
   "records": [
     {
       "id": "rmems-grok-ozempic-11",
       "pr_number": 11,
-      "training_use": "other",
+      "training_use": "feature",
       "task_type": "feature",
       "domain": "ml-infra",
       "language": "Rust",
@@ -44,7 +44,7 @@
     {
       "id": "rmems-grok-ozempic-25",
       "pr_number": 25,
-      "training_use": "other",
+      "training_use": "feature",
       "task_type": "feature",
       "domain": "ml-infra",
       "language": "Rust",

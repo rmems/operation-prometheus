@@ -1,18 +1,18 @@
 {
   "name": "myelin-accelerator-v0",
   "schema_version": "pr_trajectory_v0",
-  "created_at": "2026-08-14",
+  "created_at": "2026-08-16",
   "created_by": "Grok Build Agent: Grok 4.5",
   "source_repo": "rmems/myelin-accelerator",
   "jsonl_path": "datasets/jsonl/myelin-accelerator-v0.jsonl",
   "record_count": 5,
-  "sha256": "09b765ceae8bba5e954d2923f8d90ec46fd8ebee84a8743b926619d9d05adba9",
-  "bytes": 326677,
+  "sha256": "8ad66e10c2f627f0c1362120c0a682d5b65f5e15167a9735c0c14e4c00c1d20c",
+  "bytes": 326681,
   "records": [
     {
       "id": "rmems-myelin-accelerator-18",
       "pr_number": 18,
-      "training_use": "other",
+      "training_use": "feature",
       "task_type": "feature",
       "domain": "gpu-compute",
       "language": "Rust",
@@ -44,7 +44,7 @@
     {
       "id": "rmems-myelin-accelerator-26",
       "pr_number": 26,
-      "training_use": "other",
+      "training_use": "feature",
       "task_type": "feature",
       "domain": "gpu-compute",
       "language": "Rust",
