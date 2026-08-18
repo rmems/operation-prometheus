@@ -426,7 +426,8 @@ _ACK_PREFIX_FOR_KEY = re.compile(
     r"(?:\*\*)?\s*:?\s*"
 )
 # Remaining commit-sha tokens masked so identical acks with different SHAs share a key.
-_SHA_TOKEN = re.compile(r"(?i)\b[0-9a-f]{7,40}\b")
+# Require at least one a-f so decimal sizes, offsets, and timestamps stay distinct.
+_SHA_TOKEN = re.compile(r"(?i)\b(?=[0-9a-f]*[a-f])[0-9a-f]{7,40}\b")
 
 
 def _is_non_actionable_review_body(body: str) -> bool:
@@ -462,7 +463,9 @@ def _signal_body_key(body: str) -> str:
     )
     text = re.sub(r"\s+", " ", text.strip())
     text = _ACK_PREFIX_FOR_KEY.sub("", text, count=1)
-    text = _SHA_TOKEN.sub("<sha>", text)
+    # Only acks: problem reviews that differ by a numeric/SHA-like token stay distinct.
+    if _is_ack_shaped_review_body(body):
+        text = _SHA_TOKEN.sub("<sha>", text)
     key = text.strip().lower()
     # Empty / punctuation-only after strip is not a usable signal key.
     if not re.search(r"[a-z0-9]", key):
