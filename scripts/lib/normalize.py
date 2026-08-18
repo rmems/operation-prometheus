@@ -462,9 +462,10 @@ def _signal_body_key(body: str) -> str:
         flags=re.DOTALL | re.IGNORECASE,
     )
     text = re.sub(r"\s+", " ", text.strip())
-    text = _ACK_PREFIX_FOR_KEY.sub("", text, count=1)
-    # Only acks: problem reviews that differ by a numeric/SHA-like token stay distinct.
+    # Only acks: strip the ack prefix and mask SHA tokens for deduplication.
+    # Problem reviews preserve their original text, including hex identifiers.
     if _is_ack_shaped_review_body(body):
+        text = _ACK_PREFIX_FOR_KEY.sub("", text, count=1)
         text = _SHA_TOKEN.sub("<sha>", text)
     key = text.strip().lower()
     # Empty / punctuation-only after strip is not a usable signal key.

@@ -1536,3 +1536,31 @@ def test_macroscope_removal_keeps_surrounding_lines_separate():
         "- cargo test --features cli",
         "- invalid fixture confirms failure behavior",
     ]
+
+
+def test_distinct_non_ack_findings_with_different_hex_stay_distinct():
+    """SHA masking only applies to acks; problem reviews with different hex IDs remain distinct."""
+    from lib.normalize import extract_review_signals
+
+    raw = {
+        "reviews": [],
+        "review_comments": [
+            {
+                "user_login": "reviewer-x",
+                "user_type": "User",
+                "body": "The commit abcdef1234567 introduces a memory leak in the parser.",
+            },
+            {
+                "user_login": "reviewer-y",
+                "user_type": "User",
+                "body": "The commit 9876543fedcba introduces a memory leak in the parser.",
+            },
+        ],
+        "issue_comments": [],
+    }
+    signals = extract_review_signals(raw, max_items=8)
+    # Two distinct findings that differ only by hex identifier should NOT be deduplicated.
+    assert len(signals) == 2
+    comments = [s["comment"] for s in signals]
+    assert any("abcdef1234567" in c for c in comments)
+    assert any("9876543fedcba" in c for c in comments)

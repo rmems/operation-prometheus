@@ -12,4 +12,10 @@ RUN apt-get update \
         jq=1.6-2.1+deb12u2 \
     && rm -rf /var/lib/apt/lists/*
 
+# Create non-root user for container security.
+RUN groupadd -r prometheus && useradd -r -g prometheus -m -d /home/prometheus prometheus \
+    && chown -R prometheus:prometheus /workspace /usr/local
+
 WORKDIR /workspace
+
+USER prometheus
