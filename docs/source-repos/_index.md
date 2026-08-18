@@ -25,7 +25,7 @@ One record per PR. See [datasets/README.md](../../datasets/README.md) for commit
 | Source repo | Doc | Status |
 |-------------|-----|--------|
 | [rmems/corinth-canal](https://github.com/rmems/corinth-canal) | [corinth-canal.md](corinth-canal.md) | v0 extracted |
-| [rmems/grok-ozempic](https://github.com/rmems/grok-ozempic) | [grok-ozempic.md](grok-ozempic.md) | v0 extracted |
+| [rmems/grok-ozempic](https://github.com/rmems/grok-ozempic) | [grok-ozempic.md](grok-ozempic.md) | v0 + v1 extracted |
 | [Limen-Neural](https://github.com/Limen-Neural) (org) | [limen-neural.md](limen-neural.md) | Wave A extracted (axon-encoder) |
 | [rmems/myelin-accelerator](https://github.com/rmems/myelin-accelerator) | [myelin-accelerator.md](myelin-accelerator.md) | v0 extracted |
 | [rmems/Theseus-Quarry](https://github.com/rmems/Theseus-Quarry) | [theseus-quarry.md](theseus-quarry.md) | shortlist drafted |

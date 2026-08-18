@@ -1,0 +1,47 @@
+{
+  "name": "grok-ozempic-v1",
+  "source_repo": "rmems/grok-ozempic",
+  "source_repo_url": "https://github.com/rmems/grok-ozempic",
+  "source_repo_description": "SNN-logic ternary quantization pipeline for Grok-1 MoE with xai-dissect manifests and SAAQ artifact validation",
+  "schema_version": "pr_trajectory_v0",
+  "schema_url": "https://github.com/rmems/operation-prometheus/blob/main/schemas/pr_trajectory.schema.json",
+  "language": "Rust",
+  "domains": ["ml-infra", "quantization", "validation"],
+  "domain_by_pr": {
+    "69": "quantization",
+    "71": "quantization",
+    "72": "quantization",
+    "74": "quantization",
+    "42": "ml-infra"
+  },
+  "language_by_pr": {
+    "42": "Python",
+    "72": "Python",
+    "74": "Python"
+  },
+  "task_type_by_pr": {
+    "72": "feature",
+    "74": "feature"
+  },
+  "linked_issues_by_pr": {
+    "72": [68]
+  },
+  "pr_count": 5,
+  "pr_numbers": [69, 71, 72, 74, 42],
+  "training_use_buckets": {
+    "feature": [69, 71],
+    "review-to-patch": [42, 72, 74]
+  },
+  "extracted_at": "2026-08-18",
+  "status": "extracted-v1",
+  "created_at": "2026-08-18",
+  "created_by": "Grok Build Agent: Grok 4.5",
+  "jsonl_path": "datasets/jsonl/grok-ozempic-v1.jsonl",
+  "manifest_path": "datasets/manifests/grok-ozempic-v1.manifest.json",
+  "notes": "GOZ1 v2/v3 + expert-remedy wave, scored 2026-08-18 against live merged PRs of rmems/grok-ozempic (list_merged_prs.py). Added #69 (v2 per-tensor scale), #71 (v3 gif_threshold), #72 (expert-only multi-block residual), #74 (higher-precision remedies). #42 re-included so the Python language_by_pr path is represented in v1 (already in v0 after #18/#19). Deferred: none from this candidate list. Dropped: #76 (2 unique signals; +9059-line generated measurement artifacts — data-policy exclusion), #77 (0 kept signals; co-author hook chore), #79 (0 kept signals after bot filter; follow-up to #76). v0 remains intact. Schema v0.1 (GH #39) maps the feature card bucket to training_use feature, so the pre-v0.1 feature→other caveat does not apply to this extract. #72 names #68 without a close keyword (linked_issues_by_pr). #69/#71 title-hint as feature; #72/#74 are research: titles forced to feature via task_type_by_pr.",
+  "source_doc": "docs/source-repos.md",
+  "related_issues": {
+    "operation_prometheus": [32, 18, 19, 20],
+    "grok_ozempic": [65, 66, 68, 73, 37]
+  }
+}
