@@ -80,6 +80,7 @@ CARD_OVERRIDE_KEYS: dict[str, str] = {
     "domain": "domain_by_pr",
     "task_type": "task_type_by_pr",
     "linked_issues": "linked_issues_by_pr",
+    "language": "language_by_pr",
 }
 
 
@@ -161,6 +162,11 @@ DOMAIN_OVERRIDE: dict[tuple[str, int], str] = {
     ("rmems/corinth-canal", 95): "ml-infra",
     ("rmems/corinth-canal", 96): "tools",
 }
+
+# Fallback only — new extracts set ``language_by_pr`` on their card instead.
+# Empty on purpose: v0 extracts that needed a per-PR language (#42 Python) already
+# declare it on the card, and the overlap test forbids listing the same PR here.
+LANGUAGE_OVERRIDE: dict[tuple[str, int], str] = {}
 
 TITLE_TASK_HINTS: list[tuple[re.Pattern[str], str]] = [
     (re.compile(r"(?i)^fix\b"), "bugfix"),
@@ -419,6 +425,9 @@ _ACK_PREFIX_FOR_KEY = re.compile(
     r"(?is)^(?:\*\*)?(?:addressed|fixed)\s+in\s+(?:commit\s+)?`?[0-9a-f]{7,40}`?"
     r"(?:\*\*)?\s*:?\s*"
 )
+# Remaining commit-sha tokens masked so identical acks with different SHAs share a key.
+# Require at least one a-f so decimal sizes, offsets, and timestamps stay distinct.
+_SHA_TOKEN = re.compile(r"(?i)\b(?=[0-9a-f]*[a-f])[0-9a-f]{7,40}\b")
 
 
 def _is_non_actionable_review_body(body: str) -> bool:
@@ -453,7 +462,11 @@ def _signal_body_key(body: str) -> str:
         flags=re.DOTALL | re.IGNORECASE,
     )
     text = re.sub(r"\s+", " ", text.strip())
-    text = _ACK_PREFIX_FOR_KEY.sub("", text, count=1)
+    # Only acks: strip the ack prefix and mask SHA tokens for deduplication.
+    # Problem reviews preserve their original text, including hex identifiers.
+    if _is_ack_shaped_review_body(body):
+        text = _ACK_PREFIX_FOR_KEY.sub("", text, count=1)
+        text = _SHA_TOKEN.sub("<sha>", text)
     key = text.strip().lower()
     # Empty / punctuation-only after strip is not a usable signal key.
     if not re.search(r"[a-z0-9]", key):
@@ -1295,19 +1308,24 @@ def outcome_for(raw: dict[str, Any]) -> str:
     return "abandoned"
 
 
-def language_for(card: dict[str, Any], raw: dict[str, Any]) -> str:
-    """Resolve language: language_by_pr → card language → file extensions (GH #19)."""
-    # Per-PR override (keys may be str or int in JSON), same pattern as domain_for.
-    by_pr = card.get("language_by_pr") or {}
-    if by_pr:
-        pr = int((raw.get("source") or {}).get("pr_number") or 0)
-        if pr:
-            for k, v in by_pr.items():
-                try:
-                    if int(k) == pr and isinstance(v, str) and v.strip():
-                        return v.strip()
-                except (TypeError, ValueError):
-                    continue
+def language_for(
+    repo: str, pr: int, card: dict[str, Any], raw: dict[str, Any]
+) -> str:
+    """Resolve language: card language_by_pr → LANGUAGE_OVERRIDE → card → extensions (GH #19).
+
+    Lookup order mirrors ``domain_for`` after GH #37: the dataset card wins so a
+    new extract can ship ``language_by_pr`` without touching this module. The
+    module-level ``LANGUAGE_OVERRIDE`` table is the legacy fallback. Card-level
+    ``language`` and file-extension sniffing remain the last two steps.
+    """
+    carded = card_override(card, CARD_OVERRIDE_KEYS["language"], pr)
+    if isinstance(carded, str) and carded.strip():
+        return carded.strip()
+    key = _override_key(repo, pr)
+    if key in LANGUAGE_OVERRIDE:
+        override = LANGUAGE_OVERRIDE[key]
+        if isinstance(override, str) and override.strip():
+            return override.strip()
     if card.get("language"):
         return str(card["language"])
     files = [f.get("filename") or "" for f in (raw.get("files") or [])]
@@ -1354,7 +1372,7 @@ def normalize_record(
         "repo": repo,
         "pr_number": pr,
         "source_urls": build_source_urls(repo, pr, linked_issues),
-        "language": language_for(card, raw),
+        "language": language_for(repo, pr, card, raw),
         "domain": domain_for(repo, pr, card, raw),
         "task_type": task_type_for(repo, pr, raw, card),
         "before_context": extract_before_context(raw),

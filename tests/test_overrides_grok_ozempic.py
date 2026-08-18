@@ -90,3 +90,74 @@ def test_linked_issue_override_grok_ozempic_42_supports_37():
     assert traj["training_use"] == "review-to-patch"
     assert "https://github.com/rmems/grok-ozempic/issues/37" in traj["source_urls"]
     assert traj["review_signals"]
+
+
+def test_v1_card_language_by_pr_and_linked_issue_68():
+    """v1 card: Python on #72/#74; #72 names #68 without a close keyword."""
+    import json
+    from pathlib import Path
+
+    from lib.normalize import language_for, normalize_record
+
+    card = json.loads(
+        (
+            Path(__file__).resolve().parents[1]
+            / "datasets"
+            / "cards"
+            / "grok-ozempic-v1.json"
+        ).read_text(encoding="utf-8")
+    )
+    raw72 = {
+        "source": {"repo": "rmems/grok-ozempic", "pr_number": 72},
+        "pull": {
+            "title": "research: expert-only ternary multi-block residual fidelity",
+            "body": "Implements the #68 multi-block residual fidelity experiment.",
+            "state": "closed",
+            "merged": True,
+            "draft": False,
+        },
+        "linked_issues": [],
+        "reviews": [],
+        "review_comments": [
+            {
+                "user_login": "rmems",
+                "user_type": "User",
+                "body": "Fixed: version guard is now versions != {3} so v2 packs are rejected.",
+            }
+        ],
+        "issue_comments": [],
+        "files": [
+            {
+                "filename": "scripts/grok1_multiblock_experiment.py",
+                "status": "added",
+                "patch": "+def main():\n+    pass\n",
+            }
+        ],
+        "checks": {},
+        "commits": [],
+    }
+    assert language_for("rmems/grok-ozempic", 72, card, raw72) == "Python"
+    assert (
+        language_for(
+            "rmems/grok-ozempic",
+            74,
+            card,
+            {"files": [{"filename": "scripts/grok1_multiblock_lib.py"}]},
+        )
+        == "Python"
+    )
+    assert (
+        language_for(
+            "rmems/grok-ozempic",
+            69,
+            card,
+            {"files": [{"filename": "src/core/weight_pack.rs"}]},
+        )
+        == "Rust"
+    )
+    traj = normalize_record(raw72, card)
+    assert traj["language"] == "Python"
+    assert traj["domain"] == "quantization"
+    assert traj["training_use"] == "review-to-patch"
+    assert traj["task_type"] == "feature"
+    assert "https://github.com/rmems/grok-ozempic/issues/68" in traj["source_urls"]
