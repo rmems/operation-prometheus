@@ -5,7 +5,7 @@
 <!-- BEGIN GENERATED: scripts/build_status.py -->
 
 **Last updated:** 2026-08-18  
-**Extracts:** 5 · **Trajectories:** 27  
+**Extracts:** 5 · **Trajectories:** 33  
 
 <!-- Derived from datasets/manifests/*.manifest.json — do not edit by hand. -->
 
@@ -13,7 +13,7 @@
 
 | dataset | source repo | records | schema | extracted |
 |---------|-------------|---------|--------|-----------|
-| `corinth-canal-v0` | rmems/corinth-canal | 6 | pr_trajectory_v0 | 2026-08-16 |
+| `corinth-canal-v0` | rmems/corinth-canal | 12 | pr_trajectory_v0 | 2026-08-16 |
 | `grok-ozempic-v0` | rmems/grok-ozempic | 8 | pr_trajectory_v0 | 2026-08-16 |
 | `limen-axon-encoder-v0` | Limen-Neural/axon-encoder | 3 | pr_trajectory_v0 | 2026-08-16 |
 | `myelin-accelerator-v0` | rmems/myelin-accelerator | 5 | pr_trajectory_v0 | 2026-08-16 |
@@ -25,6 +25,12 @@
 
 | PR | domain | training_use | task_type | quality | signals | validation |
 |----|--------|--------------|-----------|---------|---------|------------|
+| #142 | ml-infra | review-to-patch | bugfix | 0.90 | 8 | 3 |
+| #138 | gpu-compute | repair | refactor | 0.90 | 2 | 3 |
+| #128 | ml-infra | review-to-patch | refactor | 0.90 | 6 | 4 |
+| #127 | tools | review-to-patch | refactor | 0.90 | 8 | 4 |
+| #126 | gpu-compute | review-to-patch | refactor | 0.95 | 7 | 4 |
+| #125 | ml-infra | review-to-patch | refactor | 0.90 | 8 | 4 |
 | #96 | tools | validation | feature | 0.78 | 8 | 3 |
 | #95 | ml-infra | feature | feature | 0.58 | 8 | 3 |
 | #94 | ml-infra | repair | feature | 0.94 | 8 | 3 |
