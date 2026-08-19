@@ -7,24 +7,48 @@
   "schema_url": "https://github.com/rmems/operation-prometheus/schemas/pr_trajectory.schema.json",
   "language": "Rust",
   "domains": ["gpu-compute", "ml-infra", "tools"],
-  "pr_count": 6,
-  "pr_numbers": [82, 89, 91, 94, 95, 96],
-  "training_use_buckets": {
-    "repair": [82, 94],
-    "validation": [89],
-    "feature": [91, 95, 96]
+  "domain_by_pr": {
+    "125": "ml-infra",
+    "126": "gpu-compute",
+    "127": "tools",
+    "128": "ml-infra",
+    "138": "gpu-compute",
+    "142": "ml-infra"
   },
-  "extracted_at": "2026-07-21",
+  "task_type_by_pr": {
+    "125": "refactor",
+    "126": "refactor",
+    "127": "refactor",
+    "128": "refactor",
+    "138": "refactor",
+    "142": "bugfix"
+  },
+  "linked_issues_by_pr": {
+    "125": [133],
+    "126": [134],
+    "127": [135],
+    "138": [134],
+    "142": [140]
+  },
+  "pr_count": 12,
+  "pr_numbers": [82, 89, 91, 94, 95, 96, 125, 126, 127, 128, 138, 142],
+  "training_use_buckets": {
+    "repair": [82, 94, 138],
+    "validation": [89],
+    "feature": [91, 95, 96],
+    "review-to-patch": [125, 126, 127, 128, 142]
+  },
+  "extracted_at": "2026-08-18",
   "status": "extracted-v0",
   "created_at": "2026-06-20",
   "extracted_by": "Grok Build Agent: Grok 4.5",
   "jsonl_path": "datasets/jsonl/corinth-canal-v0.jsonl",
   "markdown_card": "datasets/cards/corinth-canal-trajectories-v0.md",
   "manifest_path": "datasets/manifests/corinth-canal-v0.manifest.json",
-  "notes": "High-signal merged PRs with meaningful review/fix/validation loops. Extracted to datasets/jsonl/corinth-canal-v0.jsonl (6 lines). Schema v0.1 training_use has feature (GH #39); #91/#95 carry it, #96 is deliberately mapped to validation. Absolute home paths and secrets redacted. See markdown card for limitations.",
+  "notes": "v0 shortlist #82–#96 extracted 2026-07-21. GH#118 GGUF/Safetensors wave added 2026-08-18 (operation-prometheus #24 / epic #32): live list_merged_prs.py confirmed #125, #126, #127, #128, #138, #142 merged. Scored with is_bot_user + extract_review_signals / _select_deduped_signals (read-only). Shortlisted all six domain PRs (none dropped for yield; #138 kept at 2 unique bodies because it recovers #126's silent squash-merge miss — repair pair). Skipped ImgBot #136, chore #139/#130, docs #156, and GH#147 #152–#154 (deferred). #96 stays training_use validation via the legacy table despite a feature card bucket. New PR labels live only on this card (domain_by_pr / task_type_by_pr / linked_issues_by_pr); do not duplicate them in normalize.py override dicts. Schema v0.1 maps the feature bucket to training_use feature for #91/#95. Absolute home paths and secrets redacted.",
   "source_doc": "docs/source-repos.md",
   "related_issues": {
-    "operation_prometheus": [4, 5, 6, 7],
-    "corinth_canal": [39, 74, 75, 76, 80, 83, 84, 85, 90, 92]
+    "operation_prometheus": [4, 5, 6, 7, 24, 32],
+    "corinth_canal": [39, 74, 75, 76, 80, 83, 84, 85, 90, 92, 133, 134, 135, 140]
   }
 }
