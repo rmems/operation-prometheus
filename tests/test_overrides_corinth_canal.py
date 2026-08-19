@@ -67,12 +67,13 @@ def test_task_type_by_pr_beats_shared_dict():
 
     card = _card()
     assert "82" not in card["task_type_by_pr"]
-    raw125 = {"pull": {"title": "refactor(moe): unify GGUF/Safetensors family inference"}}
-    raw142 = {"pull": {"title": "fix(examples): accept dense_sim/stub_uniform in ROUTING_MODE"}}
-    assert task_type_for("rmems/corinth-canal", 125, raw125, card) == "refactor"
-    assert task_type_for("rmems/corinth-canal", 128, raw125, card) == "refactor"
-    assert task_type_for("rmems/corinth-canal", 138, raw125, card) == "refactor"
-    assert task_type_for("rmems/corinth-canal", 142, raw142, card) == "bugfix"
+    # Neutral title: no TITLE_TASK_HINTS prefix, so these results require task_type_by_pr.
+    raw_neutral = {"pull": {"title": "unify GGUF/Safetensors family inference"}}
+    assert task_type_for("rmems/corinth-canal", 125, raw_neutral, {}) == "other"
+    assert task_type_for("rmems/corinth-canal", 125, raw_neutral, card) == "refactor"
+    assert task_type_for("rmems/corinth-canal", 128, raw_neutral, card) == "refactor"
+    assert task_type_for("rmems/corinth-canal", 138, raw_neutral, card) == "refactor"
+    assert task_type_for("rmems/corinth-canal", 142, raw_neutral, card) == "bugfix"
 
 
 def test_linked_issues_by_pr_on_card_in_source_urls():
@@ -84,6 +85,7 @@ def test_linked_issues_by_pr_on_card_in_source_urls():
         125: [133],
         126: [134],
         127: [135],
+        128: [],
         138: [134],
         142: [140],
     }
@@ -91,6 +93,7 @@ def test_linked_issues_by_pr_on_card_in_source_urls():
         125: "refactor(moe): unify GGUF/Safetensors family inference",
         126: "refactor(moe): priority-ordered GGUF synapse source selection",
         127: "refactor(model): extract config validation helpers",
+        128: "refactor(moe): split checkpoint.rs into private gguf/ modules",
         138: "refactor(moe): recover priority-ordered GGUF synapse source selection",
         142: "fix(examples): accept dense_sim/stub_uniform in ROUTING_MODE",
     }
