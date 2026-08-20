@@ -4,8 +4,8 @@
 
 <!-- BEGIN GENERATED: scripts/build_status.py -->
 
-**Last updated:** 2026-08-18  
-**Extracts:** 5 · **Trajectories:** 33  
+**Last updated:** 2026-08-19  
+**Extracts:** 6 · **Trajectories:** 38  
 
 <!-- Derived from datasets/manifests/*.manifest.json — do not edit by hand. -->
 
@@ -18,6 +18,7 @@
 | `limen-axon-encoder-v0` | Limen-Neural/axon-encoder | 3 | pr_trajectory_v0 | 2026-08-16 |
 | `myelin-accelerator-v0` | rmems/myelin-accelerator | 5 | pr_trajectory_v0 | 2026-08-16 |
 | `grok-ozempic-v1` | rmems/grok-ozempic | 5 | pr_trajectory_v0 | 2026-08-18 |
+| `theseus-quarry-v0` | rmems/Theseus-Quarry | 5 | pr_trajectory_v0 | 2026-08-19 |
 
 ## Trajectory quality
 
@@ -78,6 +79,16 @@
 | #71 | quantization | feature | feature | 0.90 | 8 | 4 |
 | #69 | quantization | feature | feature | 0.90 | 8 | 4 |
 | #42 | ml-infra | review-to-patch | feature | 0.90 | 8 | 4 |
+
+### theseus-quarry-v0
+
+| PR | domain | training_use | task_type | quality | signals | validation |
+|----|--------|--------------|-----------|---------|---------|------------|
+| #13 | telemetry | feature | feature | 0.95 | 8 | 4 |
+| #12 | telemetry | repair | bugfix | 0.90 | 8 | 3 |
+| #11 | telemetry | feature | feature | 0.90 | 2 | 3 |
+| #9 | gpu-compute | feature | feature | 0.90 | 7 | 3 |
+| #8 | infra | repair | refactor | 0.95 | 8 | 3 |
 
 <!-- END GENERATED -->
 

@@ -28,7 +28,7 @@ One record per PR. See [datasets/README.md](../../datasets/README.md) for commit
 | [rmems/grok-ozempic](https://github.com/rmems/grok-ozempic) | [grok-ozempic.md](grok-ozempic.md) | v0 + v1 extracted |
 | [Limen-Neural](https://github.com/Limen-Neural) (org) | [limen-neural.md](limen-neural.md) | Wave A extracted (axon-encoder) |
 | [rmems/myelin-accelerator](https://github.com/rmems/myelin-accelerator) | [myelin-accelerator.md](myelin-accelerator.md) | v0 extracted |
-| [rmems/Theseus-Quarry](https://github.com/rmems/Theseus-Quarry) | [theseus-quarry.md](theseus-quarry.md) | shortlist drafted |
+| [rmems/Theseus-Quarry](https://github.com/rmems/Theseus-Quarry) | [theseus-quarry.md](theseus-quarry.md) | v0 extracted |
 | [rmems (org)](https://github.com/rmems) | [wave-c.md](wave-c.md) | pointers only |
 | [rmems/worktrees-hives](https://github.com/rmems/worktrees-hives) | [worktrees-hives.md](worktrees-hives.md) | shortlist drafted |
 
