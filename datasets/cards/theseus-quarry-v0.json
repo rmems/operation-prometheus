@@ -1,0 +1,38 @@
+{
+  "name": "theseus-quarry-v0",
+  "source_repo": "rmems/Theseus-Quarry",
+  "source_repo_url": "https://github.com/rmems/Theseus-Quarry",
+  "source_repo_description": "Crypto-mining telemetry extraction for neuromorphic-computing research (miner HTTP APIs, JSONL telemetry, GPU signaling)",
+  "schema_version": "pr_trajectory_v0",
+  "schema_url": "https://github.com/rmems/operation-prometheus/blob/main/schemas/pr_trajectory.schema.json",
+  "language": "Rust",
+  "domains": ["telemetry", "gpu-compute", "infra"],
+  "domain_by_pr": {
+    "8": "infra",
+    "9": "gpu-compute",
+    "12": "telemetry"
+  },
+  "task_type_by_pr": {
+    "8": "refactor",
+    "12": "bugfix"
+  },
+  "pr_count": 5,
+  "pr_numbers": [13, 9, 12, 11, 8],
+  "training_use_buckets": {
+    "feature": [13, 9, 11],
+    "repair": [12, 8]
+  },
+  "extracted_at": "2026-08-19",
+  "status": "extracted-v0",
+  "created_at": "2026-08-19",
+  "created_by": "Grok Build Agent: Grok 4.5",
+  "jsonl_path": "datasets/jsonl/theseus-quarry-v0.jsonl",
+  "manifest_path": "datasets/manifests/theseus-quarry-v0.manifest.json",
+  "markdown_card": "datasets/cards/theseus-quarry-trajectories-v0.md",
+  "notes": "v0.6 Fleet extract (operation-prometheus #27). Live list_merged_prs.py confirmed #13, #9, #12, #11, #8 merged. Deferred (not rejected): #16 borderline config/docs, #18 later second-miner HTTP extension. Rejected: #1 bulk CI, #2 mixed bot fixups, #20 docs-only. domain_by_pr covers multi-domain PRs (#8 infra, #9 gpu-compute, #12 telemetry). task_type_by_pr corrects #8 (arch: title / enhancement label → refactor) and #12 (feat: title → bugfix; card bucket is repair). Linked issues parse from Resolves/Closes keywords; no linked_issues_by_pr. All records Rust. Loopback 127.0.0.1:<port> strings in #12 are public miner/node defaults from the patch, not private endpoints.",
+  "source_doc": "docs/source-repos/theseus-quarry.md",
+  "related_issues": {
+    "operation_prometheus": [27, 30],
+    "theseus_quarry": [5, 4, 7, 6, 3]
+  }
+}
