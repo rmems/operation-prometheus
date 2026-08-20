@@ -1,0 +1,44 @@
+{
+  "name": "brainstem-daemon-v0",
+  "source_repo": "Limen-Neural/brainstem-daemon",
+  "source_repo_url": "https://github.com/Limen-Neural/brainstem-daemon",
+  "source_repo_description": "SNN runtime daemon (ServiceRegistry, optional corpus-ipc/ZMQ, neuron-count validation)",
+  "schema_version": "pr_trajectory_v0",
+  "schema_url": "https://github.com/rmems/operation-prometheus/blob/main/schemas/pr_trajectory.schema.json",
+  "language": "Rust",
+  "domains": ["snn", "api", "infra"],
+  "domain_by_pr": {
+    "8": "infra",
+    "24": "api",
+    "25": "snn",
+    "3": "snn"
+  },
+  "task_type_by_pr": {
+    "8": "refactor",
+    "24": "refactor",
+    "3": "feature"
+  },
+  "linked_issues_by_pr": {
+    "24": [10, 11, 12, 14]
+  },
+  "pr_count": 4,
+  "pr_numbers": [8, 24, 25, 3],
+  "training_use_buckets": {
+    "feature": [8, 3],
+    "review-to-patch": [24],
+    "repair": [25]
+  },
+  "extracted_at": "2026-08-20",
+  "status": "extracted-v0",
+  "created_at": "2026-08-20",
+  "created_by": "Grok Build Agent: Grok 4.5",
+  "jsonl_path": "datasets/jsonl/brainstem-daemon-v0.jsonl",
+  "manifest_path": "datasets/manifests/brainstem-daemon-v0.manifest.json",
+  "markdown_card": "datasets/cards/brainstem-daemon-trajectories-v0.md",
+  "notes": "Limen Wave B+ pilot (operation-prometheus #28). #8 is the largest raw-review PR org-wide (215 reviews) and lands ServiceRegistry plus CI/license; kept for the #5 domain runtime split, not as a CI-only monster. #24 corpus-ipc decoupling (8 unique, issues #10–#14 named without close keywords). #25 fallible neuron-count construction (bug label). #3 neuromod 0.4 + corpus-ipc migrate. Skipped #1 (target/ build-artifact dump), #27 empty Aikido patch, docs/qodana. task_type_by_pr: #8/#24 beat feat: titles (library split / trait decoupling).",
+  "source_doc": "docs/source-repos/brainstem-daemon.md",
+  "related_issues": {
+    "operation_prometheus": [28],
+    "brainstem_daemon": [4, 5, 6, 7, 10, 11, 12, 14]
+  }
+}
