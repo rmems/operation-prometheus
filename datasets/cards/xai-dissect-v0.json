@@ -1,0 +1,39 @@
+{
+  "name": "xai-dissect-v0",
+  "source_repo": "rmems/xai-dissect",
+  "source_repo_url": "https://github.com/rmems/xai-dissect",
+  "source_repo_description": "Grok-1 shard dissection, coverage manifests, and grok-ozempic export / quant-plan contract",
+  "schema_version": "pr_trajectory_v0",
+  "schema_url": "https://github.com/rmems/operation-prometheus/blob/main/schemas/pr_trajectory.schema.json",
+  "language": "Rust",
+  "domains": ["export", "ml-infra", "quantization"],
+  "domain_by_pr": {
+    "32": "export",
+    "34": "export",
+    "24": "ml-infra",
+    "36": "quantization"
+  },
+  "task_type_by_pr": {
+    "32": "feature",
+    "34": "feature",
+    "24": "feature"
+  },
+  "pr_count": 4,
+  "pr_numbers": [32, 34, 24, 36],
+  "training_use_buckets": {
+    "feature": [32, 34, 24, 36]
+  },
+  "extracted_at": "2026-08-20",
+  "status": "extracted-v0",
+  "created_at": "2026-08-20",
+  "created_by": "Grok Build Agent: Grok 4.5",
+  "jsonl_path": "datasets/jsonl/xai-dissect-v0.jsonl",
+  "manifest_path": "datasets/manifests/xai-dissect-v0.manifest.json",
+  "markdown_card": "datasets/cards/xai-dissect-trajectories-v0.md",
+  "notes": "Wave C pilot (operation-prometheus #29). Domain export/coverage wave, not bulk CI. Live yield: #32 30 kept (export contract; grok-ozempic handoff), #34 10 kept (conversion-ready manifest), #24 28 kept (strict coverage validation), #36 15 kept (pilot-plan / route-preservation / GO-NO-GO). EXCLUDED #48 (137-rev CI/Qodana/Codecov/Sentry monster). Dropped #53 docs gate, #51 relicense, #50 Sentry, #37 docs handoff. Deferred #20/#16/#6/#1 (earlier inventory/CLI; capacity). task_type_by_pr forces #32/#24 (unconventional titles → other) and #34 (documentation label + Rust code → would be docs). Linked issues parse from Closes keywords; no linked_issues_by_pr.",
+  "source_doc": "docs/source-repos/xai-dissect.md",
+  "related_issues": {
+    "operation_prometheus": [29, 30],
+    "xai_dissect": [21, 23, 22, 25, 26, 27, 28, 29, 31]
+  }
+}

@@ -1,0 +1,61 @@
+{
+  "name": "spike-viz-v0",
+  "schema_version": "pr_trajectory_v0",
+  "created_at": "2026-08-20",
+  "created_by": "Grok Build Agent: Grok 4.5",
+  "source_repo": "rmems/spike-viz",
+  "jsonl_path": "datasets/jsonl/spike-viz-v0.jsonl",
+  "record_count": 3,
+  "sha256": "8add3e827180595a0c3f93761fc048510455eba89e6fc28ea92fcbead3a40efd",
+  "bytes": 80765,
+  "records": [
+    {
+      "id": "rmems-spike-viz-22",
+      "pr_number": 22,
+      "training_use": "feature",
+      "task_type": "feature",
+      "domain": "io",
+      "language": "Python",
+      "quality_score": 0.9,
+      "outcome": "merged",
+      "has_issue_context": true,
+      "review_signal_count": 7,
+      "unique_review_signal_count": 7,
+      "patch_chars": 29840,
+      "validation_count": 4,
+      "source_url_count": 4
+    },
+    {
+      "id": "rmems-spike-viz-23",
+      "pr_number": 23,
+      "training_use": "review-to-patch",
+      "task_type": "bugfix",
+      "domain": "io",
+      "language": "Python",
+      "quality_score": 0.95,
+      "outcome": "merged",
+      "has_issue_context": true,
+      "review_signal_count": 8,
+      "unique_review_signal_count": 8,
+      "patch_chars": 18923,
+      "validation_count": 2,
+      "source_url_count": 1
+    },
+    {
+      "id": "rmems-spike-viz-24",
+      "pr_number": 24,
+      "training_use": "feature",
+      "task_type": "feature",
+      "domain": "visualization",
+      "language": "Python",
+      "quality_score": 0.95,
+      "outcome": "merged",
+      "has_issue_context": true,
+      "review_signal_count": 4,
+      "unique_review_signal_count": 4,
+      "patch_chars": 10655,
+      "validation_count": 3,
+      "source_url_count": 2
+    }
+  ]
+}

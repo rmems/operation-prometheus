@@ -1,0 +1,29 @@
+{
+  "name": "engram-parser-v0",
+  "schema_version": "pr_trajectory_v0",
+  "created_at": "2026-08-20",
+  "created_by": "Grok Build Agent: Grok 4.5",
+  "source_repo": "rmems/engram-parser",
+  "jsonl_path": "datasets/jsonl/engram-parser-v0.jsonl",
+  "record_count": 1,
+  "sha256": "1701e578c7acd478bf8ec60383a88dfdba0014ac9ed3692041f7c2b1c6ec0b95",
+  "bytes": 111652,
+  "records": [
+    {
+      "id": "rmems-engram-parser-44",
+      "pr_number": 44,
+      "training_use": "feature",
+      "task_type": "feature",
+      "domain": "ml-infra",
+      "language": "Rust",
+      "quality_score": 0.9,
+      "outcome": "merged",
+      "has_issue_context": true,
+      "review_signal_count": 8,
+      "unique_review_signal_count": 8,
+      "patch_chars": 97979,
+      "validation_count": 4,
+      "source_url_count": 2
+    }
+  ]
+}

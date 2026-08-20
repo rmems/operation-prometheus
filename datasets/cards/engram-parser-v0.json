@@ -1,0 +1,31 @@
+{
+  "name": "engram-parser-v0",
+  "source_repo": "rmems/engram-parser",
+  "source_repo_url": "https://github.com/rmems/engram-parser",
+  "source_repo_description": "Zero-dep GGUF parser and per-expert MoE weight extractor (wire layouts, not dequant/kernels)",
+  "schema_version": "pr_trajectory_v0",
+  "schema_url": "https://github.com/rmems/operation-prometheus/blob/main/schemas/pr_trajectory.schema.json",
+  "language": "Rust",
+  "domains": ["ml-infra", "parsers"],
+  "domain_by_pr": {
+    "44": "ml-infra"
+  },
+  "pr_count": 1,
+  "pr_numbers": [44],
+  "training_use_buckets": {
+    "feature": [44]
+  },
+  "extracted_at": "2026-08-20",
+  "status": "extracted-v0",
+  "created_at": "2026-08-20",
+  "created_by": "Grok Build Agent: Grok 4.5",
+  "jsonl_path": "datasets/jsonl/engram-parser-v0.jsonl",
+  "manifest_path": "datasets/manifests/engram-parser-v0.manifest.json",
+  "markdown_card": "datasets/cards/engram-parser-trajectories-v0.md",
+  "notes": "Wave C pilot (operation-prometheus #29). Dependabot-heavy repo (20+ of 35 merged). Live yield: #44 8 kept / 8 unique — GGUF v3 parser, IQ wire layouts, T1 large MoE pilots (closes #7). No second real-code PR met the 3–5 bar: #1 is the founding zero-dep parser but 319 files are dominated by committed target/ build artifacts (same noise class as myelin #2); #17 is Docker/GHCR + Actions hardening (CI); #23 repo-hygiene; #21 MSRV CI; #57 docs-only reverse of #10; #40 Qodana-only; #51 post-transfer hygiene. feat: title already maps to feature; domain_by_pr pins #44 to ml-infra vs the card's parsers fallback. Linked issue #7 from Closes/API; no linked_issues_by_pr.",
+  "source_doc": "docs/source-repos/engram-parser.md",
+  "related_issues": {
+    "operation_prometheus": [29, 30],
+    "engram_parser": [7]
+  }
+}

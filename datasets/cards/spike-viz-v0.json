@@ -1,0 +1,34 @@
+{
+  "name": "spike-viz-v0",
+  "source_repo": "rmems/spike-viz",
+  "source_repo_url": "https://github.com/rmems/spike-viz",
+  "source_repo_description": "CPU spike visualization: axon-encoder export contract, schema loaders, and raster PNG rendering",
+  "schema_version": "pr_trajectory_v0",
+  "schema_url": "https://github.com/rmems/operation-prometheus/blob/main/schemas/pr_trajectory.schema.json",
+  "language": "Python",
+  "domains": ["visualization", "io"],
+  "domain_by_pr": {
+    "24": "visualization",
+    "22": "io",
+    "23": "io"
+  },
+  "pr_count": 3,
+  "pr_numbers": [24, 23, 22],
+  "training_use_buckets": {
+    "feature": [24, 22],
+    "review-to-patch": [23]
+  },
+  "extracted_at": "2026-08-20",
+  "status": "extracted-v0",
+  "created_at": "2026-08-20",
+  "created_by": "Grok Build Agent: Grok 4.5",
+  "jsonl_path": "datasets/jsonl/spike-viz-v0.jsonl",
+  "manifest_path": "datasets/manifests/spike-viz-v0.manifest.json",
+  "markdown_card": "datasets/cards/spike-viz-trajectories-v0.md",
+  "notes": "Wave C pilot (operation-prometheus #29). Tiny repo: 4 merged PRs; extracted the three domain PRs (#24, #23, #22). Live yield: #24 4 kept, #23 10 kept / 8 emitted (review-to-patch follow-up to #22), #22 7 kept. Dropped #21 (docs charter; 0 kept signals). Title hints already feat→feature / fix→bugfix; no task_type_by_pr. domain_by_pr splits raster rendering from loader/export IO. #23 has no close-keyword issues (Related: #22 is the predecessor PR); no linked_issues_by_pr.",
+  "source_doc": "docs/source-repos/spike-viz.md",
+  "related_issues": {
+    "operation_prometheus": [29, 30],
+    "spike_viz": [9, 6, 8, 10]
+  }
+}

@@ -1,0 +1,35 @@
+{
+  "name": "thalamic-relay-v0",
+  "source_repo": "rmems/thalamic-relay",
+  "source_repo_url": "https://github.com/rmems/thalamic-relay",
+  "source_repo_description": "GPU-safety supervisor / thalamic relay: thermal and power brakes, IPC, neuromod + silicon-bridge wiring",
+  "schema_version": "pr_trajectory_v0",
+  "schema_url": "https://github.com/rmems/operation-prometheus/blob/main/schemas/pr_trajectory.schema.json",
+  "language": "Rust",
+  "domains": ["gpu-compute", "systems"],
+  "domain_by_pr": {
+    "20": "gpu-compute",
+    "23": "gpu-compute",
+    "22": "systems"
+  },
+  "pr_count": 3,
+  "pr_numbers": [20, 23, 22],
+  "training_use_buckets": {
+    "feature": [20],
+    "repair": [23],
+    "validation": [22]
+  },
+  "extracted_at": "2026-08-20",
+  "status": "extracted-v0",
+  "created_at": "2026-08-20",
+  "created_by": "Grok Build Agent: Grok 4.5",
+  "jsonl_path": "datasets/jsonl/thalamic-relay-v0.jsonl",
+  "manifest_path": "datasets/manifests/thalamic-relay-v0.manifest.json",
+  "markdown_card": "datasets/cards/thalamic-relay-trajectories-v0.md",
+  "notes": "Wave C pilot (operation-prometheus #29). GPU-safety cluster #20/#23/#22 after live yield (is_bot_user + extract_review_signals cap 8): #20 40 kept, #23 33 kept, #22 52 kept. Dropped #36 (0 kept signals; software-only coverage tests). Dropped #35 post-transfer hygiene, #33 changelog, #30 MSRV docs, #21 docs. Deferred #18 (CLI clap, 25 kept) — high yield but outside the GPU-safety cluster; capacity cap 3–5. Title hints already yield feat→feature / fix→bugfix / test→test; no task_type_by_pr. domain_by_pr splits GPU brake PRs from IPC coverage tests. Linked issues from Closes/Implements keywords; no linked_issues_by_pr.",
+  "source_doc": "docs/source-repos/thalamic-relay.md",
+  "related_issues": {
+    "operation_prometheus": [29, 30],
+    "thalamic_relay": [14, 12, 13]
+  }
+}
