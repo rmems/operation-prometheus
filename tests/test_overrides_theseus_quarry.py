@@ -44,17 +44,29 @@ def _synthetic_raw(pr: int, *, title: str, body: str = "No close keywords here."
 
 
 def test_domain_by_pr_beats_shared_dict():
-    """Card domain_by_pr wins; Theseus-Quarry has no DOMAIN_OVERRIDE rows."""
+    """Card domain_by_pr wins even when DOMAIN_OVERRIDE names the same PRs."""
     from lib.normalize import DOMAIN_OVERRIDE, domain_for
 
     assert not any(repo == "rmems/theseus-quarry" for repo, _pr in DOMAIN_OVERRIDE)
     card = _card()
     assert domain_for("rmems/Theseus-Quarry", 8, {}, {}) == "systems"
-    assert domain_for("rmems/Theseus-Quarry", 8, card, {}) == "infra"
-    assert domain_for("rmems/Theseus-Quarry", 9, card, {}) == "gpu-compute"
-    assert domain_for("rmems/Theseus-Quarry", 12, card, {}) == "telemetry"
-    assert domain_for("rmems/Theseus-Quarry", 13, card, {}) == "telemetry"
-    assert domain_for("rmems/Theseus-Quarry", 11, card, {}) == "telemetry"
+
+    planted = {
+        ("rmems/theseus-quarry", 8): "tools",
+        ("rmems/theseus-quarry", 9): "tools",
+        ("rmems/theseus-quarry", 12): "tools",
+    }
+    DOMAIN_OVERRIDE.update(planted)
+    try:
+        assert domain_for("rmems/Theseus-Quarry", 8, {}, {}) == "tools"
+        assert domain_for("rmems/Theseus-Quarry", 8, card, {}) == "infra"
+        assert domain_for("rmems/Theseus-Quarry", 9, card, {}) == "gpu-compute"
+        assert domain_for("rmems/Theseus-Quarry", 12, card, {}) == "telemetry"
+        assert domain_for("rmems/Theseus-Quarry", 13, card, {}) == "telemetry"
+        assert domain_for("rmems/Theseus-Quarry", 11, card, {}) == "telemetry"
+    finally:
+        for key in planted:
+            DOMAIN_OVERRIDE.pop(key, None)
 
 
 def test_task_type_by_pr_beats_title_hints():
