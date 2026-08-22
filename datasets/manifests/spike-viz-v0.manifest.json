@@ -6,8 +6,8 @@
   "source_repo": "rmems/spike-viz",
   "jsonl_path": "datasets/jsonl/spike-viz-v0.jsonl",
   "record_count": 3,
-  "sha256": "938dc970bd37800afc91834b46365a7a53bbba360db1427845e3a47563ad5df9",
-  "bytes": 80572,
+  "sha256": "2bec6eda57d3464dbc6f67da3a85c9ad83610bfecf7a7edc1a6c8a9c4ecfb60b",
+  "bytes": 80147,
   "records": [
     {
       "id": "rmems-spike-viz-22",
@@ -19,8 +19,8 @@
       "quality_score": 0.9,
       "outcome": "merged",
       "has_issue_context": true,
-      "review_signal_count": 7,
-      "unique_review_signal_count": 7,
+      "review_signal_count": 5,
+      "unique_review_signal_count": 5,
       "patch_chars": 29840,
       "validation_count": 4,
       "source_url_count": 4

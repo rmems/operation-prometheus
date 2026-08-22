@@ -19,7 +19,7 @@
 | [#32](https://github.com/rmems/xai-dissect/pull/32) | Define xai-dissect export contract for grok-ozempic | export | feature | 30 kept / 8 emitted. Domain anchor: `quant-plan` bundle + handoff docs. Closes #21. |
 | [#34](https://github.com/rmems/xai-dissect/pull/34) | Export conversion-ready Grok-1 tensor manifest for SAAQ sprint | export | feature | 10 kept / 7 emitted. Markdown conversion manifest + #23 acceptance tests. Closes #23. |
 | [#24](https://github.com/rmems/xai-dissect/pull/24) | Implement strict Grok-1 coverage manifest validation | ml-infra | feature | 28 kept / 7 emitted. Fail-closed 770-tensor coverage. Closes #22. |
-| [#36](https://github.com/rmems/xai-dissect/pull/36) | Complete Grok-1 planning/report PR surfaces | quantization | feature | 15 kept / 8 emitted. Pilot-plan, route-preservation, GO/NO-GO. Closes #25–#29, #31. |
+| [#36](https://github.com/rmems/xai-dissect/pull/36) | Complete Grok-1 planning/report PR surfaces | quantization | feature | 15 kept / 7 emitted (duplicate pilot-plan-fixture acknowledgement deduped). Pilot-plan, route-preservation, GO/NO-GO. Closes #25–#29, #31. |
 
 ## PR Details
 
@@ -69,7 +69,7 @@
 |----|----------------------|---------|---------------|---------|
 | #32 | 30 | 8 | 8 | shortlisted (domain anchor) |
 | #24 | 28 | 7 | 7 | shortlisted |
-| #36 | 15 | 8 | 8 | shortlisted |
+| #36 | 15 | 7 | 7 | shortlisted (duplicate pilot-plan-fixture acknowledgement deduped) |
 | #34 | 10 | 7 | 7 | shortlisted |
 | #20 | 8 | 8 | 8 | deferred |
 | #16 | 6 | 6 | 6 | deferred |
