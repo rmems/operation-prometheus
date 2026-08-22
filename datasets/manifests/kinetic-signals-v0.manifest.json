@@ -6,8 +6,8 @@
   "source_repo": "rmems/kinetic-signals",
   "jsonl_path": "datasets/jsonl/kinetic-signals-v0.jsonl",
   "record_count": 5,
-  "sha256": "c781e22f4c288f8c0fd1e8ec323cd311976d28e96d35a0d1bfc01e8ce3eb477d",
-  "bytes": 149748,
+  "sha256": "cc91b660d308d30fe4f5d4b74cd0b07b2f1576b9edce6116f6ddeee698b7d495",
+  "bytes": 149628,
   "records": [
     {
       "id": "rmems-kinetic-signals-1",
@@ -55,7 +55,7 @@
       "unique_review_signal_count": 6,
       "patch_chars": 6062,
       "validation_count": 4,
-      "source_url_count": 3
+      "source_url_count": 2
     },
     {
       "id": "rmems-kinetic-signals-39",
@@ -71,7 +71,7 @@
       "unique_review_signal_count": 8,
       "patch_chars": 47393,
       "validation_count": 4,
-      "source_url_count": 3
+      "source_url_count": 2
     },
     {
       "id": "rmems-kinetic-signals-6",

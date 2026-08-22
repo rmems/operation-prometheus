@@ -97,6 +97,14 @@ def test_task_type_by_pr_beats_title_hints():
     assert task_type_for("Limen-Neural/brainstem-daemon", 3, raw3, {}) == "other"
     assert task_type_for("Limen-Neural/brainstem-daemon", 3, raw3, card) == "feature"
 
+    raw25 = {
+        "pull": {
+            "title": "Fallible BrainstemDaemon construction with neuron-count validation"
+        }
+    }
+    assert task_type_for("Limen-Neural/brainstem-daemon", 25, raw25, {}) == "other"
+    assert task_type_for("Limen-Neural/brainstem-daemon", 25, raw25, card) == "bugfix"
+
 
 def test_linked_issues_by_pr_on_card_in_source_urls():
     """#24 names issues #10–#14 without close keywords — card provenance wins."""
@@ -114,7 +122,7 @@ def test_linked_issues_by_pr_on_card_in_source_urls():
     assert traj["source_urls"][0] == (
         "https://github.com/Limen-Neural/brainstem-daemon/pull/24"
     )
-    for issue in (10, 11, 12, 14):
+    for issue in (9, 10, 11, 12, 14):
         assert (
             f"https://github.com/Limen-Neural/brainstem-daemon/issues/{issue}"
             in traj["source_urls"]
