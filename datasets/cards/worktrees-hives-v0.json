@@ -1,0 +1,52 @@
+{
+  "name": "worktrees-hives-v0",
+  "source_repo": "rmems/worktrees-hives",
+  "source_repo_url": "https://github.com/rmems/worktrees-hives",
+  "source_repo_description": "Multi-agent hypothesis lab — agents/subagents in isolated git worktrees, mandatory JSON + Markdown findings, Python/Rust hybrid safety cage, never auto-merges",
+  "schema_version": "pr_trajectory_v0",
+  "schema_url": "https://github.com/rmems/operation-prometheus/blob/main/schemas/pr_trajectory.schema.json",
+  "language": "Python",
+  "language_by_pr": {
+    "65": "Rust"
+  },
+  "domains": ["agentic-workflow", "tools", "ml-infra"],
+  "domain_by_pr": {
+    "61": "agentic-workflow",
+    "63": "agentic-workflow",
+    "65": "ml-infra",
+    "78": "tools",
+    "79": "tools"
+  },
+  "task_type_by_pr": {
+    "61": "feature",
+    "63": "feature",
+    "65": "feature",
+    "78": "feature",
+    "79": "bugfix"
+  },
+  "linked_issues_by_pr": {
+    "61": [6],
+    "63": [8],
+    "65": [24, 25, 26, 28, 30, 40, 42],
+    "78": [37]
+  },
+  "pr_count": 5,
+  "pr_numbers": [61, 63, 65, 78, 79],
+  "training_use_buckets": {
+    "feature": [61, 63, 65],
+    "review-to-patch": [78, 79]
+  },
+  "extracted_at": "2026-08-20",
+  "status": "extracted-v0",
+  "created_at": "2026-08-20",
+  "created_by": "Grok Build Agent: Grok 4.5",
+  "jsonl_path": "datasets/jsonl/worktrees-hives-v0.jsonl",
+  "manifest_path": "datasets/manifests/worktrees-hives-v0.manifest.json",
+  "markdown_card": "datasets/cards/worktrees-hives-trajectories-v0.md",
+  "notes": "v0.6 Fleet extract (operation-prometheus #26 / shortlist #30). Live list_merged_prs.py confirmed #61, #63, #65, #78, #79 merged. Must-include set is #78/#79 (CLI pair) plus #61/#63 (claim + never-auto-merge). #65 kept as the fifth PR: hybrid foundation, 87 unique review bodies after is_bot_user + extract_review_signals (max_items=10000). Deferred lab-CLI wave #90/#88/#103/#105. Rejected: #87 toolchain pin, #104 docs-only, #52/#67/#68 CI. language_by_pr forces Rust on #65 (mixed .rs/.py; language_for would otherwise keep card Python). #78 bug label would sniff as bugfix; task_type_by_pr forces feature. #65 body `Closes #24 #25 …` only parses the first number — linked_issues_by_pr restores the full close list. #78 names #37 without a close keyword (linked_issues_by_pr). Do not duplicate overrides in normalize.py.",
+  "source_doc": "docs/source-repos/worktrees-hives.md",
+  "related_issues": {
+    "operation_prometheus": [26, 30],
+    "worktrees_hives": [6, 8, 24, 25, 26, 28, 30, 37, 40, 42]
+  }
+}
