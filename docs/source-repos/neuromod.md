@@ -18,7 +18,7 @@
 |----|-------|--------|--------|--------|
 | [#5](https://github.com/Limen-Neural/neuromod/pull/5) | feat: add Lapicque, Hodgkin-Huxley, FitzHugh-Nagumo, and Hebbian neuron models | snn | feature | 4 unique kept; new biophysical modules. Body names issue #3 (no close keyword). |
 | [#8](https://github.com/Limen-Neural/neuromod/pull/8) | Fix bench warnings | snn | repair | 2 unique; HH rewrite + standalone crate (not a warning-only chore). |
-| [#9](https://github.com/Limen-Neural/neuromod/pull/9) | Generalize neuromod core: dynamic dimensions, neutral API, and trait purge | api | review-to-patch | 2 unique; dimension-configurable `SpikingNetwork`. |
+| [#9](https://github.com/Limen-Neural/neuromod/pull/9) | Generalize neuromod core: dynamic dimensions, neutral API, and trait purge | api | bug-prediction | 2 unique; dimension-configurable `SpikingNetwork`. Retained P1 review flags the zero-init weights change the merged patch itself introduces — no later fix commit captured, so this is a flagged-bug trajectory, not review-to-patch. |
 | [#2](https://github.com/Limen-Neural/neuromod/pull/2) | SNN Core: Mining & HFT Purge | snn | review-to-patch | 7 unique; strips blockchain/HFT from the engine. |
 | [#15](https://github.com/Limen-Neural/neuromod/pull/15) | refactor: domain-agnostic neuromodulator API and CI workflow | ml-infra | review-to-patch | 8 unique; Closes #13/#14. Domain API plus a CI workflow — not a bulk-CI monster. |
 
@@ -47,7 +47,7 @@
 - **Merged**: 2026-04-22
 - **Files changed**: 10
 - **Why high-signal**: Makes `SpikingNetwork` dimension-configurable and removes domain-specific topology bootstrapping.
-- **Dataset bucket**: `review-to-patch`
+- **Dataset bucket**: `bug-prediction` (retained P1 review flags the zero-init weights change this same patch introduces; no corrective follow-up commit is captured in this extract)
 
 ### PR #2 — SNN Core: Mining & HFT Purge
 
