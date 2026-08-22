@@ -57,6 +57,7 @@
 - **Files changed**: 15
 - **Why high-signal**: Mixed env/CI + domain rename (`#4`). Card domain `infra`; task_type `refactor`.
 - **Dataset bucket**: `feature`
+- **Provenance**: issues #3, #4, #5 (`#4`/`#5` via close keywords; `#3` via card `linked_issues_by_pr` -- body says "refs #3", not a close keyword)
 
 ### PR #1 — Generalizing
 
