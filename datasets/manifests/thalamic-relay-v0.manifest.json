@@ -6,8 +6,8 @@
   "source_repo": "rmems/thalamic-relay",
   "jsonl_path": "datasets/jsonl/thalamic-relay-v0.jsonl",
   "record_count": 3,
-  "sha256": "bc6852a5932555fc7e777fee98856ef7f24ea8aa8e3024e23020ad2af58404be",
-  "bytes": 75212,
+  "sha256": "f95cd488cb865e131a7dc391a19404b13ff6fb39b6b6f97a6f9f91d218103847",
+  "bytes": 74974,
   "records": [
     {
       "id": "rmems-thalamic-relay-20",
@@ -19,8 +19,8 @@
       "quality_score": 0.95,
       "outcome": "merged",
       "has_issue_context": true,
-      "review_signal_count": 5,
-      "unique_review_signal_count": 5,
+      "review_signal_count": 4,
+      "unique_review_signal_count": 4,
       "patch_chars": 21420,
       "validation_count": 4,
       "source_url_count": 3
