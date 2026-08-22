@@ -6,8 +6,8 @@
   "source_repo": "rmems/kinetic-signals",
   "jsonl_path": "datasets/jsonl/kinetic-signals-v0.jsonl",
   "record_count": 5,
-  "sha256": "bf8d86976f6dc32b5702e3ef85ab93fad619f14cac868ff5cd3f771d79c6ce86",
-  "bytes": 149672,
+  "sha256": "773963467f23cfc9e97a55151f00c6d1c23d2d81a882d1a0e74ea47d82228483",
+  "bytes": 148630,
   "records": [
     {
       "id": "rmems-kinetic-signals-1",
@@ -35,8 +35,8 @@
       "quality_score": 0.95,
       "outcome": "merged",
       "has_issue_context": true,
-      "review_signal_count": 6,
-      "unique_review_signal_count": 6,
+      "review_signal_count": 3,
+      "unique_review_signal_count": 3,
       "patch_chars": 7096,
       "validation_count": 3,
       "source_url_count": 2
@@ -83,8 +83,8 @@
       "quality_score": 0.95,
       "outcome": "merged",
       "has_issue_context": true,
-      "review_signal_count": 8,
-      "unique_review_signal_count": 8,
+      "review_signal_count": 3,
+      "unique_review_signal_count": 3,
       "patch_chars": 32762,
       "validation_count": 4,
       "source_url_count": 3

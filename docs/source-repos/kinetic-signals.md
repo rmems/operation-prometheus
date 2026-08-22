@@ -17,8 +17,8 @@
 |----|-------|--------|--------|--------|
 | [#39](https://github.com/rmems/kinetic-signals/pull/39) | test: expand shared_vectors for streaming APIs (LIM-201, #28) | telemetry | validation | Densest Wave B candidate: 109 raw reviews / 8 unique kept. |
 | [#35](https://github.com/rmems/kinetic-signals/pull/35) | test: expand demo for missing APIs (LIM-199, #26) | telemetry | validation | 6 unique; streaming Hawkes + surprise demo coverage. |
-| [#17](https://github.com/rmems/kinetic-signals/pull/17) | refactor!: remove deprecated GBM aliases, bump to v0.4.0 | snn | repair | 6 unique; Closes #15. |
-| [#6](https://github.com/rmems/kinetic-signals/pull/6) | Dev environment setup + resolve open issues (#3, #4, #5) | infra | feature | 8 unique; #4 domain rename plus CI for #5 — kept for the domain half. |
+| [#17](https://github.com/rmems/kinetic-signals/pull/17) | refactor!: remove deprecated GBM aliases, bump to v0.4.0 | snn | repair | 3 unique (a duplicate fix confirmation and two orphan replies with no preserved originating comment were dropped); Closes #15. |
+| [#6](https://github.com/rmems/kinetic-signals/pull/6) | Dev environment setup + resolve open issues (#3, #4, #5) | infra | feature | 3 unique (five orphan replies about CI hardening/fixture params with no preserved originating comment were dropped); #4 domain rename plus CI for #5 — kept for the domain half. |
 | [#1](https://github.com/rmems/kinetic-signals/pull/1) | Generalizing | ml-infra | bug-prediction | 1 unique; strips third-party deps and serde gates. Retained P1 review flags the NaN-dropping clamp the patch itself introduces — no corrective commit captured, so this is bug-prediction, not a clean feature trajectory. |
 
 ## PR Details

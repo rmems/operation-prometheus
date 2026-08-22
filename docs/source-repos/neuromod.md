@@ -20,7 +20,7 @@
 | [#8](https://github.com/Limen-Neural/neuromod/pull/8) | Fix bench warnings | snn | bug-prediction | 2 unique; HH rewrite + standalone crate (not a warning-only chore). Both retained reviews (voltage-convention mismatch, hard-coded reset state) still describe defects present in the merged patch. |
 | [#9](https://github.com/Limen-Neural/neuromod/pull/9) | Generalize neuromod core: dynamic dimensions, neutral API, and trait purge | api | bug-prediction | 2 unique; dimension-configurable `SpikingNetwork`. Retained P1 review flags the zero-init weights change the merged patch itself introduces — no later fix commit captured, so this is a flagged-bug trajectory, not review-to-patch. |
 | [#2](https://github.com/Limen-Neural/neuromod/pull/2) | SNN Core: Mining & HFT Purge | snn | review-to-patch | 7 unique; strips blockchain/HFT from the engine. |
-| [#15](https://github.com/Limen-Neural/neuromod/pull/15) | refactor: domain-agnostic neuromodulator API and CI workflow | ml-infra | review-to-patch | 8 unique; Closes #13/#14. Domain API plus a CI workflow — not a bulk-CI monster. |
+| [#15](https://github.com/Limen-Neural/neuromod/pull/15) | refactor: domain-agnostic neuromodulator API and CI workflow | ml-infra | review-to-patch | 4 unique (a `@coderabbitai Review please` trigger comment and three orphan CI-hardening/decay-fix replies with no preserved originating comment were dropped); Closes #13/#14. Domain API plus a CI workflow — not a bulk-CI monster. |
 
 ## PR Details
 

@@ -6,8 +6,8 @@
   "source_repo": "Limen-Neural/neuromod",
   "jsonl_path": "datasets/jsonl/neuromod-v0.jsonl",
   "record_count": 5,
-  "sha256": "f6fb31fd63bc451f6b576f8ee5bb67df65219a8277fbf0a1d2929fc33029fe4c",
-  "bytes": 326113,
+  "sha256": "b264449b0796f809ee56d367a0bc98f23b6e40e4a64931b9c9567d8f2b1d5a2e",
+  "bytes": 324457,
   "records": [
     {
       "id": "Limen-Neural-neuromod-15",
@@ -19,8 +19,8 @@
       "quality_score": 0.95,
       "outcome": "merged",
       "has_issue_context": true,
-      "review_signal_count": 8,
-      "unique_review_signal_count": 8,
+      "review_signal_count": 4,
+      "unique_review_signal_count": 4,
       "patch_chars": 97930,
       "validation_count": 3,
       "source_url_count": 3
