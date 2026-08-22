@@ -6,8 +6,8 @@
   "source_repo": "rmems/xai-dissect",
   "jsonl_path": "datasets/jsonl/xai-dissect-v0.jsonl",
   "record_count": 4,
-  "sha256": "c86a3d79ef00f7baadd9ba40fcebe23940f665f91a1371cbfd6d64efcb4253a7",
-  "bytes": 302994,
+  "sha256": "8372682dd5b7868ff178666c4c99f0288293a799ebeb48cdcc2353f4190398b0",
+  "bytes": 302754,
   "records": [
     {
       "id": "rmems-xai-dissect-24",
@@ -51,8 +51,8 @@
       "quality_score": 0.9,
       "outcome": "merged",
       "has_issue_context": true,
-      "review_signal_count": 8,
-      "unique_review_signal_count": 8,
+      "review_signal_count": 7,
+      "unique_review_signal_count": 7,
       "patch_chars": 9606,
       "validation_count": 3,
       "source_url_count": 2
