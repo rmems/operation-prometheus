@@ -4,8 +4,8 @@
 
 <!-- BEGIN GENERATED: scripts/build_status.py -->
 
-**Last updated:** 2026-08-19  
-**Extracts:** 6 · **Trajectories:** 38  
+**Last updated:** 2026-08-20  
+**Extracts:** 7 · **Trajectories:** 43  
 
 <!-- Derived from datasets/manifests/*.manifest.json — do not edit by hand. -->
 
@@ -19,6 +19,7 @@
 | `myelin-accelerator-v0` | rmems/myelin-accelerator | 5 | pr_trajectory_v0 | 2026-08-16 |
 | `grok-ozempic-v1` | rmems/grok-ozempic | 5 | pr_trajectory_v0 | 2026-08-18 |
 | `theseus-quarry-v0` | rmems/Theseus-Quarry | 5 | pr_trajectory_v0 | 2026-08-19 |
+| `worktrees-hives-v0` | rmems/worktrees-hives | 5 | pr_trajectory_v0 | 2026-08-20 |
 
 ## Trajectory quality
 
@@ -89,6 +90,16 @@
 | #11 | telemetry | feature | feature | 0.90 | 2 | 3 |
 | #9 | gpu-compute | feature | feature | 0.90 | 7 | 3 |
 | #8 | infra | repair | refactor | 0.95 | 8 | 3 |
+
+### worktrees-hives-v0
+
+| PR | domain | training_use | task_type | quality | signals | validation |
+|----|--------|--------------|-----------|---------|---------|------------|
+| #79 | tools | review-to-patch | bugfix | 0.90 | 2 | 4 |
+| #78 | tools | review-to-patch | feature | 0.95 | 8 | 4 |
+| #65 | ml-infra | feature | feature | 0.90 | 8 | 2 |
+| #63 | agentic-workflow | feature | feature | 0.95 | 8 | 2 |
+| #61 | agentic-workflow | feature | feature | 0.90 | 8 | 3 |
 
 <!-- END GENERATED -->
 
