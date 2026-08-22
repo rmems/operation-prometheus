@@ -19,7 +19,7 @@
 | [#7](https://github.com/rmems/SpikeStream.jl/pull/7) | Re-scope SpikeStream around spike-stream feature extraction | snn | feature | 8 unique; adds `spike_features.jl`. |
 | [#25](https://github.com/rmems/SpikeStream.jl/pull/25) | test(fixtures): frozen spike feature fixtures and range checks (LIM-41) | snn | validation | 0 unique (all 4 raw signals dropped as contextless — author replies to Devin with no preserved originating comment); addresses #5 (kept intentionally open for Linear↔GitHub sync -- no close keyword). |
 | [#22](https://github.com/rmems/SpikeStream.jl/pull/22) | chore(api): remove transitional Hurst/Hawkes/GBM compute_ functions (LIM-47) | api | repair | 0 unique (3 raw signals dropped as contextless — no path/line/quoted-text referent); boundary cut vs kinetic-signals. |
-| [#21](https://github.com/rmems/SpikeStream.jl/pull/21) | chore: Add streaming benchmarks (#15) | tools | validation | 0 unique (6 of 8 raw signals were author "Acknowledged"/"Addressed" responses with no preserved originating comment; the remaining 2 described a `prettymemory(allocs(m))` defect not verifiable anywhere in the retained patch, dropped); Closes #15. Card `task_type` is `test`. |
+| [#21](https://github.com/rmems/SpikeStream.jl/pull/21) | chore: Add streaming benchmarks (#15) | tools | validation | 2 unique (6 of 8 raw signals were author "Acknowledged"/"Addressed" responses with no preserved originating comment); Closes #15. Card `task_type` is `test`. |
 
 ## PR Details
 
@@ -30,7 +30,7 @@
 - **Commits**: 10
 - **Files changed**: 8
 - **Why high-signal**: Introduces first-class spike-event primitives (counts, density, ISI, bursts, windowed/normalized vectors) and keeps market helpers as transitional APIs.
-- **Dataset bucket**: `feature`
+- **Dataset bucket**: `feature` (most retained review findings are fixed and verifiable in the patch; one caveat -- signal 5's redundant-sorting concern for `normalized_feature_vector` is only partially addressed, since it still calls `spike_count`/`spike_density`, which each re-sort internally, rather than reusing its own pre-sorted `sorted_times`)
 
 ### PR #25 — test(fixtures): frozen spike feature fixtures and range checks
 
@@ -54,7 +54,7 @@
 - **Merged**: 2026-07-07
 - **Files changed**: 2
 - **Why high-signal**: BenchmarkTools harness for the six core extractors at three scales. Closes #15.
-- **Dataset bucket**: `validation` (0 unique review signals -- the two describing a `prettymemory(allocs(m))` defect aren't verifiable anywhere in the retained patch, which only shows the already-correct `allocs(m)` / `prettymemory(memory(m))` split)
+- **Dataset bucket**: `validation`
 
 ## Measured review density (raw, 2026-08-20)
 
