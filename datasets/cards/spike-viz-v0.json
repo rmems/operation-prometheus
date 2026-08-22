@@ -25,7 +25,7 @@
   "jsonl_path": "datasets/jsonl/spike-viz-v0.jsonl",
   "manifest_path": "datasets/manifests/spike-viz-v0.manifest.json",
   "markdown_card": "datasets/cards/spike-viz-trajectories-v0.md",
-  "notes": "Wave C pilot (operation-prometheus #29). Tiny repo: 4 merged PRs; extracted the three domain PRs (#24, #23, #22). Live yield: #24 4 kept, #23 10 kept / 8 emitted (review-to-patch follow-up to #22), #22 7 kept. Dropped #21 (docs charter; 0 kept signals). Title hints already feat→feature / fix→bugfix; no task_type_by_pr. domain_by_pr splits raster rendering from loader/export IO. #23 has no close-keyword issues (Related: #22 is the predecessor PR); no linked_issues_by_pr.",
+  "notes": "Wave C pilot (operation-prometheus #29). Tiny repo: 4 merged PRs; extracted the three domain PRs (#24, #23, #22). Live yield: #24 4 kept, #23 10 kept / 8 emitted (review-to-patch follow-up to #22), #22 7 kept. Dropped #21 (docs charter; 0 kept signals). Title hints already feat→feature / fix→bugfix; no task_type_by_pr. domain_by_pr splits raster rendering from loader/export IO. #23 has no close-keyword issues; its predecessor is PR #22 (not an issue), so its pull URL is added to source_urls by hand in the JSONL rather than via linked_issues_by_pr, which only mints /issues/<n> provenance links.",
   "source_doc": "docs/source-repos/spike-viz.md",
   "related_issues": {
     "operation_prometheus": [29, 30],

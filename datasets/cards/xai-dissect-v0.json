@@ -16,7 +16,8 @@
   "task_type_by_pr": {
     "32": "feature",
     "34": "feature",
-    "24": "feature"
+    "24": "feature",
+    "36": "feature"
   },
   "pr_count": 4,
   "pr_numbers": [32, 34, 24, 36],
@@ -30,7 +31,7 @@
   "jsonl_path": "datasets/jsonl/xai-dissect-v0.jsonl",
   "manifest_path": "datasets/manifests/xai-dissect-v0.manifest.json",
   "markdown_card": "datasets/cards/xai-dissect-trajectories-v0.md",
-  "notes": "Wave C pilot (operation-prometheus #29). Domain export/coverage wave, not bulk CI. Live yield: #32 30 kept (export contract; grok-ozempic handoff), #34 10 kept (conversion-ready manifest), #24 28 kept (strict coverage validation), #36 15 kept (pilot-plan / route-preservation / GO-NO-GO). EXCLUDED #48 (137-rev CI/Qodana/Codecov/Sentry monster). Dropped #53 docs gate, #51 relicense, #50 Sentry, #37 docs handoff. Deferred #20/#16/#6/#1 (earlier inventory/CLI; capacity). task_type_by_pr forces #32/#24 (unconventional titles → other) and #34 (documentation label + Rust code → would be docs). Linked issues parse from Closes keywords; no linked_issues_by_pr.",
+  "notes": "Wave C pilot (operation-prometheus #29). Domain export/coverage wave, not bulk CI. Live yield: #32 30 kept (export contract; grok-ozempic handoff), #34 10 kept (conversion-ready manifest), #24 28 kept (strict coverage validation), #36 15 kept (pilot-plan / route-preservation / GO-NO-GO). EXCLUDED #48 (137-rev CI/Qodana/Codecov/Sentry monster). Dropped #53 docs gate, #51 relicense, #50 Sentry, #37 docs handoff. Deferred #20/#16/#6/#1 (earlier inventory/CLI; capacity). task_type_by_pr forces #32/#24 (unconventional titles → other), #34 (documentation label + Rust code → would be docs), and #36 (unconventional title → other). Linked issues parse from Closes keywords; no linked_issues_by_pr.",
   "source_doc": "docs/source-repos/xai-dissect.md",
   "related_issues": {
     "operation_prometheus": [29, 30],
