@@ -6,8 +6,8 @@
   "source_repo": "Limen-Neural/brainstem-daemon",
   "jsonl_path": "datasets/jsonl/brainstem-daemon-v0.jsonl",
   "record_count": 4,
-  "sha256": "99e6c4cd3062e9861fa9506be932adc8b7bebd96928227a44d6a1948b269e870",
-  "bytes": 198208,
+  "sha256": "cd1c0fa51088b78b8a9404139eb7e215cd920da944d452678f1b74c9599cfd1d",
+  "bytes": 198082,
   "records": [
     {
       "id": "Limen-Neural-brainstem-daemon-24",
@@ -19,8 +19,8 @@
       "quality_score": 0.95,
       "outcome": "merged",
       "has_issue_context": true,
-      "review_signal_count": 8,
-      "unique_review_signal_count": 8,
+      "review_signal_count": 7,
+      "unique_review_signal_count": 7,
       "patch_chars": 42102,
       "validation_count": 4,
       "source_url_count": 6

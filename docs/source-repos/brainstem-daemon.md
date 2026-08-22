@@ -16,7 +16,7 @@
 | PR | Title | Domain | Bucket | Signal |
 |----|-------|--------|--------|--------|
 | [#8](https://github.com/Limen-Neural/brainstem-daemon/pull/8) | feat: resolve open issues #4, #5, #6, #7 | infra | feature | 215 raw reviews / 8 unique; ServiceRegistry library split (plus CI/license). |
-| [#24](https://github.com/Limen-Neural/brainstem-daemon/pull/24) | feat: temporary corpus-ipc decoupling (issues #10, #11, #12, #14) | api | review-to-patch | 56 raw / 8 unique; local ingress/egress traits. |
+| [#24](https://github.com/Limen-Neural/brainstem-daemon/pull/24) | feat: temporary corpus-ipc decoupling (issues #10, #11, #12, #14) | api | review-to-patch | 56 raw / 7 unique (a contextless "I don't see much of a difference" response with no referent was dropped); local ingress/egress traits. |
 | [#25](https://github.com/Limen-Neural/brainstem-daemon/pull/25) | Fallible BrainstemDaemon construction with neuron-count validation | snn | repair | 18 raw / 8 unique; `try_new` instead of panic. |
 | [#3](https://github.com/Limen-Neural/brainstem-daemon/pull/3) | Migrate daemon to corpus-ipc and neuromod v0.4.0 | snn | feature | 2 unique; ZMQ ingress/egress + `with_dimensions`. |
 
@@ -64,7 +64,7 @@
 | PR | Reviews | Threads | Yield (unique) | Size | Verdict |
 |----|---------|---------|----------------|------|---------|
 | #8 | 215 | 246 | 8 | +2380/−837, 14 files | shortlisted |
-| #24 | 56 | 73 | 8 | +673/−158, 12 files | shortlisted |
+| #24 | 56 | 73 | 7 | +673/−158, 12 files | shortlisted (contextless response dropped) |
 | #25 | 18 | 20 | 8 | +109/−13, 3 files | shortlisted |
 | #3 | 4 | 8 | 2 | +116/−44, 3 files | shortlisted |
 | #1 | 1 | 0 | 0 | 100 files, mostly `target/` | rejected |
