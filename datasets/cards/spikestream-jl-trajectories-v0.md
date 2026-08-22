@@ -19,7 +19,7 @@
 | PR | Bucket (card) | Schema `training_use` | Domain | Quality |
 |----|---------------|----------------------|--------|---------|
 | [#7](https://github.com/rmems/SpikeStream.jl/pull/7) | feature | feature | snn | 0.95 |
-| [#25](https://github.com/rmems/SpikeStream.jl/pull/25) | validation | validation | snn | 0.90 |
+| [#25](https://github.com/rmems/SpikeStream.jl/pull/25) | validation | validation | snn | 0.80 |
 | [#22](https://github.com/rmems/SpikeStream.jl/pull/22) | repair | repair | api | 0.85 |
 | [#21](https://github.com/rmems/SpikeStream.jl/pull/21) | validation | validation | tools | 0.95 |
 

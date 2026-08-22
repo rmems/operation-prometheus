@@ -17,7 +17,7 @@
 | PR | Title | Domain | Bucket | Signal |
 |----|-------|--------|--------|--------|
 | [#7](https://github.com/rmems/SpikeStream.jl/pull/7) | Re-scope SpikeStream around spike-stream feature extraction | snn | feature | 8 unique; adds `spike_features.jl`. |
-| [#25](https://github.com/rmems/SpikeStream.jl/pull/25) | test(fixtures): frozen spike feature fixtures and range checks (LIM-41) | snn | validation | 4 unique; Closes #5. |
+| [#25](https://github.com/rmems/SpikeStream.jl/pull/25) | test(fixtures): frozen spike feature fixtures and range checks (LIM-41) | snn | validation | 0 unique (all 4 raw signals dropped as contextless — author replies to Devin with no preserved originating comment); Closes #5. |
 | [#22](https://github.com/rmems/SpikeStream.jl/pull/22) | chore(api): remove transitional Hurst/Hawkes/GBM compute_ functions (LIM-47) | api | repair | 0 unique (3 raw signals dropped as contextless — no path/line/quoted-text referent); boundary cut vs kinetic-signals. |
 | [#21](https://github.com/rmems/SpikeStream.jl/pull/21) | chore: Add streaming benchmarks (#15) | tools | validation | 2 unique (6 of 8 raw signals were author "Acknowledged"/"Addressed" responses with no preserved originating comment); Closes #15. Card `task_type` is `test`. |
 
@@ -38,7 +38,7 @@
 - **Merged**: 2026-07-23
 - **Files changed**: 6
 - **Why high-signal**: Frozen `spike_vectors.json` goldens + range invariants after the kinetic-signals split. Closes #5.
-- **Dataset bucket**: `validation`
+- **Dataset bucket**: `validation` (0 unique review signals -- all four raw signals were author replies to Devin with no preserved originating comment)
 
 ### PR #22 — chore(api): remove transitional Hurst/Hawkes/GBM compute_ functions
 

@@ -32,7 +32,7 @@
   "jsonl_path": "datasets/jsonl/spikestream-jl-v0.jsonl",
   "manifest_path": "datasets/manifests/spikestream-jl-v0.manifest.json",
   "markdown_card": "datasets/cards/spikestream-jl-trajectories-v0.md",
-  "notes": "Limen Wave B+ pilot (operation-prometheus #28). Repo transferred Limen-Neural → rmems. Live scoring: #18 (27 raw reviews) and #20 (21) are CI/docs-only — skipped under avoid-for-v0-training despite higher raw review counts. Extracted #7 (re-scope to spike features, 8 unique), #25 fixtures (closes #5), #22 Hurst/Hawkes/GBM amputation (0 unique — 3 raw signals dropped as contextless), #21 streaming benches (closes #15). task_type_by_pr: #22/#21 beat chore: titles; #7 pinned to feature since its non-conventional \"Re-scope\" title falls through the title-hint table. Four-PR Wave B+ pilot (Wave A three-PR exception lives on axon-encoder).",
+  "notes": "Limen Wave B+ pilot (operation-prometheus #28). Repo transferred Limen-Neural → rmems. Live scoring: #18 (27 raw reviews) and #20 (21) are CI/docs-only — skipped under avoid-for-v0-training despite higher raw review counts. Extracted #7 (re-scope to spike features, 8 unique), #25 fixtures (closes #5, 0 unique — all 4 raw signals were author replies to Devin dropped as contextless, quality_score 0.80), #22 Hurst/Hawkes/GBM amputation (0 unique — 3 raw signals dropped as contextless), #21 streaming benches (closes #15). task_type_by_pr: #22/#21 beat chore: titles; #7 pinned to feature since its non-conventional \"Re-scope\" title falls through the title-hint table. Four-PR Wave B+ pilot (Wave A three-PR exception lives on axon-encoder).",
   "source_doc": "docs/source-repos/spikestream-jl.md",
   "related_issues": {
     "operation_prometheus": [28],
