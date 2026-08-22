@@ -1,0 +1,61 @@
+{
+  "name": "thalamic-relay-v0",
+  "schema_version": "pr_trajectory_v0",
+  "created_at": "2026-08-20",
+  "created_by": "Grok Build Agent: Grok 4.5",
+  "source_repo": "rmems/thalamic-relay",
+  "jsonl_path": "datasets/jsonl/thalamic-relay-v0.jsonl",
+  "record_count": 3,
+  "sha256": "f95cd488cb865e131a7dc391a19404b13ff6fb39b6b6f97a6f9f91d218103847",
+  "bytes": 74974,
+  "records": [
+    {
+      "id": "rmems-thalamic-relay-20",
+      "pr_number": 20,
+      "training_use": "feature",
+      "task_type": "feature",
+      "domain": "gpu-compute",
+      "language": "Rust",
+      "quality_score": 0.95,
+      "outcome": "merged",
+      "has_issue_context": true,
+      "review_signal_count": 4,
+      "unique_review_signal_count": 4,
+      "patch_chars": 21420,
+      "validation_count": 4,
+      "source_url_count": 3
+    },
+    {
+      "id": "rmems-thalamic-relay-22",
+      "pr_number": 22,
+      "training_use": "validation",
+      "task_type": "test",
+      "domain": "systems",
+      "language": "Rust",
+      "quality_score": 0.9,
+      "outcome": "merged",
+      "has_issue_context": true,
+      "review_signal_count": 1,
+      "unique_review_signal_count": 1,
+      "patch_chars": 8175,
+      "validation_count": 3,
+      "source_url_count": 2
+    },
+    {
+      "id": "rmems-thalamic-relay-23",
+      "pr_number": 23,
+      "training_use": "repair",
+      "task_type": "bugfix",
+      "domain": "gpu-compute",
+      "language": "Rust",
+      "quality_score": 0.95,
+      "outcome": "merged",
+      "has_issue_context": true,
+      "review_signal_count": 5,
+      "unique_review_signal_count": 5,
+      "patch_chars": 18331,
+      "validation_count": 4,
+      "source_url_count": 1
+    }
+  ]
+}
