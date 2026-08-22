@@ -16,9 +16,9 @@
 
 | PR | Title | Domain | Bucket | Signal |
 |----|-------|--------|--------|--------|
-| [#20](https://github.com/rmems/thalamic-relay/pull/20) | feat: integrate GPU safety monitoring into main supervisor loop | gpu-compute | feature | 40 kept / 8 emitted. Wires `check_safety` into the loop; closes #14 / #12. |
-| [#23](https://github.com/rmems/thalamic-relay/pull/23) | fix: harden GPU brake recovery on safety PR | gpu-compute | repair | 33 kept / 8 emitted. Fresh telemetry after `release_task` so the brake cannot lift into a still-critical GPU. |
-| [#22](https://github.com/rmems/thalamic-relay/pull/22) | test: increase coverage for supervisor + IPC paths | systems | validation | 52 kept / 8 emitted (densest yield). 8→17 tests on UDP/IPC + metrics; closes #13. |
+| [#20](https://github.com/rmems/thalamic-relay/pull/20) | feat: integrate GPU safety monitoring into main supervisor loop | gpu-compute | feature | 40 kept / 7 emitted. Wires `check_safety` into the loop; closes #14 / #12. |
+| [#23](https://github.com/rmems/thalamic-relay/pull/23) | fix: harden GPU brake recovery on safety PR | gpu-compute | repair | 33 kept / 7 emitted. Fresh telemetry after `release_task` so the brake cannot lift into a still-critical GPU. |
+| [#22](https://github.com/rmems/thalamic-relay/pull/22) | test: increase coverage for supervisor + IPC paths | systems | validation | 52 kept / 3 emitted. 8→17 tests on UDP/IPC + metrics; closes #13. |
 
 ## PR Details
 
@@ -55,9 +55,9 @@
 
 | PR | Kept after bot filter | Emitted | Unique bodies | Verdict |
 |----|----------------------|---------|---------------|---------|
-| #22 | 52 | 8 | 8 | shortlisted |
-| #20 | 40 | 8 | 8 | shortlisted |
-| #23 | 33 | 8 | 8 | shortlisted |
+| #22 | 52 | 3 | 3 | shortlisted |
+| #20 | 40 | 7 | 7 | shortlisted |
+| #23 | 33 | 7 | 7 | shortlisted |
 | #18 | 25 | 8 | 8 | deferred (CLI, not GPU-safety) |
 | #36 | 0 | 0 | 0 | dropped (0 kept signals) |
 

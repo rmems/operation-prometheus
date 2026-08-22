@@ -17,7 +17,7 @@
 
 | PR | Title | Domain | Bucket | Signal |
 |----|-------|--------|--------|--------|
-| [#24](https://github.com/rmems/spike-viz/pull/24) | feat: CPU raster renderer (sparse/dense → PNG) | visualization | feature | 4 kept / 4 emitted. `render_raster()` on CPU. Closes #9. |
+| [#24](https://github.com/rmems/spike-viz/pull/24) | feat: CPU raster renderer (sparse/dense → PNG) | visualization | feature | 4 kept / 2 emitted. `render_raster()` on CPU. Closes #9. |
 | [#23](https://github.com/rmems/spike-viz/pull/23) | fix: address PR #22 review comments | io | review-to-patch | 10 kept / 8 emitted. Explicit follow-up to #22 (cannot reopen). |
 | [#22](https://github.com/rmems/spike-viz/pull/22) | feat: export contract, schema loaders, package skeleton | io | feature | 7 kept / 7 emitted. Closes #6 / #8 / #10. |
 
@@ -58,7 +58,7 @@
 |----|----------------------|---------|---------------|---------|
 | #23 | 10 | 8 | 8 | shortlisted (pair with #22) |
 | #22 | 7 | 7 | 7 | shortlisted |
-| #24 | 4 | 4 | 4 | shortlisted |
+| #24 | 4 | 2 | 2 | shortlisted |
 | #21 | 0 | 0 | 0 | dropped (docs-only) |
 
 ## Considered and rejected
