@@ -6,8 +6,8 @@
   "source_repo": "rmems/SpikeStream.jl",
   "jsonl_path": "datasets/jsonl/spikestream-jl-v0.jsonl",
   "record_count": 4,
-  "sha256": "9c662a11d1eef5519685ac094fc41c0ed16bffbfd91b8c2be3f98cc99e3696b1",
-  "bytes": 69885,
+  "sha256": "e28a315ab37450aa6ae3c3c40f476669de2d42ccf08477797adeb578a42e8a5e",
+  "bytes": 69683,
   "records": [
     {
       "id": "rmems-SpikeStream.jl-21",
@@ -35,8 +35,8 @@
       "quality_score": 0.95,
       "outcome": "merged",
       "has_issue_context": true,
-      "review_signal_count": 3,
-      "unique_review_signal_count": 3,
+      "review_signal_count": 0,
+      "unique_review_signal_count": 0,
       "patch_chars": 7654,
       "validation_count": 3,
       "source_url_count": 1
