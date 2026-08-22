@@ -41,7 +41,7 @@
 - **Files changed**: 12
 - **Why high-signal**: Local `IngressPacket` / `SpikeEvent` traits and a stub backend so `corpus-ipc`+`zmq` can be optional.
 - **Dataset bucket**: `review-to-patch`
-- **Provenance**: issues #10, #11, #12, #14 (card `linked_issues_by_pr`; body has no close keywords)
+- **Provenance**: issues #9, #10, #11, #12, #14 (card `linked_issues_by_pr`; #9 is the parent planning issue this PR implements, #10-#14 are child issues; body has no close keywords)
 
 ### PR #25 — Fallible BrainstemDaemon construction with neuron-count validation
 
