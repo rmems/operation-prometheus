@@ -122,6 +122,8 @@ def test_linked_issues_by_pr_on_card_in_source_urls():
     assert traj["source_urls"][0] == (
         "https://github.com/Limen-Neural/brainstem-daemon/pull/24"
     )
+    assert len(traj["source_urls"]) == 6
+    assert len(traj["source_urls"]) == len(set(traj["source_urls"]))
     for issue in (9, 10, 11, 12, 14):
         assert (
             f"https://github.com/Limen-Neural/brainstem-daemon/issues/{issue}"

@@ -58,7 +58,7 @@
 
 ## Measured review density (raw, 2026-08-20)
 
-| PR | Reviews | Threads | Yield (unique) | Size | Verdict |
+| PR | Reviews | Threads | Raw yield (unique, pre-quality-filter) | Size | Verdict |
 |----|---------|---------|----------------|------|---------|
 | #18 | 27 | 34 | 8 | +79/−151, CI/docs only | **rejected** (bulk CI) |
 | #21 | 26 | 32 | 8 | +75/−0, benches | shortlisted |
