@@ -19,7 +19,7 @@
 | [#35](https://github.com/rmems/kinetic-signals/pull/35) | test: expand demo for missing APIs (LIM-199, #26) | telemetry | validation | 6 unique; streaming Hawkes + surprise demo coverage. |
 | [#17](https://github.com/rmems/kinetic-signals/pull/17) | refactor!: remove deprecated GBM aliases, bump to v0.4.0 | snn | repair | 6 unique; Closes #15. |
 | [#6](https://github.com/rmems/kinetic-signals/pull/6) | Dev environment setup + resolve open issues (#3, #4, #5) | infra | feature | 8 unique; #4 domain rename plus CI for #5 — kept for the domain half. |
-| [#1](https://github.com/rmems/kinetic-signals/pull/1) | Generalizing | ml-infra | feature | 1 unique; strips third-party deps and serde gates. |
+| [#1](https://github.com/rmems/kinetic-signals/pull/1) | Generalizing | ml-infra | bug-prediction | 1 unique; strips third-party deps and serde gates. Retained P1 review flags the NaN-dropping clamp the patch itself introduces — no corrective commit captured, so this is bug-prediction, not a clean feature trajectory. |
 
 ## PR Details
 
@@ -64,7 +64,7 @@
 - **Merged**: 2026-04-19
 - **Files changed**: 12
 - **Why high-signal**: Local `real.rs` trait replaces num-traits; removes serde-gated derives.
-- **Dataset bucket**: `feature`
+- **Dataset bucket**: `bug-prediction` (retained P1 review flags the `h.max(T::zero()).min(T::one())` clamp this same patch introduces as NaN-dropping; no corrective follow-up commit is captured in this extract)
 
 ## Measured review density (raw, 2026-08-20)
 

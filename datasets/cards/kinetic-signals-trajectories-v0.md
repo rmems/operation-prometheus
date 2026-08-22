@@ -22,7 +22,7 @@
 | [#35](https://github.com/rmems/kinetic-signals/pull/35) | validation | validation | telemetry | 0.95 |
 | [#17](https://github.com/rmems/kinetic-signals/pull/17) | repair | repair | snn | 0.95 |
 | [#6](https://github.com/rmems/kinetic-signals/pull/6) | feature | feature | infra | 0.95 |
-| [#1](https://github.com/rmems/kinetic-signals/pull/1) | feature | feature | ml-infra | 0.75 |
+| [#1](https://github.com/rmems/kinetic-signals/pull/1) | bug-prediction | bug-prediction | ml-infra | 0.75 |
 
 ## Narrative buckets
 

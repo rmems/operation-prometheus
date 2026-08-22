@@ -20,7 +20,7 @@
 |----|---------------|----------------------|--------|---------|
 | [#5](https://github.com/Limen-Neural/neuromod/pull/5) | feature | feature | snn | 0.95 |
 | [#8](https://github.com/Limen-Neural/neuromod/pull/8) | repair | repair | snn | 0.75 |
-| [#9](https://github.com/Limen-Neural/neuromod/pull/9) | review-to-patch | review-to-patch | api | 0.85 |
+| [#9](https://github.com/Limen-Neural/neuromod/pull/9) | bug-prediction | bug-prediction | api | 0.85 |
 | [#2](https://github.com/Limen-Neural/neuromod/pull/2) | review-to-patch | review-to-patch | snn | 0.85 |
 | [#15](https://github.com/Limen-Neural/neuromod/pull/15) | review-to-patch | review-to-patch | ml-infra | 0.95 |
 

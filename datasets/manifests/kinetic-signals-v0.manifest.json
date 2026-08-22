@@ -6,13 +6,13 @@
   "source_repo": "rmems/kinetic-signals",
   "jsonl_path": "datasets/jsonl/kinetic-signals-v0.jsonl",
   "record_count": 5,
-  "sha256": "cc91b660d308d30fe4f5d4b74cd0b07b2f1576b9edce6116f6ddeee698b7d495",
-  "bytes": 149628,
+  "sha256": "bf8d86976f6dc32b5702e3ef85ab93fad619f14cac868ff5cd3f771d79c6ce86",
+  "bytes": 149672,
   "records": [
     {
       "id": "rmems-kinetic-signals-1",
       "pr_number": 1,
-      "training_use": "feature",
+      "training_use": "bug-prediction",
       "task_type": "refactor",
       "domain": "ml-infra",
       "language": "Rust",
