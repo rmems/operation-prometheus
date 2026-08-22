@@ -6,8 +6,8 @@
   "source_repo": "Limen-Neural/neuromod",
   "jsonl_path": "datasets/jsonl/neuromod-v0.jsonl",
   "record_count": 5,
-  "sha256": "51b606f38e346fb257898cb3c45e303dd7f2f66e2aa34f957713aecef956dca8",
-  "bytes": 326064,
+  "sha256": "f6fb31fd63bc451f6b576f8ee5bb67df65219a8277fbf0a1d2929fc33029fe4c",
+  "bytes": 326113,
   "records": [
     {
       "id": "Limen-Neural-neuromod-15",
@@ -60,7 +60,7 @@
     {
       "id": "Limen-Neural-neuromod-8",
       "pr_number": 8,
-      "training_use": "repair",
+      "training_use": "bug-prediction",
       "task_type": "refactor",
       "domain": "snn",
       "language": "Rust",
