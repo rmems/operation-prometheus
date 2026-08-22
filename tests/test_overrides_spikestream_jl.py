@@ -100,4 +100,4 @@ def test_language_and_buckets_on_card():
     assert traj["domain"] == "snn"
     assert traj["language"] == "Julia"
     assert traj["training_use"] == "feature"
-    assert traj["task_type"] == "other"
+    assert traj["task_type"] == "feature"
