@@ -18,7 +18,7 @@
 |----|-------|--------|--------|--------|
 | [#7](https://github.com/rmems/SpikeStream.jl/pull/7) | Re-scope SpikeStream around spike-stream feature extraction | snn | feature | 8 unique; adds `spike_features.jl`. |
 | [#25](https://github.com/rmems/SpikeStream.jl/pull/25) | test(fixtures): frozen spike feature fixtures and range checks (LIM-41) | snn | validation | 4 unique; Closes #5. |
-| [#22](https://github.com/rmems/SpikeStream.jl/pull/22) | chore(api): remove transitional Hurst/Hawkes/GBM compute_ functions (LIM-47) | api | repair | 3 unique; boundary cut vs kinetic-signals. |
+| [#22](https://github.com/rmems/SpikeStream.jl/pull/22) | chore(api): remove transitional Hurst/Hawkes/GBM compute_ functions (LIM-47) | api | repair | 0 unique (3 raw signals dropped as contextless — no path/line/quoted-text referent); boundary cut vs kinetic-signals. |
 | [#21](https://github.com/rmems/SpikeStream.jl/pull/21) | chore: Add streaming benchmarks (#15) | tools | validation | 8 unique; Closes #15. Card `task_type` is `test`. |
 
 ## PR Details
