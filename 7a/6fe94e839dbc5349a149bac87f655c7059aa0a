@@ -1,0 +1,21 @@
+scripts/lib/__init__.py
+  s_9528f7bb1b94a0::t_c01bb48c1cf92b 3
+v0.6.0releasenotes.md
+  s_9528f7bb1b94a0::t_e36734e1b35cf3 1-11
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.5.2",
+  "base_commit_sha": "7a6fe94e839dbc5349a149bac87f655c7059aa0a",
+  "prompts": {},
+  "sessions": {
+    "s_9528f7bb1b94a0": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a03161-d48b-7023-afa0-82e6e8d5b8dd",
+        "model": "gpt-5.3-codex-spark"
+      },
+      "human_author": "Raul Montoya Cardenas <montoyaraul34@gmail.com>"
+    }
+  }
+}
