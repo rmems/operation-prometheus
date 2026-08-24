@@ -24,12 +24,17 @@ One record per PR. See [datasets/README.md](../../datasets/README.md) for commit
 
 | Source repo | Doc | Status |
 |-------------|-----|--------|
+| [Limen-Neural/brainstem-daemon](https://github.com/Limen-Neural/brainstem-daemon) | [brainstem-daemon.md](brainstem-daemon.md) | v0 extracted |
 | [rmems/corinth-canal](https://github.com/rmems/corinth-canal) | [corinth-canal.md](corinth-canal.md) | v0 extracted |
 | [rmems/engram-parser](https://github.com/rmems/engram-parser) | [engram-parser.md](engram-parser.md) | v0 extracted |
 | [rmems/grok-ozempic](https://github.com/rmems/grok-ozempic) | [grok-ozempic.md](grok-ozempic.md) | v0 + v1 extracted |
+| [rmems/kinetic-signals](https://github.com/rmems/kinetic-signals) | [kinetic-signals.md](kinetic-signals.md) | v0 extracted |
 | [Limen-Neural](https://github.com/Limen-Neural) (org) | [limen-neural.md](limen-neural.md) | Wave A extracted (axon-encoder) |
+| [Limen Wave B+](https://github.com/Limen-Neural) | [limen-wave-b.md](limen-wave-b.md) | Wave B+ pilot extracted |
 | [rmems/myelin-accelerator](https://github.com/rmems/myelin-accelerator) | [myelin-accelerator.md](myelin-accelerator.md) | v0 extracted |
+| [Limen-Neural/neuromod](https://github.com/Limen-Neural/neuromod) | [neuromod.md](neuromod.md) | v0 extracted |
 | [rmems/spike-viz](https://github.com/rmems/spike-viz) | [spike-viz.md](spike-viz.md) | v0 extracted |
+| [rmems/SpikeStream.jl](https://github.com/rmems/SpikeStream.jl) | [spikestream-jl.md](spikestream-jl.md) | v0 extracted |
 | [rmems/thalamic-relay](https://github.com/rmems/thalamic-relay) | [thalamic-relay.md](thalamic-relay.md) | v0 extracted |
 | [rmems/Theseus-Quarry](https://github.com/rmems/Theseus-Quarry) | [theseus-quarry.md](theseus-quarry.md) | v0 extracted |
 | [rmems (org)](https://github.com/rmems) | [wave-c.md](wave-c.md) | Wave C pilot extracted |
