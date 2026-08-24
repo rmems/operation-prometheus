@@ -25,12 +25,16 @@ One record per PR. See [datasets/README.md](../../datasets/README.md) for commit
 | Source repo | Doc | Status |
 |-------------|-----|--------|
 | [rmems/corinth-canal](https://github.com/rmems/corinth-canal) | [corinth-canal.md](corinth-canal.md) | v0 extracted |
+| [rmems/engram-parser](https://github.com/rmems/engram-parser) | [engram-parser.md](engram-parser.md) | v0 extracted |
 | [rmems/grok-ozempic](https://github.com/rmems/grok-ozempic) | [grok-ozempic.md](grok-ozempic.md) | v0 + v1 extracted |
 | [Limen-Neural](https://github.com/Limen-Neural) (org) | [limen-neural.md](limen-neural.md) | Wave A extracted (axon-encoder) |
 | [rmems/myelin-accelerator](https://github.com/rmems/myelin-accelerator) | [myelin-accelerator.md](myelin-accelerator.md) | v0 extracted |
+| [rmems/spike-viz](https://github.com/rmems/spike-viz) | [spike-viz.md](spike-viz.md) | v0 extracted |
+| [rmems/thalamic-relay](https://github.com/rmems/thalamic-relay) | [thalamic-relay.md](thalamic-relay.md) | v0 extracted |
 | [rmems/Theseus-Quarry](https://github.com/rmems/Theseus-Quarry) | [theseus-quarry.md](theseus-quarry.md) | v0 extracted |
-| [rmems (org)](https://github.com/rmems) | [wave-c.md](wave-c.md) | pointers only |
+| [rmems (org)](https://github.com/rmems) | [wave-c.md](wave-c.md) | Wave C pilot extracted |
 | [rmems/worktrees-hives](https://github.com/rmems/worktrees-hives) | [worktrees-hives.md](worktrees-hives.md) | v0 extracted |
+| [rmems/xai-dissect](https://github.com/rmems/xai-dissect) | [xai-dissect.md](xai-dissect.md) | v0 extracted |
 
 <!-- END GENERATED INDEX -->
 

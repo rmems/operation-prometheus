@@ -5,7 +5,7 @@
 <!-- BEGIN GENERATED: scripts/build_status.py -->
 
 **Last updated:** 2026-08-20  
-**Extracts:** 7 · **Trajectories:** 43  
+**Extracts:** 11 · **Trajectories:** 54  
 
 <!-- Derived from datasets/manifests/*.manifest.json — do not edit by hand. -->
 
@@ -19,7 +19,11 @@
 | `myelin-accelerator-v0` | rmems/myelin-accelerator | 5 | pr_trajectory_v0 | 2026-08-16 |
 | `grok-ozempic-v1` | rmems/grok-ozempic | 5 | pr_trajectory_v0 | 2026-08-18 |
 | `theseus-quarry-v0` | rmems/Theseus-Quarry | 5 | pr_trajectory_v0 | 2026-08-19 |
+| `engram-parser-v0` | rmems/engram-parser | 1 | pr_trajectory_v0 | 2026-08-20 |
+| `spike-viz-v0` | rmems/spike-viz | 3 | pr_trajectory_v0 | 2026-08-20 |
+| `thalamic-relay-v0` | rmems/thalamic-relay | 3 | pr_trajectory_v0 | 2026-08-20 |
 | `worktrees-hives-v0` | rmems/worktrees-hives | 5 | pr_trajectory_v0 | 2026-08-20 |
+| `xai-dissect-v0` | rmems/xai-dissect | 4 | pr_trajectory_v0 | 2026-08-20 |
 
 ## Trajectory quality
 
@@ -91,6 +95,28 @@
 | #9 | gpu-compute | feature | feature | 0.90 | 7 | 3 |
 | #8 | infra | repair | refactor | 0.95 | 8 | 3 |
 
+### engram-parser-v0
+
+| PR | domain | training_use | task_type | quality | signals | validation |
+|----|--------|--------------|-----------|---------|---------|------------|
+| #44 | ml-infra | feature | feature | 0.90 | 8 | 4 |
+
+### spike-viz-v0
+
+| PR | domain | training_use | task_type | quality | signals | validation |
+|----|--------|--------------|-----------|---------|---------|------------|
+| #24 | visualization | feature | feature | 0.95 | 2 | 3 |
+| #23 | io | review-to-patch | bugfix | 0.95 | 7 | 2 |
+| #22 | io | feature | feature | 0.90 | 5 | 4 |
+
+### thalamic-relay-v0
+
+| PR | domain | training_use | task_type | quality | signals | validation |
+|----|--------|--------------|-----------|---------|---------|------------|
+| #23 | gpu-compute | repair | bugfix | 0.95 | 5 | 4 |
+| #22 | systems | validation | test | 0.90 | 1 | 3 |
+| #20 | gpu-compute | feature | feature | 0.95 | 4 | 4 |
+
 ### worktrees-hives-v0
 
 | PR | domain | training_use | task_type | quality | signals | validation |
@@ -100,6 +126,15 @@
 | #65 | ml-infra | feature | feature | 0.90 | 8 | 2 |
 | #63 | agentic-workflow | feature | feature | 0.95 | 8 | 2 |
 | #61 | agentic-workflow | feature | feature | 0.90 | 8 | 3 |
+
+### xai-dissect-v0
+
+| PR | domain | training_use | task_type | quality | signals | validation |
+|----|--------|--------------|-----------|---------|---------|------------|
+| #36 | quantization | feature | feature | 0.95 | 6 | 3 |
+| #34 | export | feature | feature | 0.90 | 7 | 3 |
+| #32 | export | feature | feature | 0.95 | 8 | 3 |
+| #24 | ml-infra | feature | feature | 0.95 | 7 | 3 |
 
 <!-- END GENERATED -->
 
