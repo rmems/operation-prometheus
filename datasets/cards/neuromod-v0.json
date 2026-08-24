@@ -1,0 +1,45 @@
+{
+  "name": "neuromod-v0",
+  "source_repo": "Limen-Neural/neuromod",
+  "source_repo_url": "https://github.com/Limen-Neural/neuromod",
+  "source_repo_description": "Core SNN models and neuromodulator API (LIF/HH/FHN/Hebbian, domain-agnostic modulators)",
+  "schema_version": "pr_trajectory_v0",
+  "schema_url": "https://github.com/rmems/operation-prometheus/blob/main/schemas/pr_trajectory.schema.json",
+  "language": "Rust",
+  "domains": ["snn", "api", "ml-infra"],
+  "domain_by_pr": {
+    "5": "snn",
+    "8": "snn",
+    "9": "api",
+    "2": "snn",
+    "15": "ml-infra"
+  },
+  "task_type_by_pr": {
+    "8": "refactor",
+    "9": "refactor",
+    "2": "refactor"
+  },
+  "linked_issues_by_pr": {
+    "5": [3]
+  },
+  "pr_count": 5,
+  "pr_numbers": [5, 8, 9, 2, 15],
+  "training_use_buckets": {
+    "feature": [5],
+    "review-to-patch": [2, 15],
+    "bug-prediction": [9, 8]
+  },
+  "extracted_at": "2026-08-20",
+  "status": "extracted-v0",
+  "created_at": "2026-08-20",
+  "created_by": "Grok Build Agent: Grok 4.5",
+  "jsonl_path": "datasets/jsonl/neuromod-v0.jsonl",
+  "manifest_path": "datasets/manifests/neuromod-v0.manifest.json",
+  "markdown_card": "datasets/cards/neuromod-trajectories-v0.md",
+  "notes": "Limen Wave B+ pilot (operation-prometheus #28). Must-include smoke PRs #5/#8/#9 remain merged with extract_review_signals yield (4/2/2 unique). Added #2 (mining/HFT purge, 7 unique) and #15 (domain-agnostic modulator API, 4 unique after dropping a `@coderabbitai Review please` trigger and three orphan CI-hardening/decay-fix replies; also lands CI for #14 but the delta is 21 Rust files). Deferred #96–#98 Docker/release-CI chain and #33 bulk CI monster. domain_by_pr: #9 api, #15 ml-infra. task_type_by_pr: #8 beats Fix-title bugfix (HH rewrite + standalone crate). linked_issues_by_pr: #5 → issue #3 (body names issue without a close keyword). training_use_buckets: #9 is bug-prediction, not review-to-patch — the retained P1 review flags the zero-init weights change the patch itself introduces, so the patch is the flaw, not a fix responding to it; no later corrective commit is captured in this extract. #8 is bug-prediction, not repair — both retained reviews (absolute-vs-relative voltage convention in new_cortical(), hard-coded reset() state) still describe defects present in the merged patch, with no corrective follow-up captured.",
+  "source_doc": "docs/source-repos/neuromod.md",
+  "related_issues": {
+    "operation_prometheus": [28],
+    "neuromod": [3, 13, 14]
+  }
+}

@@ -1,0 +1,47 @@
+{
+  "name": "kinetic-signals-v0",
+  "source_repo": "rmems/kinetic-signals",
+  "source_repo_url": "https://github.com/rmems/kinetic-signals",
+  "source_repo_description": "Streaming signal-processing crate (Hawkes/surprise/stats) at the SpikeStream.jl language boundary",
+  "schema_version": "pr_trajectory_v0",
+  "schema_url": "https://github.com/rmems/operation-prometheus/blob/main/schemas/pr_trajectory.schema.json",
+  "language": "Rust",
+  "domains": ["telemetry", "snn", "infra", "ml-infra"],
+  "domain_by_pr": {
+    "39": "telemetry",
+    "35": "telemetry",
+    "17": "snn",
+    "6": "infra",
+    "1": "ml-infra"
+  },
+  "task_type_by_pr": {
+    "6": "refactor",
+    "1": "refactor"
+  },
+  "linked_issues_by_pr": {
+    "39": [28],
+    "35": [26],
+    "6": [3]
+  },
+  "pr_count": 5,
+  "pr_numbers": [39, 35, 17, 6, 1],
+  "training_use_buckets": {
+    "validation": [39, 35],
+    "repair": [17],
+    "feature": [6],
+    "bug-prediction": [1]
+  },
+  "extracted_at": "2026-08-20",
+  "status": "extracted-v0",
+  "created_at": "2026-08-20",
+  "created_by": "Grok Build Agent: Grok 4.5",
+  "jsonl_path": "datasets/jsonl/kinetic-signals-v0.jsonl",
+  "manifest_path": "datasets/manifests/kinetic-signals-v0.manifest.json",
+  "markdown_card": "datasets/cards/kinetic-signals-trajectories-v0.md",
+  "notes": "Limen Wave B+ pilot (operation-prometheus #28). Repo transferred Limen-Neural → rmems. #39 is the densest Wave B candidate (109 raw reviews / 8 unique kept). Cluster: #35 demo coverage, #17 GBM alias amputation, #6 issue #4 domain rename plus CI, #1 dependency-free generalize. Skipped #37 (0 kept signals), #2 (0 kept), docs/Sentry/AGENTS, #42 post-transfer hygiene. linked_issues_by_pr for #39→#28 and #35→#26 (titles/bodies name the issues without close keywords; collector did not fetch the pre-transfer Limen-Neural URLs); #6→#3 (body says \"refs #3\", not a close keyword, for the SpikeStream.jl output-range alignment work alongside #4/#5 which are auto-linked via \"closes\"). training_use_buckets: #1 is bug-prediction, not feature — the retained P1 review flags the NaN-dropping `h.max(T::zero()).min(T::one())` clamp the patch itself introduces, with no corrective commit captured in this extract.",
+  "source_doc": "docs/source-repos/kinetic-signals.md",
+  "related_issues": {
+    "operation_prometheus": [28],
+    "kinetic_signals": [28, 26, 15, 5, 4, 3]
+  }
+}
