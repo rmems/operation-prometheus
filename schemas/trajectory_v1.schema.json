@@ -2,7 +2,7 @@
   "$schema": "http://json-schema.org/draft-07/schema#",
   "$id": "https://github.com/rmems/operation-prometheus/schemas/trajectory_v1.schema.json",
   "title": "Trajectory v1",
-  "description": "Event-sourced trajectory v1 schema.",
+  "description": "Lossless event-sourced trajectory v1 schema and provenance envelope.",
   "type": "object",
   "required": [
     "schema_version",
@@ -30,7 +30,11 @@
       "required": ["owner", "name"],
       "properties": {
         "owner": { "type": "string" },
-        "name": { "type": "string" }
+        "name": { "type": "string" },
+        "url": { "type": "string" },
+        "commit_oid": { "type": "string" },
+        "base_oid": { "type": "string" },
+        "head_oid": { "type": "string" }
       }
     },
     "license": { "type": "string" },
@@ -38,9 +42,25 @@
     "collection_policy": { "type": "string" },
     "takedown_state": { "type": "string" },
     "terminal_disposition": {
-      "enum": ["successful", "failed", "reverted", "falsified", "null", "invalid", "interrupted", "inconclusive"]
+      "enum": [
+        "successful",
+        "failed",
+        "reverted",
+        "falsified",
+        "null",
+        "invalid",
+        "interrupted",
+        "inconclusive"
+      ]
     },
-    "evidence_quality": { "type": "object" },
+    "evidence_quality": {
+      "type": "object",
+      "properties": {
+        "signal_to_noise": { "type": "number" },
+        "reproducibility": { "type": "number" },
+        "completeness": { "type": "number" }
+      }
+    },
     "artifacts": {
       "type": "array",
       "items": {
@@ -52,7 +72,8 @@
           "media_type": { "type": "string" },
           "byte_size": { "type": "integer", "minimum": 0 },
           "availability": { "enum": ["inline", "remote", "missing"] },
-          "reproduction_role": { "type": "string" }
+          "reproduction_role": { "type": "string" },
+          "content": { "type": "string" }
         }
       }
     },
@@ -89,7 +110,21 @@
             "type": "array",
             "items": { "type": "string" }
           },
-          "disposition": { "type": "string" }
+          "disposition": {
+            "enum": [
+              "successful",
+              "failed",
+              "reverted",
+              "falsified",
+              "null",
+              "invalid",
+              "interrupted",
+              "inconclusive",
+              "neutral",
+              "passed"
+            ]
+          },
+          "content": { "type": "string" }
         }
       }
     },
@@ -121,5 +156,25 @@
         "measurements": { "type": "string" }
       }
     }
-  }
+  },
+  "allOf": [
+    {
+      "if": {
+        "properties": { "trajectory_type": { "const": "software" } }
+      },
+      "then": {
+        "required": ["software_payload"],
+        "not": { "required": ["research_payload"] }
+      }
+    },
+    {
+      "if": {
+        "properties": { "trajectory_type": { "const": "research" } }
+      },
+      "then": {
+        "required": ["research_payload"],
+        "not": { "required": ["software_payload"] }
+      }
+    }
+  ]
 }

@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Validate JSONL trajectory files against pr_trajectory.schema.json.
+"""Validate JSONL trajectory files against schemas.
 
 Usage:
     python scripts/validate_jsonl.py datasets/jsonl/*.jsonl
@@ -13,6 +13,7 @@ non-zero if any validation error is found.
 from __future__ import annotations
 
 import argparse
+from datetime import datetime, timezone
 import json
 import re
 import sys
@@ -66,39 +67,67 @@ def _iter_strings(obj: object):
 def policy_errors(record: dict, lineno: int, filename: str) -> list[str]:
     """Extra policy checks beyond JSON Schema."""
     errors: list[str] = []
-    
+    if not isinstance(record, dict):
+        return errors
+
     schema_version = record.get("schema_version")
     if schema_version in ("1", "1.0", "v1"):
-        events = record.get("events", [])
-        last_ts = ""
-        for e in events:
-            ts = e.get("timestamp", "")
-            if ts:
-                if last_ts and ts < last_ts:
-                    errors.append(f"  {filename}:{lineno} [policy] - future-event leakage / events not ordered (timestamp {ts} before {last_ts})")
-                last_ts = ts
-                
+        events = record.get("events")
+        if isinstance(events, list):
+            last_dt: datetime | None = None
+            for e in events:
+                if not isinstance(e, dict):
+                    continue
+                ts = e.get("timestamp")
+                if isinstance(ts, str) and ts:
+                    try:
+                        iso_ts = ts.replace("Z", "+00:00")
+                        dt = datetime.fromisoformat(iso_ts).astimezone(timezone.utc)
+                        if last_dt is not None and dt < last_dt:
+                            errors.append(
+                                f"  {filename}:{lineno} [policy] - future-event leakage / events not ordered "
+                                f"(timestamp {ts} before previous)"
+                            )
+                        last_dt = dt
+                    except (ValueError, TypeError):
+                        pass
+
+                actor = e.get("actor")
+                if isinstance(actor, dict):
+                    if actor.get("type") not in ("human", "bot", "application", "agent"):
+                        errors.append(f"  {filename}:{lineno} [policy] - invented/unsupported actor type")
+
         traj_type = record.get("trajectory_type")
-        if traj_type == "software":
+        if traj_type == "software" and isinstance(events, list):
             has_snapshot = False
             for e in events:
-                if e.get("code_state", {}).get("before_blob") or e.get("code_state", {}).get("base_oid"):
-                    has_snapshot = True
-                    break
+                if isinstance(e, dict):
+                    code_state = e.get("code_state")
+                    if isinstance(code_state, dict):
+                        if any(code_state.get(k) for k in ("before_blob", "base_oid", "commit_oid", "tree_oid")):
+                            has_snapshot = True
+                            break
             if not has_snapshot:
                 errors.append(f"  {filename}:{lineno} [policy] - missing required code snapshots for software trajectory")
 
         disp = record.get("terminal_disposition")
         if disp == "successful":
-            payload = record.get("software_payload") or record.get("research_payload") or {}
-            has_success_event = any(e.get("disposition") == "successful" for e in events)
-            if not has_success_event and "successful" not in str(payload):
-                 errors.append(f"  {filename}:{lineno} [policy] - nonterminal record incorrectly represented as positive terminal example")
-                 
-        for e in events:
-            actor = e.get("actor", {})
-            if actor.get("type") not in ("human", "bot", "application", "agent"):
-                 errors.append(f"  {filename}:{lineno} [policy] - invented/unsupported actor type")
+            payload = record.get("software_payload") if traj_type == "software" else record.get("research_payload")
+            has_success_event = False
+            if isinstance(events, list):
+                for e in events:
+                    if isinstance(e, dict) and e.get("disposition") in ("successful", "passed"):
+                        has_success_event = True
+                        break
+            outcome_success = False
+            if isinstance(payload, dict):
+                val_outcome = str(payload.get("validation_outcome", "")).strip().lower()
+                if val_outcome in ("pass", "passed", "success", "successful", "verified", "ok"):
+                    outcome_success = True
+            if not has_success_event and not outcome_success:
+                errors.append(
+                    f"  {filename}:{lineno} [policy] - nonterminal record incorrectly represented as positive terminal example"
+                )
 
     repo = record.get("repo")
     pr = record.get("pr_number")
@@ -156,9 +185,12 @@ def validate_file(
                 except json.JSONDecodeError as exc:
                     errors.append(f"  {filepath.name}:{lineno} - Invalid JSON: {exc}")
                     continue
-                
-                version = record.get("schema_version")
-                validator = v1_validator if version in ("1", "1.0", "v1") else v0_validator
+
+                if isinstance(record, dict):
+                    version = record.get("schema_version")
+                    validator = v1_validator if version in ("1", "1.0", "v1") else v0_validator
+                else:
+                    validator = v0_validator
 
                 for error in sorted(validator.iter_errors(record), key=lambda e: list(e.path)):
                     path = ".".join(str(p) for p in error.absolute_path) or "(root)"
@@ -184,11 +216,15 @@ def main(argv: list[str] | None = None) -> int:
     args = parser.parse_args(argv)
 
     schema_v0 = load_schema(SCHEMA_V0_PATH)
-    v0_validator = jsonschema.Draft7Validator(schema_v0)
-    
+    v0_validator = jsonschema.Draft7Validator(
+        schema_v0, format_checker=jsonschema.Draft7Validator.FORMAT_CHECKER
+    )
+
     schema_v1 = load_schema(SCHEMA_V1_PATH)
-    v1_validator = jsonschema.Draft7Validator(schema_v1)
-    
+    v1_validator = jsonschema.Draft7Validator(
+        schema_v1, format_checker=jsonschema.Draft7Validator.FORMAT_CHECKER
+    )
+
     all_errors: list[str] = []
 
     for arg in args.files:
