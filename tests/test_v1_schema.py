@@ -1,5 +1,7 @@
+import json
 import sys
 from pathlib import Path
+
 import jsonschema
 
 _REPO_ROOT = Path(__file__).resolve().parent.parent
@@ -59,6 +61,25 @@ def test_v1_future_leakage_mixed_offset():
     v0, v1 = get_validators()
     errors = validate_file(FIXTURES_DIR / "future_leakage_offset.jsonl", v0, v1, strict_policy=True)
     assert any("future-event leakage" in e for e in errors), f"Expected future leakage error, got {errors}"
+
+
+def test_v1_timestamp_utc_overflow_is_reported_and_validation_continues(tmp_path):
+    v0, v1 = get_validators()
+    overflow_record = json.loads((FIXTURES_DIR / "software_valid.jsonl").read_text())
+    overflow_record["events"][0]["timestamp"] = "0001-01-01T00:00:00+14:00"
+    next_record = json.loads((FIXTURES_DIR / "software_valid.jsonl").read_text())
+    next_record["events"][0]["actor"]["type"] = "wizard"
+    filepath = tmp_path / "timestamps.jsonl"
+    filepath.write_text(f"{json.dumps(overflow_record)}\n{json.dumps(next_record)}\n")
+
+    errors = validate_file(filepath, v0, v1, strict_policy=True)
+
+    assert any(
+        f"{filepath.name}:1 [policy] - timestamp UTC normalization overflow" in error for error in errors
+    )
+    assert any(
+        f"{filepath.name}:2 [policy] - invented/unsupported actor type" in error for error in errors
+    )
 
 
 def test_v1_nonterminal_positive():

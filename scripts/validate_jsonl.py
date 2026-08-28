@@ -89,6 +89,10 @@ def policy_errors(record: dict, lineno: int, filename: str) -> list[str]:
                                 f"(timestamp {ts} before previous)"
                             )
                         last_dt = dt
+                    except OverflowError:
+                        errors.append(
+                            f"  {filename}:{lineno} [policy] - timestamp UTC normalization overflow"
+                        )
                     except (ValueError, TypeError):
                         pass
 
