@@ -30,7 +30,8 @@ if str(_SCRIPTS) not in sys.path:
 
 from lib.secrets import find_secrets  # noqa: E402
 
-SCHEMA_PATH = Path(__file__).resolve().parent.parent / "schemas" / "pr_trajectory.schema.json"
+SCHEMA_V0_PATH = Path(__file__).resolve().parent.parent / "schemas" / "pr_trajectory.schema.json"
+SCHEMA_V1_PATH = Path(__file__).resolve().parent.parent / "schemas" / "trajectory_v1.schema.json"
 HOME_PATH_RE = re.compile(
     r"(?:"
     r"/home/[A-Za-z0-9._-]+"
@@ -42,11 +43,11 @@ HOME_PATH_RE = re.compile(
 )
 
 
-def load_schema() -> dict:
-    if not SCHEMA_PATH.exists():
-        print(f"ERROR: Schema not found at {SCHEMA_PATH}", file=sys.stderr)
+def load_schema(path: Path) -> dict:
+    if not path.exists():
+        print(f"ERROR: Schema not found at {path}", file=sys.stderr)
         sys.exit(2)
-    with open(SCHEMA_PATH) as f:
+    with open(path) as f:
         return json.load(f)
 
 
@@ -65,6 +66,40 @@ def _iter_strings(obj: object):
 def policy_errors(record: dict, lineno: int, filename: str) -> list[str]:
     """Extra policy checks beyond JSON Schema."""
     errors: list[str] = []
+    
+    schema_version = record.get("schema_version")
+    if schema_version in ("1", "1.0", "v1"):
+        events = record.get("events", [])
+        last_ts = ""
+        for e in events:
+            ts = e.get("timestamp", "")
+            if ts:
+                if last_ts and ts < last_ts:
+                    errors.append(f"  {filename}:{lineno} [policy] - future-event leakage / events not ordered (timestamp {ts} before {last_ts})")
+                last_ts = ts
+                
+        traj_type = record.get("trajectory_type")
+        if traj_type == "software":
+            has_snapshot = False
+            for e in events:
+                if e.get("code_state", {}).get("before_blob") or e.get("code_state", {}).get("base_oid"):
+                    has_snapshot = True
+                    break
+            if not has_snapshot:
+                errors.append(f"  {filename}:{lineno} [policy] - missing required code snapshots for software trajectory")
+
+        disp = record.get("terminal_disposition")
+        if disp == "successful":
+            payload = record.get("software_payload") or record.get("research_payload") or {}
+            has_success_event = any(e.get("disposition") == "successful" for e in events)
+            if not has_success_event and "successful" not in str(payload):
+                 errors.append(f"  {filename}:{lineno} [policy] - nonterminal record incorrectly represented as positive terminal example")
+                 
+        for e in events:
+            actor = e.get("actor", {})
+            if actor.get("type") not in ("human", "bot", "application", "agent"):
+                 errors.append(f"  {filename}:{lineno} [policy] - invented/unsupported actor type")
+
     repo = record.get("repo")
     pr = record.get("pr_number")
     urls = record.get("source_urls") or []
@@ -101,7 +136,8 @@ def policy_errors(record: dict, lineno: int, filename: str) -> list[str]:
 
 def validate_file(
     filepath: Path,
-    validator: jsonschema.Draft7Validator,
+    v0_validator: jsonschema.Draft7Validator,
+    v1_validator: jsonschema.Draft7Validator,
     *,
     strict_policy: bool = False,
 ) -> list[str]:
@@ -120,6 +156,10 @@ def validate_file(
                 except json.JSONDecodeError as exc:
                     errors.append(f"  {filepath.name}:{lineno} - Invalid JSON: {exc}")
                     continue
+                
+                version = record.get("schema_version")
+                validator = v1_validator if version in ("1", "1.0", "v1") else v0_validator
+
                 for error in sorted(validator.iter_errors(record), key=lambda e: list(e.path)):
                     path = ".".join(str(p) for p in error.absolute_path) or "(root)"
                     errors.append(f"  {filepath.name}:{lineno} [{path}] - {error.message}")
@@ -143,14 +183,18 @@ def main(argv: list[str] | None = None) -> int:
     )
     args = parser.parse_args(argv)
 
-    schema = load_schema()
-    validator = jsonschema.Draft7Validator(schema)
+    schema_v0 = load_schema(SCHEMA_V0_PATH)
+    v0_validator = jsonschema.Draft7Validator(schema_v0)
+    
+    schema_v1 = load_schema(SCHEMA_V1_PATH)
+    v1_validator = jsonschema.Draft7Validator(schema_v1)
+    
     all_errors: list[str] = []
 
     for arg in args.files:
         filepath = Path(arg)
         file_errors = validate_file(
-            filepath, validator, strict_policy=args.strict_policy
+            filepath, v0_validator, v1_validator, strict_policy=args.strict_policy
         )
         all_errors.extend(file_errors)
         if not file_errors:
