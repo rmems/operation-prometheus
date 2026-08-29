@@ -115,23 +115,32 @@ def policy_errors(record: dict, lineno: int, filename: str) -> list[str]:
                 errors.append(f"  {filename}:{lineno} [policy] - missing required code snapshots for software trajectory")
 
         disp = record.get("terminal_disposition")
-        if disp == "successful":
-            payload = record.get("software_payload") if traj_type == "software" else record.get("research_payload")
-            has_success_event = False
-            if isinstance(events, list):
-                for e in events:
-                    if isinstance(e, dict) and e.get("disposition") in ("successful", "passed"):
-                        has_success_event = True
-                        break
-            outcome_success = False
-            if isinstance(payload, dict):
-                val_outcome = str(payload.get("validation_outcome", "")).strip().lower()
-                if val_outcome in ("pass", "passed", "success", "successful", "verified", "ok"):
-                    outcome_success = True
-            if not has_success_event and not outcome_success:
-                errors.append(
-                    f"  {filename}:{lineno} [policy] - nonterminal record incorrectly represented as positive terminal example"
-                )
+        payload = record.get("software_payload") if traj_type == "software" else record.get("research_payload")
+        success_dispositions = ("successful", "passed")
+        success_outcomes = ("pass", "passed", "success", "successful", "verified", "ok")
+        last_disp = None
+        if isinstance(events, list):
+            for e in reversed(events):
+                if isinstance(e, dict) and "disposition" in e:
+                    last_disp = e.get("disposition")
+                    break
+        outcome = ""
+        if isinstance(payload, dict):
+            outcome = str(payload.get("validation_outcome", "")).strip().lower()
+        if last_disp is not None:
+            terminal_success = last_disp in success_dispositions
+        elif outcome:
+            terminal_success = outcome in success_outcomes
+        else:
+            terminal_success = None
+        if disp == "successful" and terminal_success is not True:
+            errors.append(
+                f"  {filename}:{lineno} [policy] - nonterminal record incorrectly represented as positive terminal example"
+            )
+        elif disp == "failed" and terminal_success is True:
+            errors.append(
+                f"  {filename}:{lineno} [policy] - terminal_disposition does not agree with terminal outcome evidence"
+            )
 
     repo = record.get("repo")
     pr = record.get("pr_number")

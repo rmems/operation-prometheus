@@ -138,6 +138,14 @@
     },
     "software_payload": {
       "type": "object",
+      "minProperties": 1,
+      "anyOf": [
+        { "required": ["issue_statement"] },
+        { "required": ["acceptance_criteria"] },
+        { "required": ["pre_change_state"] },
+        { "required": ["implementation_patch"] },
+        { "required": ["validation_outcome"] }
+      ],
       "properties": {
         "issue_statement": { "type": "string" },
         "acceptance_criteria": { "type": "string" },

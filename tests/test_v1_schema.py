@@ -98,3 +98,21 @@ def test_v1_invented_actor():
     v0, v1 = get_validators()
     errors = validate_file(FIXTURES_DIR / "invented_actor.jsonl", v0, v1, strict_policy=True)
     assert any("wizard" in e or "actor type" in e for e in errors), f"Expected actor error, got {errors}"
+
+
+def test_v1_failed_with_only_successful_events():
+    v0, v1 = get_validators()
+    errors = validate_file(FIXTURES_DIR / "failed_all_successful_events.jsonl", v0, v1, strict_policy=True)
+    assert any("terminal_disposition does not agree" in e for e in errors), f"Expected disposition disagreement, got {errors}"
+
+
+def test_v1_successful_with_last_event_failed():
+    v0, v1 = get_validators()
+    errors = validate_file(FIXTURES_DIR / "successful_last_event_failed.jsonl", v0, v1, strict_policy=True)
+    assert any("nonterminal record incorrectly represented" in e for e in errors), f"Expected nonterminal error, got {errors}"
+
+
+def test_v1_empty_software_payload():
+    v0, v1 = get_validators()
+    errors = validate_file(FIXTURES_DIR / "empty_software_payload.jsonl", v0, v1, strict_policy=True)
+    assert any("software_payload" in e or "anyOf" in e or "minProperties" in e for e in errors), f"Expected empty payload error, got {errors}"
