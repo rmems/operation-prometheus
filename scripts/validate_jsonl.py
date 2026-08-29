@@ -13,6 +13,7 @@ non-zero if any validation error is found.
 from __future__ import annotations
 
 import argparse
+import hashlib
 from datetime import datetime, timezone
 import json
 import re
@@ -81,7 +82,7 @@ def policy_errors(record: dict, lineno: int, filename: str) -> list[str]:
                 ts = e.get("timestamp")
                 if isinstance(ts, str) and ts:
                     try:
-                        iso_ts = ts.replace("Z", "+00:00")
+                        iso_ts = ts[:-1] + "+00:00" if ts.endswith(("Z", "z")) else ts
                         dt = datetime.fromisoformat(iso_ts).astimezone(timezone.utc)
                         if last_dt is not None and dt < last_dt:
                             errors.append(
@@ -94,7 +95,9 @@ def policy_errors(record: dict, lineno: int, filename: str) -> list[str]:
                             f"  {filename}:{lineno} [policy] - timestamp UTC normalization overflow"
                         )
                     except (ValueError, TypeError):
-                        pass
+                        errors.append(
+                            f"  {filename}:{lineno} [policy] - timestamp is not a parseable UTC instant"
+                        )
 
                 actor = e.get("actor")
                 if isinstance(actor, dict):
@@ -141,6 +144,29 @@ def policy_errors(record: dict, lineno: int, filename: str) -> list[str]:
             errors.append(
                 f"  {filename}:{lineno} [policy] - terminal_disposition does not agree with terminal outcome evidence"
             )
+
+        artifacts = record.get("artifacts")
+        if isinstance(artifacts, list):
+            for art in artifacts:
+                if not isinstance(art, dict) or art.get("availability") != "inline":
+                    continue
+                content = art.get("content")
+                if not isinstance(content, str):
+                    errors.append(
+                        f"  {filename}:{lineno} [policy] - inline artifact missing content"
+                    )
+                    continue
+                raw = content.encode("utf-8")
+                digest = hashlib.sha256(raw).hexdigest()
+                declared = str(art.get("sha256") or "").strip().lower()
+                if declared != digest:
+                    errors.append(
+                        f"  {filename}:{lineno} [policy] - inline artifact sha256 does not match content"
+                    )
+                if art.get("byte_size") != len(raw):
+                    errors.append(
+                        f"  {filename}:{lineno} [policy] - inline artifact byte_size does not match content"
+                    )
 
     repo = record.get("repo")
     pr = record.get("pr_number")

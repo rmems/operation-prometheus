@@ -116,3 +116,16 @@ def test_v1_empty_software_payload():
     v0, v1 = get_validators()
     errors = validate_file(FIXTURES_DIR / "empty_software_payload.jsonl", v0, v1, strict_policy=True)
     assert any("software_payload" in e or "anyOf" in e or "minProperties" in e for e in errors), f"Expected empty payload error, got {errors}"
+
+
+def test_v1_lowercase_z_order():
+    v0, v1 = get_validators()
+    errors = validate_file(FIXTURES_DIR / "lowercase_z_order.jsonl", v0, v1, strict_policy=True)
+    assert any("future-event leakage" in e for e in errors), f"Expected order error for lowercase z, got {errors}"
+
+
+def test_v1_inline_artifact_hash_mismatch():
+    v0, v1 = get_validators()
+    errors = validate_file(FIXTURES_DIR / "inline_hash_mismatch.jsonl", v0, v1, strict_policy=True)
+    assert any("inline artifact sha256 does not match content" in e for e in errors), f"Expected hash mismatch, got {errors}"
+    assert any("inline artifact byte_size does not match content" in e for e in errors), f"Expected byte_size mismatch, got {errors}"
