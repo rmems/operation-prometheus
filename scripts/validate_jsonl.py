@@ -73,7 +73,10 @@ def _iter_strings(obj: object):
 def _is_absolute_uri(value: object) -> bool:
     if not isinstance(value, str) or not value:
         return False
-    parsed = urlparse(value)
+    try:
+        parsed = urlparse(value)
+    except ValueError:
+        return False
     return bool(parsed.scheme and parsed.netloc)
 
 
@@ -186,7 +189,7 @@ def policy_errors(record: dict, lineno: int, filename: str) -> list[str]:
             errors.append(
                 f"  {filename}:{lineno} [policy] - nonterminal record incorrectly represented as positive terminal example"
             )
-        elif disp not in (None, "null", "successful") and terminal_success is True:
+        elif disp not in (None, "successful") and terminal_success is True:
             errors.append(
                 f"  {filename}:{lineno} [policy] - terminal_disposition does not agree with terminal outcome evidence"
             )

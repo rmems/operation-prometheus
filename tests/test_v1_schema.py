@@ -262,3 +262,15 @@ def test_v1_failed_last_event_neutral_is_symmetric():
     v0, v1 = get_validators()
     errors = validate_file(FIXTURES_DIR / "failed_last_neutral.jsonl", v0, v1, strict_policy=True)
     assert not any("does not agree" in e or "nonterminal record" in e for e in errors), f"Neutral last event should not disagree with failed, got {errors}"
+
+
+def test_v1_malformed_remote_uri_does_not_abort():
+    v0, v1 = get_validators()
+    errors = validate_file(FIXTURES_DIR / "malformed_remote_uri.jsonl", v0, v1, strict_policy=True)
+    assert any("uri" in e.lower() for e in errors), f"Expected malformed uri error, got {errors}"
+
+
+def test_v1_null_terminal_with_successful_last_event():
+    v0, v1 = get_validators()
+    errors = validate_file(FIXTURES_DIR / "null_terminal_successful.jsonl", v0, v1, strict_policy=True)
+    assert any("terminal_disposition does not agree" in e for e in errors), f"Expected null/success disagreement, got {errors}"
