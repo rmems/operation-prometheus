@@ -135,3 +135,76 @@ def test_v1_empty_research_payload():
     v0, v1 = get_validators()
     errors = validate_file(FIXTURES_DIR / "empty_research_payload.jsonl", v0, v1, strict_policy=True)
     assert any("research_payload" in e or "anyOf" in e or "minProperties" in e for e in errors), f"Expected empty research payload error, got {errors}"
+
+
+def test_v1_blank_software_payload_rejected():
+    v0, v1 = get_validators()
+    errors = validate_file(FIXTURES_DIR / "blank_software_payload.jsonl", v0, v1, strict_policy=True)
+    assert any("minLength" in e or "issue_statement" in e for e in errors), f"Expected blank payload error, got {errors}"
+
+
+def test_v1_empty_events_rejected():
+    v0, v1 = get_validators()
+    errors = validate_file(FIXTURES_DIR / "empty_events.jsonl", v0, v1, strict_policy=True)
+    assert any("minItems" in e or "is too short" in e or "events" in e for e in errors), f"Expected empty events error, got {errors}"
+
+
+def test_v1_reverted_with_successful_last_event():
+    v0, v1 = get_validators()
+    errors = validate_file(FIXTURES_DIR / "reverted_last_successful.jsonl", v0, v1, strict_policy=True)
+    assert any("terminal_disposition does not agree" in e for e in errors), f"Expected disposition disagreement, got {errors}"
+
+
+def test_v1_remote_artifact_requires_uri():
+    v0, v1 = get_validators()
+    errors = validate_file(FIXTURES_DIR / "remote_missing_uri.jsonl", v0, v1, strict_policy=True)
+    assert any("uri" in e for e in errors), f"Expected missing uri error, got {errors}"
+
+
+def test_v1_secret_like_object_key_is_flagged(tmp_path):
+    v0, v1 = get_validators()
+    record = json.loads((FIXTURES_DIR / "software_valid.jsonl").read_text())
+    record["evidence_quality"] = {"github_pat_abcdefghijklmnopqrstuvwxyz0123": 1}
+    filepath = tmp_path / "secret_key.jsonl"
+    filepath.write_text(json.dumps(record) + "\n")
+    errors = validate_file(filepath, v0, v1, strict_policy=True)
+    assert any("secret-like token" in e for e in errors), f"Expected secret key error, got {errors}"
+
+
+def test_v1_nonfinite_json_constant_rejected(tmp_path):
+    v0, v1 = get_validators()
+    record = json.loads((FIXTURES_DIR / "software_valid.jsonl").read_text())
+    record["evidence_quality"] = {"signal_to_noise": 0.5}
+    line = json.dumps(record).replace("0.5", "NaN")
+    filepath = tmp_path / "nan.jsonl"
+    filepath.write_text(line + "\n")
+    errors = validate_file(filepath, v0, v1, strict_policy=True)
+    assert any("Invalid JSON" in e or "non-finite" in e for e in errors), f"Expected NaN rejection, got {errors}"
+
+
+def test_v1_inline_lone_surrogate_does_not_crash(tmp_path):
+    v0, v1 = get_validators()
+    next_record = json.loads((FIXTURES_DIR / "software_valid.jsonl").read_text())
+    next_record["events"][0]["actor"]["type"] = "wizard"
+    filepath = tmp_path / "surrogate.jsonl"
+    first = (
+        '{"schema_version": "1.0", "trajectory_id": "soft-1", "trajectory_type": "software",'
+        ' "provider_id": "test-provider", "source_id": "test-source", "collector_version": "0.6.0",'
+        ' "repository": {"owner": "foo", "name": "bar"}, "license": "MIT", "collection_policy": "public",'
+        ' "terminal_disposition": "successful",'
+        ' "events": [{"event_id": "e1", "timestamp": "2023-01-01T12:00:00Z",'
+        ' "actor": {"type": "human", "id": "u1"}, "event_type": "commit",'
+        ' "code_state": {"base_oid": "abc", "head_oid": "def"}, "disposition": "successful"}],'
+        ' "artifacts": [{"id": "a1", "sha256": "' + ("0" * 64) + '", "media_type": "text/plain",'
+        ' "byte_size": 1, "availability": "inline", "reproduction_role": "patch",'
+        ' "content": "\\ud800"}],'
+        ' "software_payload": {"validation_outcome": "pass"}}'
+    )
+    filepath.write_text(first + "\n" + json.dumps(next_record) + "\n")
+    errors = validate_file(filepath, v0, v1, strict_policy=True)
+    assert any(
+        "not UTF-8 encodable" in e or "sha256 does not match" in e for e in errors
+    ), f"Expected surrogate handling, got {errors}"
+    assert any(
+        "invented/unsupported actor type" in e for e in errors
+    ), f"Expected validation to continue, got {errors}"

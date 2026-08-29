@@ -73,12 +73,24 @@
           "byte_size": { "type": "integer", "minimum": 0 },
           "availability": { "enum": ["inline", "remote", "missing"] },
           "reproduction_role": { "type": "string" },
-          "content": { "type": "string" }
-        }
+          "content": { "type": "string" },
+          "uri": { "type": "string", "format": "uri" }
+        },
+        "allOf": [
+          {
+            "if": { "properties": { "availability": { "const": "remote" } } },
+            "then": { "required": ["uri"] }
+          },
+          {
+            "if": { "properties": { "availability": { "const": "inline" } } },
+            "then": { "required": ["content"] }
+          }
+        ]
       }
     },
     "events": {
       "type": "array",
+      "minItems": 1,
       "items": {
         "type": "object",
         "required": ["event_id", "timestamp", "actor", "event_type"],
@@ -147,11 +159,11 @@
         { "required": ["validation_outcome"] }
       ],
       "properties": {
-        "issue_statement": { "type": "string" },
-        "acceptance_criteria": { "type": "string" },
-        "pre_change_state": { "type": "string" },
-        "implementation_patch": { "type": "string" },
-        "validation_outcome": { "type": "string" }
+        "issue_statement": { "type": "string", "minLength": 1 },
+        "acceptance_criteria": { "type": "string", "minLength": 1 },
+        "pre_change_state": { "type": "string", "minLength": 1 },
+        "implementation_patch": { "type": "string", "minLength": 1 },
+        "validation_outcome": { "type": "string", "minLength": 1 }
       }
     },
     "research_payload": {
@@ -165,11 +177,11 @@
         { "required": ["measurements"] }
       ],
       "properties": {
-        "hypothesis": { "type": "string" },
-        "initial_state": { "type": "string" },
-        "plan": { "type": "string" },
-        "resource_budget": { "type": "string" },
-        "measurements": { "type": "string" }
+        "hypothesis": { "type": "string", "minLength": 1 },
+        "initial_state": { "type": "string", "minLength": 1 },
+        "plan": { "type": "string", "minLength": 1 },
+        "resource_budget": { "type": "string", "minLength": 1 },
+        "measurements": { "type": "string", "minLength": 1 }
       }
     }
   },

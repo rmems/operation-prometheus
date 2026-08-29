@@ -54,11 +54,13 @@ def load_schema(path: Path) -> dict:
 
 
 def _iter_strings(obj: object):
-    """Yield raw string values from a nested JSON structure (pre-serialization)."""
+    """Yield raw string keys and values from a nested JSON structure."""
     if isinstance(obj, str):
         yield obj
     elif isinstance(obj, dict):
-        for value in obj.values():
+        for key, value in obj.items():
+            if isinstance(key, str):
+                yield key
             yield from _iter_strings(value)
     elif isinstance(obj, list):
         for value in obj:
@@ -121,6 +123,16 @@ def policy_errors(record: dict, lineno: int, filename: str) -> list[str]:
         payload = record.get("software_payload") if traj_type == "software" else record.get("research_payload")
         success_dispositions = ("successful", "passed")
         success_outcomes = ("pass", "passed", "success", "successful", "verified", "ok")
+        terminal_enum = {
+            "successful",
+            "failed",
+            "reverted",
+            "falsified",
+            "null",
+            "invalid",
+            "interrupted",
+            "inconclusive",
+        }
         last_disp = None
         if isinstance(events, list):
             for e in reversed(events):
@@ -140,10 +152,20 @@ def policy_errors(record: dict, lineno: int, filename: str) -> list[str]:
             errors.append(
                 f"  {filename}:{lineno} [policy] - nonterminal record incorrectly represented as positive terminal example"
             )
-        elif disp == "failed" and terminal_success is True:
+        elif disp not in (None, "null", "successful") and terminal_success is True:
             errors.append(
                 f"  {filename}:{lineno} [policy] - terminal_disposition does not agree with terminal outcome evidence"
             )
+        elif (
+            isinstance(last_disp, str)
+            and disp in terminal_enum
+            and disp != "null"
+        ):
+            normalized_last = "successful" if last_disp == "passed" else last_disp
+            if normalized_last in terminal_enum and normalized_last != disp:
+                errors.append(
+                    f"  {filename}:{lineno} [policy] - terminal_disposition does not agree with terminal outcome evidence"
+                )
 
         artifacts = record.get("artifacts")
         if isinstance(artifacts, list):
@@ -156,7 +178,13 @@ def policy_errors(record: dict, lineno: int, filename: str) -> list[str]:
                         f"  {filename}:{lineno} [policy] - inline artifact missing content"
                     )
                     continue
-                raw = content.encode("utf-8")
+                try:
+                    raw = content.encode("utf-8")
+                except UnicodeEncodeError:
+                    errors.append(
+                        f"  {filename}:{lineno} [policy] - inline artifact content is not UTF-8 encodable"
+                    )
+                    continue
                 digest = hashlib.sha256(raw).hexdigest()
                 declared = str(art.get("sha256") or "").strip().lower()
                 if declared != digest:
@@ -220,7 +248,12 @@ def validate_file(
                     continue
                 count += 1
                 try:
-                    record = json.loads(line)
+                    def _reject_nonfinite(constant: str):
+                        raise json.JSONDecodeError(
+                            f"non-finite constant {constant!r}", line, 0
+                        )
+
+                    record = json.loads(line, parse_constant=_reject_nonfinite)
                 except json.JSONDecodeError as exc:
                     errors.append(f"  {filepath.name}:{lineno} - Invalid JSON: {exc}")
                     continue
