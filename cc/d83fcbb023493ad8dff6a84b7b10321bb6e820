@@ -1,0 +1,25 @@
+docs/data-policy.md
+  s_d7eb2bcd578c7e::t_a6284c3ba727c3 68-89
+README.md
+  s_d7eb2bcd578c7e::t_4c5c084d95b9c2 60-72
+LICENSE
+  s_d7eb2bcd578c7e::t_7e34f737b6985d 1-202
+NOTICE
+  s_d7eb2bcd578c7e::t_f2357131990ffa 1-61
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.5.2",
+  "base_commit_sha": "ccd83fcbb023493ad8dff6a84b7b10321bb6e820",
+  "prompts": {},
+  "sessions": {
+    "s_d7eb2bcd578c7e": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "d5684087-6163-4846-8e53-9b3a90634689",
+        "model": "claude-sonnet-5"
+      },
+      "human_author": "Raul Montoya Cardenas <montoyaraul34@gmail.com>"
+    }
+  }
+}
