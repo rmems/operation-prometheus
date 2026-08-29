@@ -156,6 +156,14 @@
     },
     "research_payload": {
       "type": "object",
+      "minProperties": 1,
+      "anyOf": [
+        { "required": ["hypothesis"] },
+        { "required": ["initial_state"] },
+        { "required": ["plan"] },
+        { "required": ["resource_budget"] },
+        { "required": ["measurements"] }
+      ],
       "properties": {
         "hypothesis": { "type": "string" },
         "initial_state": { "type": "string" },
