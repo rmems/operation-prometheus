@@ -77,9 +77,11 @@ repository retains that repository's own license:
 - The trajectory schema (`schemas/trajectory_v1.schema.json`,
   `schemas/pr_trajectory.schema.json`) carries a machine-readable `license`
   field per record, so source-license provenance travels with the data.
-- Per-source-repository license documentation lives in
-  [docs/source-repos/](source-repos/) and is summarized in each dataset card's
-  "License / provenance" section.
+- Per-source-repository license documentation is required to live in
+  [docs/source-repos/](source-repos/) and to be summarized in each dataset
+  card's "License / provenance" section. Existing v0 source docs and cards
+  are being backfilled with explicit source-license identities; this
+  requirement applies going forward regardless of backfill status.
 - The canonical Hugging Face dataset card must document the full set of
   represented source licenses rather than implying a single blanket license
   for the dataset.

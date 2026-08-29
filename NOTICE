@@ -36,10 +36,12 @@ records this per-record, machine-readable, so that the license of the
 originating source repository travels with the data rather than being implied
 by this repository's own license.
 
-Per-source-repository license documentation lives alongside each extraction
-shortlist in docs/source-repos/ and is also summarized in each dataset card
-under its "License / provenance" section (e.g.
-datasets/cards/<name>-trajectories-v0.md).
+Per-source-repository license documentation is required to live alongside
+each extraction shortlist in docs/source-repos/ and to be summarized in that
+source's dataset card under its "License / provenance" section (e.g.
+datasets/cards/<name>-trajectories-v0.md). Existing v0 cards and source docs
+are being backfilled with explicit source-license identities; this is
+tracked separately and does not change the requirement going forward.
 
 Users of any dataset produced by this project are responsible for complying
 with the license of each source repository represented in that dataset, in
