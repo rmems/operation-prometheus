@@ -197,7 +197,6 @@ def policy_errors(record: dict, lineno: int, filename: str) -> list[str]:
             isinstance(last_disp, str)
             and last_disp not in ("neutral", "null")
             and disp in terminal_enum
-            and disp != "null"
         ):
             normalized_last = "successful" if last_disp == "passed" else last_disp
             if normalized_last in terminal_enum and normalized_last != disp:

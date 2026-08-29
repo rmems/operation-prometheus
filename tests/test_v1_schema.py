@@ -274,3 +274,9 @@ def test_v1_null_terminal_with_successful_last_event():
     v0, v1 = get_validators()
     errors = validate_file(FIXTURES_DIR / "null_terminal_successful.jsonl", v0, v1, strict_policy=True)
     assert any("terminal_disposition does not agree" in e for e in errors), f"Expected null/success disagreement, got {errors}"
+
+
+def test_v1_null_terminal_with_failed_last_event():
+    v0, v1 = get_validators()
+    errors = validate_file(FIXTURES_DIR / "null_terminal_failed.jsonl", v0, v1, strict_policy=True)
+    assert any("terminal_disposition does not agree" in e for e in errors), f"Expected null/failed disagreement, got {errors}"
