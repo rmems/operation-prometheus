@@ -65,6 +65,28 @@ See also:
 
 Open an issue or discussion in this repository. All policy updates should be tracked as changes to this document and referenced from the root README.
 
+## Licensing Model
+
+Operation Prometheus's own tooling, schemas, validators, tests, and
+documentation are licensed under **Apache-2.0** (see root [LICENSE](../LICENSE)).
+
+This repository-level license does **not** relicense incorporated
+source-derived material. Every trajectory extracted from a public source
+repository retains that repository's own license:
+
+- The trajectory schema (`schemas/trajectory_v1.schema.json`,
+  `schemas/pr_trajectory.schema.json`) carries a machine-readable `license`
+  field per record, so source-license provenance travels with the data.
+- Per-source-repository license documentation lives in
+  [docs/source-repos/](source-repos/) and is summarized in each dataset card's
+  "License / provenance" section.
+- The canonical Hugging Face dataset card must document the full set of
+  represented source licenses rather than implying a single blanket license
+  for the dataset.
+
+See [NOTICE](../NOTICE) for the complete distinction between
+Operation Prometheus-owned material and incorporated source-derived material.
+
 ## Anti-Hallucination and Evidence Policy
 
 Trajectory generation must rely strictly on verifiable source evidence. We must never invent:

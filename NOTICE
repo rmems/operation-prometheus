@@ -1,0 +1,61 @@
+Operation Prometheus
+Copyright 2026 Raul Montoya Cardenas
+
+This product is licensed under the Apache License, Version 2.0.
+See the LICENSE file for the full license text.
+
+================================================================================
+Scope of the repository-level Apache-2.0 license
+================================================================================
+
+The Apache-2.0 license at the root of this repository applies to
+Operation Prometheus-owned material only, including:
+
+  - schemas (schemas/)
+  - builders, collectors, and other extraction/transformation code (scripts/)
+  - validators
+  - tests and fixtures authored for this repository
+  - documentation and dataset cards written for this project (docs/, README.md,
+    datasets/cards/*.md)
+  - manifests and release tooling (datasets/manifests/)
+  - compilation and curation logic
+
+================================================================================
+Incorporated source-derived material
+================================================================================
+
+Operation Prometheus extracts engineering trajectories (issues, PRs, reviews,
+diffs, and commit history) from public source repositories. This
+source-derived material is NOT relicensed by the repository-level Apache-2.0
+license.
+
+Each trajectory record retains the license of the repository it was extracted
+from. The `license` field in the trajectory schema (see
+schemas/trajectory_v1.schema.json and schemas/pr_trajectory.schema.json)
+records this per-record, machine-readable, so that the license of the
+originating source repository travels with the data rather than being implied
+by this repository's own license.
+
+Per-source-repository license documentation lives alongside each extraction
+shortlist in docs/source-repos/ and is also summarized in each dataset card
+under its "License / provenance" section (e.g.
+datasets/cards/<name>-trajectories-v0.md).
+
+Users of any dataset produced by this project are responsible for complying
+with the license of each source repository represented in that dataset, in
+addition to the Apache-2.0 terms governing Operation Prometheus's own tooling
+and curation code.
+
+No incorporated source-derived artifact is silently relicensed, rewritten, or
+stripped of its source-repository license provenance by virtue of being
+processed through this pipeline.
+
+================================================================================
+Third-party attribution
+================================================================================
+
+This NOTICE file does not itself grant any rights. It is provided for
+informational purposes to satisfy the attribution requirements of the
+Apache License, Version 2.0, and to make explicit the distinction between
+Operation Prometheus's own licensing and the licensing of incorporated
+source-derived material.

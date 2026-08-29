@@ -57,6 +57,19 @@ Initial repositories include:
 
 See [datasets/README.md](datasets/README.md) for rules on what may be committed.
 
+## License
+
+Operation Prometheus-owned material (schemas, builders/collectors, validators,
+tests, documentation, dataset cards, manifests, and release tooling) is
+licensed under **Apache-2.0** — see [LICENSE](LICENSE).
+
+Incorporated source-derived material (trajectories extracted from public
+source repositories) is **not** relicensed by this repository's license: each
+trajectory record retains the license of its originating source repository.
+See [NOTICE](NOTICE) for the full distinction and
+[docs/data-policy.md](docs/data-policy.md) for how source-license provenance
+is tracked.
+
 ## Schemas and Data Policy
 
 - **Schema v0** (initial draft, not final): [schemas/pr_trajectory.schema.json](schemas/pr_trajectory.schema.json). Implements GitHub [#2](https://github.com/rmems/operation-prometheus/issues/2). See the tiny example in `datasets/examples/`.
