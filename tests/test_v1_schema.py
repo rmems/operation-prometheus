@@ -280,3 +280,15 @@ def test_v1_null_terminal_with_failed_last_event():
     v0, v1 = get_validators()
     errors = validate_file(FIXTURES_DIR / "null_terminal_failed.jsonl", v0, v1, strict_policy=True)
     assert any("terminal_disposition does not agree" in e for e in errors), f"Expected null/failed disagreement, got {errors}"
+
+
+def test_v1_invalid_snapshot_oid_is_rejected():
+    v0, v1 = get_validators()
+    errors = validate_file(FIXTURES_DIR / "invalid_snapshot_oid.jsonl", v0, v1, strict_policy=True)
+    assert any("not a git object id" in e or "missing required code snapshots" in e for e in errors), f"Expected invalid OID error, got {errors}"
+
+
+def test_v1_magnet_remote_uri_is_accepted():
+    v0, v1 = get_validators()
+    errors = validate_file(FIXTURES_DIR / "remote_magnet_uri.jsonl", v0, v1, strict_policy=True)
+    assert not any("uri" in e.lower() for e in errors), f"magnet URI should be accepted, got {errors}"

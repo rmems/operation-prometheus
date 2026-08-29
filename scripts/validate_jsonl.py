@@ -45,6 +45,16 @@ HOME_PATH_RE = re.compile(
     r")",
     re.IGNORECASE,
 )
+_GIT_OID_RE = re.compile(r"^[0-9a-fA-F]{3,64}$")
+_SNAPSHOT_KEYS = (
+    "before_blob",
+    "after_blob",
+    "base_oid",
+    "commit_oid",
+    "tree_oid",
+    "head_oid",
+)
+_AUTHORITY_SCHEMES = frozenset({"http", "https", "ftp", "ftps"})
 
 
 def load_schema(path: Path) -> dict:
@@ -77,7 +87,11 @@ def _is_absolute_uri(value: object) -> bool:
         parsed = urlparse(value)
     except ValueError:
         return False
-    return bool(parsed.scheme and parsed.netloc)
+    if not parsed.scheme:
+        return False
+    if parsed.scheme.lower() in _AUTHORITY_SCHEMES:
+        return bool(parsed.netloc)
+    return True
 
 
 def _contains_nonfinite(obj: object) -> bool:
@@ -137,22 +151,21 @@ def policy_errors(record: dict, lineno: int, filename: str) -> list[str]:
         if traj_type == "software" and isinstance(events, list):
             has_snapshot = False
             for e in events:
-                if isinstance(e, dict):
-                    code_state = e.get("code_state")
-                    if isinstance(code_state, dict):
-                        if any(
-                            code_state.get(k)
-                            for k in (
-                                "before_blob",
-                                "after_blob",
-                                "base_oid",
-                                "commit_oid",
-                                "tree_oid",
-                                "head_oid",
-                            )
-                        ):
-                            has_snapshot = True
-                            break
+                if not isinstance(e, dict):
+                    continue
+                code_state = e.get("code_state")
+                if not isinstance(code_state, dict):
+                    continue
+                for key in _SNAPSHOT_KEYS:
+                    value = code_state.get(key)
+                    if not value:
+                        continue
+                    if isinstance(value, str) and _GIT_OID_RE.fullmatch(value):
+                        has_snapshot = True
+                    else:
+                        errors.append(
+                            f"  {filename}:{lineno} [policy] - code snapshot {key} is not a git object id"
+                        )
             if not has_snapshot:
                 errors.append(f"  {filename}:{lineno} [policy] - missing required code snapshots for software trajectory")
 
