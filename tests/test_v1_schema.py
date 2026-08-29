@@ -208,3 +208,57 @@ def test_v1_inline_lone_surrogate_does_not_crash(tmp_path):
     assert any(
         "invented/unsupported actor type" in e for e in errors
     ), f"Expected validation to continue, got {errors}"
+
+
+def test_v1_head_oid_only_snapshot_is_enough():
+    v0, v1 = get_validators()
+    errors = validate_file(FIXTURES_DIR / "head_oid_only.jsonl", v0, v1, strict_policy=True)
+    assert not any("missing required code snapshots" in e for e in errors), f"head_oid-only should count, got {errors}"
+
+
+def test_v1_after_blob_only_snapshot_is_enough():
+    v0, v1 = get_validators()
+    errors = validate_file(FIXTURES_DIR / "after_blob_only.jsonl", v0, v1, strict_policy=True)
+    assert not any("missing required code snapshots" in e for e in errors), f"after_blob-only should count, got {errors}"
+
+
+def test_v1_missing_artifact_content_hash_is_checked():
+    v0, v1 = get_validators()
+    errors = validate_file(FIXTURES_DIR / "missing_content_hash.jsonl", v0, v1, strict_policy=True)
+    assert any("sha256 does not match content" in e for e in errors), f"Expected hash mismatch, got {errors}"
+
+
+def test_v1_relative_remote_uri_rejected():
+    v0, v1 = get_validators()
+    errors = validate_file(FIXTURES_DIR / "relative_remote_uri.jsonl", v0, v1, strict_policy=True)
+    assert any("uri" in e.lower() for e in errors), f"Expected relative uri error, got {errors}"
+
+
+def test_v1_yesterday_timestamp_rejected():
+    v0, v1 = get_validators()
+    errors = validate_file(FIXTURES_DIR / "yesterday_timestamp.jsonl", v0, v1, strict_policy=True)
+    assert any("timestamp" in e.lower() or "date-time" in e.lower() or "format" in e.lower() for e in errors), f"Expected timestamp format error, got {errors}"
+
+
+def test_v1_overflow_float_rejected():
+    v0, v1 = get_validators()
+    errors = validate_file(FIXTURES_DIR / "overflow_float.jsonl", v0, v1, strict_policy=True)
+    assert any("non-finite" in e or "Invalid JSON" in e for e in errors), f"Expected 1e999 rejection, got {errors}"
+
+
+def test_v1_research_successful_without_event_disposition():
+    v0, v1 = get_validators()
+    errors = validate_file(FIXTURES_DIR / "research_no_disposition.jsonl", v0, v1, strict_policy=True)
+    assert not any("nonterminal record" in e or "does not agree" in e for e in errors), f"Research without disposition should not false-positive, got {errors}"
+
+
+def test_v1_successful_last_event_neutral_is_not_false_positive():
+    v0, v1 = get_validators()
+    errors = validate_file(FIXTURES_DIR / "successful_last_neutral.jsonl", v0, v1, strict_policy=True)
+    assert not any("nonterminal record" in e for e in errors), f"Neutral last event should not false-positive successful, got {errors}"
+
+
+def test_v1_failed_last_event_neutral_is_symmetric():
+    v0, v1 = get_validators()
+    errors = validate_file(FIXTURES_DIR / "failed_last_neutral.jsonl", v0, v1, strict_policy=True)
+    assert not any("does not agree" in e or "nonterminal record" in e for e in errors), f"Neutral last event should not disagree with failed, got {errors}"

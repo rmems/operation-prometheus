@@ -14,7 +14,9 @@ from __future__ import annotations
 
 import argparse
 import hashlib
+import math
 from datetime import datetime, timezone
+from urllib.parse import urlparse
 import json
 import re
 import sys
@@ -67,6 +69,24 @@ def _iter_strings(obj: object):
             yield from _iter_strings(value)
 
 
+
+def _is_absolute_uri(value: object) -> bool:
+    if not isinstance(value, str) or not value:
+        return False
+    parsed = urlparse(value)
+    return bool(parsed.scheme and parsed.netloc)
+
+
+def _contains_nonfinite(obj: object) -> bool:
+    if isinstance(obj, float) and not math.isfinite(obj):
+        return True
+    if isinstance(obj, dict):
+        return any(_contains_nonfinite(v) for v in obj.values())
+    if isinstance(obj, list):
+        return any(_contains_nonfinite(v) for v in obj)
+    return False
+
+
 def policy_errors(record: dict, lineno: int, filename: str) -> list[str]:
     """Extra policy checks beyond JSON Schema."""
     errors: list[str] = []
@@ -85,7 +105,11 @@ def policy_errors(record: dict, lineno: int, filename: str) -> list[str]:
                 if isinstance(ts, str) and ts:
                     try:
                         iso_ts = ts[:-1] + "+00:00" if ts.endswith(("Z", "z")) else ts
-                        dt = datetime.fromisoformat(iso_ts).astimezone(timezone.utc)
+                        dt = datetime.fromisoformat(iso_ts)
+                        if dt.tzinfo is None:
+                            dt = dt.replace(tzinfo=timezone.utc)
+                        else:
+                            dt = dt.astimezone(timezone.utc)
                         if last_dt is not None and dt < last_dt:
                             errors.append(
                                 f"  {filename}:{lineno} [policy] - future-event leakage / events not ordered "
@@ -113,7 +137,17 @@ def policy_errors(record: dict, lineno: int, filename: str) -> list[str]:
                 if isinstance(e, dict):
                     code_state = e.get("code_state")
                     if isinstance(code_state, dict):
-                        if any(code_state.get(k) for k in ("before_blob", "base_oid", "commit_oid", "tree_oid")):
+                        if any(
+                            code_state.get(k)
+                            for k in (
+                                "before_blob",
+                                "after_blob",
+                                "base_oid",
+                                "commit_oid",
+                                "tree_oid",
+                                "head_oid",
+                            )
+                        ):
                             has_snapshot = True
                             break
             if not has_snapshot:
@@ -142,13 +176,13 @@ def policy_errors(record: dict, lineno: int, filename: str) -> list[str]:
         outcome = ""
         if isinstance(payload, dict):
             outcome = str(payload.get("validation_outcome", "")).strip().lower()
-        if last_disp is not None:
-            terminal_success = last_disp in success_dispositions
-        elif outcome:
-            terminal_success = outcome in success_outcomes
+        if last_disp in success_dispositions:
+            terminal_success = True
+        elif last_disp in (None, "neutral", "null"):
+            terminal_success = (outcome in success_outcomes) if outcome else None
         else:
-            terminal_success = None
-        if disp == "successful" and terminal_success is not True:
+            terminal_success = False
+        if disp == "successful" and terminal_success is False:
             errors.append(
                 f"  {filename}:{lineno} [policy] - nonterminal record incorrectly represented as positive terminal example"
             )
@@ -158,6 +192,7 @@ def policy_errors(record: dict, lineno: int, filename: str) -> list[str]:
             )
         elif (
             isinstance(last_disp, str)
+            and last_disp not in ("neutral", "null")
             and disp in terminal_enum
             and disp != "null"
         ):
@@ -170,30 +205,38 @@ def policy_errors(record: dict, lineno: int, filename: str) -> list[str]:
         artifacts = record.get("artifacts")
         if isinstance(artifacts, list):
             for art in artifacts:
-                if not isinstance(art, dict) or art.get("availability") != "inline":
+                if not isinstance(art, dict):
                     continue
+                availability = art.get("availability")
                 content = art.get("content")
-                if not isinstance(content, str):
+                if availability == "inline" and not isinstance(content, str):
                     errors.append(
                         f"  {filename}:{lineno} [policy] - inline artifact missing content"
                     )
+                    continue
+                if availability == "remote" and not _is_absolute_uri(art.get("uri")):
+                    errors.append(
+                        f"  {filename}:{lineno} [policy] - remote artifact uri is not an absolute URI"
+                    )
+                if not isinstance(content, str):
                     continue
                 try:
                     raw = content.encode("utf-8")
                 except UnicodeEncodeError:
                     errors.append(
-                        f"  {filename}:{lineno} [policy] - inline artifact content is not UTF-8 encodable"
+                        f"  {filename}:{lineno} [policy] - {'inline artifact' if availability == 'inline' else 'artifact'} content is not UTF-8 encodable"
                     )
                     continue
                 digest = hashlib.sha256(raw).hexdigest()
                 declared = str(art.get("sha256") or "").strip().lower()
+                label = "inline artifact" if availability == "inline" else "artifact"
                 if declared != digest:
                     errors.append(
-                        f"  {filename}:{lineno} [policy] - inline artifact sha256 does not match content"
+                        f"  {filename}:{lineno} [policy] - {label} sha256 does not match content"
                     )
                 if art.get("byte_size") != len(raw):
                     errors.append(
-                        f"  {filename}:{lineno} [policy] - inline artifact byte_size does not match content"
+                        f"  {filename}:{lineno} [policy] - {label} byte_size does not match content"
                     )
 
     repo = record.get("repo")
@@ -256,6 +299,11 @@ def validate_file(
                     record = json.loads(line, parse_constant=_reject_nonfinite)
                 except json.JSONDecodeError as exc:
                     errors.append(f"  {filepath.name}:{lineno} - Invalid JSON: {exc}")
+                    continue
+                if _contains_nonfinite(record):
+                    errors.append(
+                        f"  {filepath.name}:{lineno} - Invalid JSON: non-finite number"
+                    )
                     continue
 
                 if isinstance(record, dict):

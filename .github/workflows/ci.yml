@@ -42,7 +42,7 @@ jobs:
       - uses: actions/setup-python@v5
         with:
           python-version: "3.12"
-      - run: pip install --quiet 'pytest==8.4.1' 'jsonschema==4.25.0'
+      - run: pip install --quiet 'pytest==8.4.1' 'jsonschema[format]==4.25.0'
       - name: Run tests
         run: |
           pytest -q || exit_code=$?
@@ -61,7 +61,7 @@ jobs:
       - uses: actions/setup-python@v5
         with:
           python-version: "3.12"
-      - run: pip install --quiet 'jsonschema==4.25.0'
+      - run: pip install --quiet 'jsonschema[format]==4.25.0'
       - name: Validate JSONL files against schema + policy
         run: |
           if ls datasets/jsonl/*.jsonl 1>/dev/null 2>&1; then
