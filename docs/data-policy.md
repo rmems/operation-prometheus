@@ -64,3 +64,13 @@ See also:
 ## Questions or Concerns
 
 Open an issue or discussion in this repository. All policy updates should be tracked as changes to this document and referenced from the root README.
+
+## Anti-Hallucination and Evidence Policy
+
+Trajectory generation must rely strictly on verifiable source evidence. We must never invent:
+- Hidden chain-of-thought or internal reasoning that was not published.
+- Reviewer intent that cannot be evidenced.
+- Undisclosed agent or model identities (e.g. attributing human actions to models, or vice versa, without proof).
+- Execution success, test results, or causal explanations not present in the evidence.
+
+If evidence is unavailable, explicitly encode it as such or mark it null, rather than filling fields with inferences or fabricated details.

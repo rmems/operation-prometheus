@@ -1,0 +1,208 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "https://github.com/rmems/operation-prometheus/schemas/trajectory_v1.schema.json",
+  "title": "Trajectory v1",
+  "description": "Lossless event-sourced trajectory v1 schema and provenance envelope.",
+  "type": "object",
+  "required": [
+    "schema_version",
+    "trajectory_id",
+    "trajectory_type",
+    "provider_id",
+    "source_id",
+    "collector_version",
+    "repository",
+    "license",
+    "collection_policy",
+    "terminal_disposition",
+    "events",
+    "artifacts"
+  ],
+  "properties": {
+    "schema_version": { "type": "string", "enum": ["1", "1.0", "v1"] },
+    "trajectory_id": { "type": "string" },
+    "trajectory_type": { "enum": ["software", "research"] },
+    "provider_id": { "type": "string" },
+    "source_id": { "type": "string" },
+    "collector_version": { "type": "string" },
+    "repository": {
+      "type": "object",
+      "required": ["owner", "name"],
+      "properties": {
+        "owner": { "type": "string" },
+        "name": { "type": "string" },
+        "url": { "type": "string" },
+        "commit_oid": { "type": "string" },
+        "base_oid": { "type": "string" },
+        "head_oid": { "type": "string" }
+      }
+    },
+    "license": { "type": "string" },
+    "provenance": { "type": "string" },
+    "collection_policy": { "type": "string" },
+    "takedown_state": { "type": "string" },
+    "terminal_disposition": {
+      "enum": [
+        "successful",
+        "failed",
+        "reverted",
+        "falsified",
+        "null",
+        "invalid",
+        "interrupted",
+        "inconclusive"
+      ]
+    },
+    "evidence_quality": {
+      "type": "object",
+      "properties": {
+        "signal_to_noise": { "type": "number" },
+        "reproducibility": { "type": "number" },
+        "completeness": { "type": "number" }
+      }
+    },
+    "artifacts": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["id", "sha256", "media_type", "byte_size", "availability", "reproduction_role"],
+        "properties": {
+          "id": { "type": "string" },
+          "sha256": { "type": "string", "pattern": "^[a-f0-9]{64}$" },
+          "media_type": { "type": "string" },
+          "byte_size": { "type": "integer", "minimum": 0 },
+          "availability": { "enum": ["inline", "remote", "missing"] },
+          "reproduction_role": { "type": "string" },
+          "content": { "type": "string" },
+          "uri": { "type": "string", "format": "uri" }
+        },
+        "allOf": [
+          {
+            "if": { "properties": { "availability": { "const": "remote" } } },
+            "then": { "required": ["uri"] }
+          },
+          {
+            "if": { "properties": { "availability": { "const": "inline" } } },
+            "then": { "required": ["content"] }
+          }
+        ]
+      }
+    },
+    "events": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "type": "object",
+        "required": ["event_id", "timestamp", "actor", "event_type"],
+        "properties": {
+          "event_id": { "type": "string" },
+          "timestamp": { "type": "string", "format": "date-time" },
+          "actor": {
+            "type": "object",
+            "required": ["type", "id"],
+            "properties": {
+              "type": { "enum": ["human", "bot", "application", "agent"] },
+              "id": { "type": "string" },
+              "disclosed_identity": { "type": "string" }
+            }
+          },
+          "event_type": { "type": "string" },
+          "code_state": {
+            "type": "object",
+            "properties": {
+              "commit_oid": { "type": "string" },
+              "base_oid": { "type": "string" },
+              "head_oid": { "type": "string" },
+              "tree_oid": { "type": "string" },
+              "before_blob": { "type": "string" },
+              "after_blob": { "type": "string" }
+            }
+          },
+          "evidence_references": {
+            "type": "array",
+            "items": { "type": "string" }
+          },
+          "disposition": {
+            "enum": [
+              "successful",
+              "failed",
+              "reverted",
+              "falsified",
+              "null",
+              "invalid",
+              "interrupted",
+              "inconclusive",
+              "neutral",
+              "passed"
+            ]
+          },
+          "content": { "type": "string" }
+        }
+      }
+    },
+    "lineage": {
+      "type": "object",
+      "properties": {
+        "supersedes": { "type": "array", "items": { "type": "string" } },
+        "reverts": { "type": "array", "items": { "type": "string" } },
+        "multi_pr_links": { "type": "array", "items": { "type": "string" } }
+      }
+    },
+    "software_payload": {
+      "type": "object",
+      "minProperties": 1,
+      "anyOf": [
+        { "required": ["issue_statement"] },
+        { "required": ["acceptance_criteria"] },
+        { "required": ["pre_change_state"] },
+        { "required": ["implementation_patch"] },
+        { "required": ["validation_outcome"] }
+      ],
+      "properties": {
+        "issue_statement": { "type": "string", "minLength": 1 },
+        "acceptance_criteria": { "type": "string", "minLength": 1 },
+        "pre_change_state": { "type": "string", "minLength": 1 },
+        "implementation_patch": { "type": "string", "minLength": 1 },
+        "validation_outcome": { "type": "string", "minLength": 1 }
+      }
+    },
+    "research_payload": {
+      "type": "object",
+      "minProperties": 1,
+      "anyOf": [
+        { "required": ["hypothesis"] },
+        { "required": ["initial_state"] },
+        { "required": ["plan"] },
+        { "required": ["resource_budget"] },
+        { "required": ["measurements"] }
+      ],
+      "properties": {
+        "hypothesis": { "type": "string", "minLength": 1 },
+        "initial_state": { "type": "string", "minLength": 1 },
+        "plan": { "type": "string", "minLength": 1 },
+        "resource_budget": { "type": "string", "minLength": 1 },
+        "measurements": { "type": "string", "minLength": 1 }
+      }
+    }
+  },
+  "allOf": [
+    {
+      "if": {
+        "properties": { "trajectory_type": { "const": "software" } }
+      },
+      "then": {
+        "required": ["software_payload"],
+        "not": { "required": ["research_payload"] }
+      }
+    },
+    {
+      "if": {
+        "properties": { "trajectory_type": { "const": "research" } }
+      },
+      "then": {
+        "required": ["research_payload"],
+        "not": { "required": ["software_payload"] }
+      }
+    }
+  ]
+}

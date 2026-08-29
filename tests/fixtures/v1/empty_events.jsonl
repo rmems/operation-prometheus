@@ -1,0 +1,1 @@
+{"schema_version": "1.0", "trajectory_id": "soft-1", "trajectory_type": "software", "provider_id": "test-provider", "source_id": "test-source", "collector_version": "0.6.0", "repository": {"owner": "foo", "name": "bar"}, "license": "MIT", "collection_policy": "public", "terminal_disposition": "failed", "events": [], "artifacts": [], "software_payload": {"issue_statement": "x"}}
