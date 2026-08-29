@@ -157,11 +157,18 @@ def main(argv: list[str] | None = None) -> int:
             pr = int((raw.get("source") or {}).get("pr_number") or 0)
             if pr_filter is not None and pr not in pr_filter:
                 continue
+            source_license = str(
+                (raw.get("source") or {}).get("license")
+                or card.get("source_license")
+                or card.get("license")
+                or "NOASSERTION"
+            ).strip()
             traj = normalize_record(
                 raw,
                 card,
                 raw_path=path,
                 max_patch_bytes=args.max_patch_bytes,
+                source_license=source_license or "NOASSERTION",
             )
             schema_errors = _validate(traj, validator)
             if schema_errors:
