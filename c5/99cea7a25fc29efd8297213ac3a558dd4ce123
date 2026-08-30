@@ -1,0 +1,36 @@
+schemas/eligibility_manifest.schema.json
+  s_7f419f27da8ebf::t_a13bf2100b0cc0 1-125
+tests/test_eligibility_ledger.py
+  s_7f419f27da8ebf::t_6aca097042a4d9 8,15,266,273,280,287,294,312-338,369-409,433-461
+scripts/lib/eligibility.py
+  s_7f419f27da8ebf::t_a36f44627a5483 71-73,240-242,246-248,323-324,381-385,419,423-425,427-434,443-451,466-470,506,520-521,651-658,706,728-730
+schemas/duplicate_group.schema.json
+  s_7f419f27da8ebf::t_af6e2d23a6143d 53,55-58,66,68-71,77-85,89-97
+  s_7f419f27da8ebf::t_a13bf2100b0cc0 1-52,54,59-65,67,72-76,86-88,98-172
+tests/test_source_inventory.py
+  s_7f419f27da8ebf::t_6aca097042a4d9 16,300-322,339-341,345-354,402-410
+scripts/lib/source_inventory.py
+  s_7f419f27da8ebf::t_a36f44627a5483 162-165,476-483,524
+schemas/source_repository.schema.json
+  s_7f419f27da8ebf::t_a13bf2100b0cc0 1-81
+schemas/eligibility_baseline_report.schema.json
+  s_7f419f27da8ebf::t_a13bf2100b0cc0 1-111
+scripts/build_eligibility_ledger.py
+  s_7f419f27da8ebf::t_a36f44627a5483 28-31,106,108-123,162
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.5.2",
+  "base_commit_sha": "c599cea7a25fc29efd8297213ac3a558dd4ce123",
+  "prompts": {},
+  "sessions": {
+    "s_7f419f27da8ebf": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a0503b-9695-7f51-9e26-2f3f8ac7006c",
+        "model": "gpt-5.6-sol"
+      },
+      "human_author": "Raul Montoya Cardenas <montoyaraul34@gmail.com>"
+    }
+  }
+}
