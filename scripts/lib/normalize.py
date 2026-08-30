@@ -1341,12 +1341,28 @@ def language_for(
     return "unknown"
 
 
+def resolve_source_license(source: dict[str, Any], card: dict[str, Any]) -> str:
+    """Resolve the originating source repository's SPDX license, or NOASSERTION.
+
+    Only ``source.license`` and the card's explicit ``source_license`` are
+    trusted — a bare ``card["license"]`` is not a reserved provenance field
+    and could mean something unrelated, so it is not used as a fallback.
+    Non-string values are rejected rather than coerced, so a stray dict or
+    number can never silently satisfy the schema as a license value.
+    """
+    for value in (source.get("license"), card.get("source_license")):
+        if isinstance(value, str) and value.strip():
+            return value.strip()
+    return "NOASSERTION"
+
+
 def normalize_record(
     raw: dict[str, Any],
     card: dict[str, Any] | None = None,
     *,
     raw_path: Path | None = None,
     max_patch_bytes: int = DEFAULT_MAX_TRAJECTORY_PATCH,
+    source_license: str | None = None,
 ) -> dict[str, Any]:
     """Build a schema-v0 trajectory dict from a raw PR record."""
     card = card or {}
@@ -1356,6 +1372,10 @@ def normalize_record(
     # Include owner so multi-repo extracts never collide (alice/widget#12 vs bob/widget#12).
     owner_repo = repo.replace("/", "-") if "/" in repo else repo
     traj_id = f"{owner_repo}-{pr}"
+    if source_license is None:
+        source_license = resolve_source_license(source, card)
+    else:
+        source_license = source_license.strip() or "NOASSERTION"
 
     linked_issues = enrich_linked_issues(raw, card)
     # Prefer enriched list for context/URLs without mutating caller's raw dict.
@@ -1372,6 +1392,7 @@ def normalize_record(
         "repo": repo,
         "pr_number": pr,
         "source_urls": build_source_urls(repo, pr, linked_issues),
+        "license": source_license,
         "language": language_for(repo, pr, card, raw),
         "domain": domain_for(repo, pr, card, raw),
         "task_type": task_type_for(repo, pr, raw, card),

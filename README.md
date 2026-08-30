@@ -57,6 +57,13 @@ Initial repositories include:
 
 See [datasets/README.md](datasets/README.md) for rules on what may be committed.
 
+## License
+
+Project-owned material is licensed under **Apache-2.0** ([LICENSE](LICENSE)).
+Incorporated source-derived trajectory data retains its originating
+repository's own license and is not relicensed by this repository — see
+[NOTICE](NOTICE) and [docs/data-policy.md](docs/data-policy.md#licensing-model).
+
 ## Schemas and Data Policy
 
 - **Schema v0** (initial draft, not final): [schemas/pr_trajectory.schema.json](schemas/pr_trajectory.schema.json). Implements GitHub [#2](https://github.com/rmems/operation-prometheus/issues/2). See the tiny example in `datasets/examples/`.
@@ -103,4 +110,3 @@ python scripts/validate_jsonl.py --strict-policy datasets/jsonl/corinth-canal-v0
 ```
 
 The collector performs **no write operations** to GitHub. Raw dumps must stay out of git (`datasets/raw/` is ignored).
-

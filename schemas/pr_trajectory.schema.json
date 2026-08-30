@@ -44,6 +44,12 @@
       },
       "description": "Public GitHub PR/issue URLs that contributed provenance or review signal. MUST include the canonical PR URL for the declared repo and pr_number (https://github.com/{repo}/pull/{pr_number}). Cross-repo supplemental links are allowed but the primary trajectory's own PR must be present for auditability."
     },
+    "license": {
+      "type": "string",
+      "minLength": 1,
+      "pattern": "\\S",
+      "description": "SPDX license identifier or expression for the originating source repository; use NOASSERTION when it is not available."
+    },
     "language": {
       "type": "string",
       "description": "Primary programming language of the change (e.g. Rust, Python, Julia).",
