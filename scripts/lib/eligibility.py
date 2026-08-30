@@ -134,10 +134,16 @@ def assess_quality(pr: dict[str, Any], repository: dict[str, Any]) -> dict[str, 
     state = str(pr.get("state") or "").lower()
     terminal_time = pr.get("merged_at") or pr.get("closed_at")
 
-    if linked:
+    if linked and (title or body):
         clarity = _quality(
-            "verified",
-            ["formal_issue_link_present"],
+            "partial",
+            ["formal_issue_reference_without_issue_content", "pr_description_present"],
+            [source, *[str(item.get("url") or item.get("id")) for item in linked]],
+        )
+    elif linked:
+        clarity = _quality(
+            "partial",
+            ["formal_issue_reference_without_issue_content"],
             [str(item.get("url") or item.get("id")) for item in linked],
         )
     elif title and body:
@@ -260,7 +266,7 @@ def _automatic_state(
 ) -> tuple[str, list[str]]:
     state = str(pr.get("state") or "").lower()
     title = str(pr.get("title") or "").strip()
-    if state == "open" or pr.get("draft"):
+    if state == "open":
         reasons = ["mutable_open_pull_request"]
         if pr.get("draft"):
             reasons.append("draft_pull_request")
@@ -419,32 +425,71 @@ def _duplicate_records(
             }
         )
 
-    comparable = [
-        (row["candidate_id"], row["repository_name_with_owner"].casefold(), _title_tokens(row["title"]))
-        for row in candidates
-    ]
-    for index, (left_id, left_repo, left_tokens) in enumerate(comparable):
-        if len(left_tokens) < 4:
-            continue
-        for right_id, right_repo, right_tokens in comparable[index + 1 :]:
-            if left_repo != right_repo or len(right_tokens) < 4:
+    by_repository: dict[str, list[tuple[str, set[str]]]] = defaultdict(list)
+    for row in candidates:
+        tokens = _title_tokens(row["title"])
+        if len(tokens) >= 4:
+            by_repository[row["repository_name_with_owner"].casefold()].append(
+                (row["candidate_id"], tokens)
+            )
+    for _repository, entries in sorted(by_repository.items()):
+        adjacency: dict[str, set[str]] = defaultdict(set)
+        edge_similarity: dict[tuple[str, str], float] = {}
+        tokens_by_id = {candidate_id: tokens for candidate_id, tokens in entries}
+        for index, (left_id, left_tokens) in enumerate(entries):
+            for right_id, right_tokens in entries[index + 1 :]:
+                union = left_tokens | right_tokens
+                similarity = len(left_tokens & right_tokens) / len(union) if union else 0.0
+                if similarity < near_threshold:
+                    continue
+                pair = tuple(sorted((left_id, right_id)))
+                adjacency[left_id].add(right_id)
+                adjacency[right_id].add(left_id)
+                edge_similarity[pair] = similarity
+
+        visited: set[str] = set()
+        for start in sorted(adjacency):
+            if start in visited:
                 continue
-            union = left_tokens | right_tokens
-            similarity = len(left_tokens & right_tokens) / len(union) if union else 0.0
-            if similarity < near_threshold or similarity >= 1.0:
+            pending = [start]
+            component: set[str] = set()
+            while pending:
+                candidate_id = pending.pop()
+                if candidate_id in component:
+                    continue
+                component.add(candidate_id)
+                pending.extend(sorted(adjacency[candidate_id] - component, reverse=True))
+            visited.update(component)
+            ids = sorted(component)
+            if len(ids) < 2:
                 continue
-            ids = sorted([left_id, right_id])
+            qualifying_edges = [
+                {
+                    "candidate_ids": list(pair),
+                    "similarity": round(similarity, 6),
+                }
+                for pair, similarity in sorted(edge_similarity.items())
+                if pair[0] in component and pair[1] in component
+            ]
+            exact_title = len({tuple(sorted(tokens_by_id[candidate_id])) for candidate_id in ids}) == 1
+            similarity = min(edge["similarity"] for edge in qualifying_edges)
             group_id = "duplicate:" + hashlib.sha256(canonical_json_bytes(ids)).hexdigest()[:20]
             duplicates.append(
                 {
                     "schema_version": "duplicate_group_v1",
                     "group_id": group_id,
-                    "kind": "near_title_match",
+                    "kind": "exact_title_match" if exact_title else "near_title_match",
                     "candidate_ids": ids,
                     "source_candidate": None,
-                    "exact": False,
-                    "similarity": round(similarity, 6),
-                    "evidence": [{"method": "title_token_jaccard", "threshold": near_threshold}],
+                    "exact": exact_title,
+                    "similarity": similarity,
+                    "evidence": [
+                        {
+                            "method": "title_token_jaccard_connected_components",
+                            "threshold": near_threshold,
+                            "qualifying_edges": qualifying_edges,
+                        }
+                    ],
                 }
             )
     duplicates.sort(key=lambda row: row["group_id"])
@@ -542,6 +587,7 @@ def _post_cutoff_evidence(
             {"candidate_id": row["candidate_id"], "merged_at": row.get("merged_at")}
             for row in candidates
             if row["source_state"] == "merged"
+            and row["task_family"] != "dependency"
             and (metric != "formally_issue_linked_merged_pr_count" or row.get("linked_issues"))
             and _parse_time(row.get("merged_at"))
             and _parse_time(row.get("merged_at")) > cutoff
@@ -582,11 +628,18 @@ def build_baseline_report(
         actual_value = int(actual[metric])
         delta = actual_value - expected_int
         evidence = _post_cutoff_evidence(metric, cutoff, repositories, candidates)
-        explained = delta == 0 or (delta > 0 and len(evidence) >= delta)
+        automatic_event_count = len(evidence)
+        explained = delta == 0 or (delta > 0 and automatic_event_count == delta)
         explanation = "unchanged_from_baseline" if delta == 0 else "post_baseline_source_events"
         if not explained and metric in manual:
             entry = manual[metric]
             refs = entry.get("evidence_refs") or []
+            declared_countervailing_delta = entry.get("countervailing_delta")
+            if declared_countervailing_delta != delta - automatic_event_count:
+                raise ValueError(
+                    f"Baseline drift explanation for {metric} declares countervailing_delta "
+                    f"{declared_countervailing_delta!r}, expected {delta - automatic_event_count}"
+                )
             if refs:
                 explained = True
                 explanation = str(entry.get("reason_code") or "manual_evidence_backed_explanation")
@@ -597,6 +650,8 @@ def build_baseline_report(
                 "expected": expected_int,
                 "actual": actual_value,
                 "delta": delta,
+                "post_cutoff_event_count": automatic_event_count,
+                "countervailing_delta": delta - automatic_event_count,
                 "explained": explained,
                 "explanation": explanation if explained else "unexplained_drift",
                 "evidence": evidence,
@@ -694,6 +749,25 @@ def build_eligibility_artifacts(
     if policy.get("schema_version") != "eligibility_policy_v1":
         raise ValueError("Unsupported eligibility policy schema")
 
+    snapshot_owners = snapshot.get("owners") or []
+    policy_owners = policy.get("owners") or []
+    snapshot_owner_keys = {
+        (str(row.get("kind") or ""), str(row.get("login") or "").casefold())
+        for row in snapshot_owners
+        if isinstance(row, dict)
+    }
+    policy_owner_keys = {
+        (str(row.get("kind") or ""), str(row.get("login") or "").casefold())
+        for row in policy_owners
+        if isinstance(row, dict)
+    }
+    if (
+        len(snapshot_owner_keys) != len(snapshot_owners)
+        or len(policy_owner_keys) != len(policy_owners)
+        or snapshot_owner_keys != policy_owner_keys
+    ):
+        raise ValueError("Source snapshot owners do not match eligibility policy owners")
+
     declared_snapshot_hash = snapshot.get("snapshot_sha256")
     snapshot_without_hash = dict(snapshot)
     snapshot_without_hash.pop("snapshot_sha256", None)
@@ -743,6 +817,10 @@ def build_eligibility_artifacts(
     }
     if len(by_repo_number) != len(raw_prs):
         raise ValueError("Source snapshot contains duplicate repository/PR aliases")
+    for (repository_name, number), source_id in list(by_repo_number.items()):
+        for alias, canonical in repository_aliases.items():
+            if canonical == repository_name:
+                by_repo_number[(alias, number)] = source_id
     overrides = _override_map(policy)
     stale_overrides = sorted(set(overrides) - set(source_ids))
     if stale_overrides:
@@ -770,6 +848,8 @@ def build_eligibility_artifacts(
             reason_codes = [str(item) for item in override["reason_codes"]]
             if state == "included_positive" and str(raw.get("state") or "") != "merged":
                 raise ValueError(f"Override cannot include non-merged candidate as positive: {cid}")
+            if state == "included_negative" and str(raw.get("state") or "") == "open":
+                raise ValueError(f"Override cannot include open candidate as negative: {cid}")
             if state == "watchlist_open" and str(raw.get("state") or "") != "open":
                 raise ValueError(f"Override cannot watchlist a terminal candidate: {cid}")
         repo_alias = str(raw.get("repository_name_with_owner") or "")

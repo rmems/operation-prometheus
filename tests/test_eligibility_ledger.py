@@ -8,6 +8,7 @@ import pytest
 from build_eligibility_ledger import _validate_inputs
 from lib.eligibility import (
     QUALITY_DIMENSIONS,
+    _duplicate_records,
     _lineage,
     _load_existing_rows,
     build_eligibility_artifacts,
@@ -174,7 +175,7 @@ def _snapshot() -> dict:
             "repository_count": 2,
             "pull_request_count": 5,
             "page_count": 2,
-            "private_repositories_ignored": 0,
+            "non_public_repositories_ignored": 0,
         },
         "pages": pages,
         "repositories": repositories,
@@ -235,6 +236,10 @@ def test_build_assigns_one_fail_closed_state_and_all_quality_dimensions(tmp_path
     assert by_number[3]["state"] == "watchlist_open"
     assert by_number[4]["state"] == "excluded"
     assert by_number[5]["state"] == "excluded"
+    assert by_number[1]["quality"]["task_hypothesis_clarity"]["assessment"] == "partial"
+    assert "formal_issue_reference_without_issue_content" in by_number[1]["quality"][
+        "task_hypothesis_clarity"
+    ]["reason_codes"]
     for candidate in artifacts["candidates"]:
         assert candidate["primary_reason"] in candidate["reason_codes"]
         assert set(candidate["quality"]) == set(QUALITY_DIMENSIONS)
@@ -249,6 +254,53 @@ def test_duplicate_and_near_duplicate_reports_are_machine_readable(tmp_path):
     assert "near_title_match" in kinds
     exact = next(row for row in artifacts["duplicates"] if row["kind"] == "current_corpus_duplicate")
     assert exact["exact"] is True
+
+
+def test_duplicate_detection_groups_connected_titles_and_exact_titles():
+    candidates = [
+        {
+            "candidate_id": "a",
+            "repository_name_with_owner": "rmems/repo",
+            "title": "alpha beta gamma delta",
+            "head_oid": "shared-head",
+        },
+        {
+            "candidate_id": "b",
+            "repository_name_with_owner": "rmems/repo",
+            "title": "alpha beta gamma epsilon",
+            "head_oid": "shared-head",
+        },
+        {
+            "candidate_id": "c",
+            "repository_name_with_owner": "rmems/repo",
+            "title": "alpha beta epsilon zeta",
+            "head_oid": "unique-head",
+        },
+        {
+            "candidate_id": "d",
+            "repository_name_with_owner": "rmems/other",
+            "title": "identical title tokens here",
+            "head_oid": "head-d",
+        },
+        {
+            "candidate_id": "e",
+            "repository_name_with_owner": "rmems/other",
+            "title": "identical title tokens here",
+            "head_oid": "head-e",
+        },
+    ]
+    groups = _duplicate_records(candidates, [], {}, near_threshold=0.6)
+    shared_head = next(group for group in groups if group["kind"] == "shared_head_oid")
+    connected = next(
+        group
+        for group in groups
+        if group["kind"] == "near_title_match" and set(group["candidate_ids"]) == {"a", "b", "c"}
+    )
+    exact_title = next(group for group in groups if group["kind"] == "exact_title_match")
+    assert shared_head["candidate_ids"] == ["a", "b"]
+    assert connected["similarity"] == 0.6
+    assert exact_title["candidate_ids"] == ["d", "e"]
+    assert exact_title["exact"] is True
 
 
 def test_repeated_build_is_byte_identical(tmp_path):
@@ -328,6 +380,83 @@ def test_repository_alias_preserves_existing_rows_across_transfer(tmp_path):
     assert artifacts["baseline_report"]["orphan_existing_dataset_candidates"] == []
 
 
+def test_repository_alias_resolves_lineage_references(tmp_path):
+    snapshot = _snapshot()
+    snapshot["pull_requests"][0]["body"] = (
+        "Reverts https://github.com/legacy/repo-a/pull/2 after validation."
+    )
+    snapshot["pull_requests"][0]["source_hash"] = sha256_json(snapshot["pull_requests"][0])
+    snapshot.pop("snapshot_sha256")
+    snapshot["snapshot_sha256"] = sha256_json(snapshot)
+    policy = _policy()
+    policy["repository_aliases"] = [
+        {
+            "alias": "legacy/repo-a",
+            "repository_id": "R1",
+            "canonical_name_with_owner": "rmems/repo-a",
+            "evidence_refs": ["https://github.com/legacy/repo-a"],
+        }
+    ]
+    artifacts = build_eligibility_artifacts(snapshot, policy, _repo_root(tmp_path))
+    candidate = next(row for row in artifacts["candidates"] if row["pull_request_number"] == 1)
+    assert candidate["lineage"]["reverts"][0]["target_candidate_id"].endswith(":pull:PR2")
+
+
+def test_terminal_draft_is_not_misclassified_as_open_watchlist(tmp_path):
+    snapshot = _snapshot()
+    snapshot["pull_requests"][0]["draft"] = True
+    snapshot.pop("snapshot_sha256")
+    snapshot["snapshot_sha256"] = sha256_json(snapshot)
+    artifacts = build_eligibility_artifacts(snapshot, _policy(), _repo_root(tmp_path))
+    candidate = next(row for row in artifacts["candidates"] if row["pull_request_number"] == 1)
+    assert candidate["source_state"] == "merged"
+    assert candidate["state"] == "quarantined"
+
+
+def test_snapshot_owners_must_match_policy_owners(tmp_path):
+    snapshot = _snapshot()
+    snapshot["owners"] = [{"kind": "user", "login": "rmems"}]
+    snapshot.pop("snapshot_sha256")
+    snapshot["snapshot_sha256"] = sha256_json(snapshot)
+    with pytest.raises(ValueError, match="owners do not match"):
+        build_eligibility_artifacts(snapshot, _policy(), _repo_root(tmp_path))
+
+
+def test_open_candidate_cannot_be_overridden_as_included_negative(tmp_path):
+    policy = _policy()
+    policy["overrides"] = [
+        {
+            "candidate_id": "github:repository:R1:pull:PR3",
+            "state": "included_negative",
+            "reason_codes": ["explicit_negative"],
+            "evidence_refs": ["https://github.com/rmems/repo-a/pull/3"],
+        }
+    ]
+    with pytest.raises(ValueError, match="open candidate as negative"):
+        build_eligibility_artifacts(_snapshot(), policy, _repo_root(tmp_path))
+
+
+def test_baseline_automatic_drift_requires_exact_non_dependency_event_reconciliation(tmp_path):
+    snapshot = _snapshot()
+    snapshot["pull_requests"][0]["merged_at"] = "2026-08-25T00:00:00Z"
+    snapshot["pull_requests"][3]["merged_at"] = "2026-08-26T00:00:00Z"
+    snapshot["pull_requests"][4]["merged_at"] = "2026-08-27T00:00:00Z"
+    snapshot.pop("snapshot_sha256")
+    snapshot["snapshot_sha256"] = sha256_json(snapshot)
+    policy = _policy()
+    policy["baseline"]["expected_counts"]["merged_non_dependency_pr_count"] = 1
+    artifacts = build_eligibility_artifacts(snapshot, policy, _repo_root(tmp_path))
+    comparison = next(
+        row
+        for row in artifacts["baseline_report"]["comparisons"]
+        if row["metric"] == "merged_non_dependency_pr_count"
+    )
+    assert comparison["delta"] == 1
+    assert comparison["post_cutoff_event_count"] == 2
+    assert comparison["countervailing_delta"] == -1
+    assert comparison["explained"] is False
+
+
 def test_incomplete_snapshot_and_stale_override_fail_closed(tmp_path):
     snapshot = _snapshot()
     snapshot["collection"]["complete"] = False
@@ -346,6 +475,19 @@ def test_incomplete_snapshot_and_stale_override_fail_closed(tmp_path):
     ]
     with pytest.raises(ValueError, match="stale overrides"):
         build_eligibility_artifacts(snapshot, policy, _repo_root(tmp_path / "second"))
+
+
+def test_duplicate_override_candidate_ids_fail_closed(tmp_path):
+    override = {
+        "candidate_id": "github:repository:R1:pull:PR1",
+        "state": "excluded",
+        "reason_codes": ["explicit_policy_exclusion"],
+        "evidence_refs": ["https://example.invalid/evidence"],
+    }
+    policy = _policy()
+    policy["overrides"] = [override, {**override, "state": "quarantined"}]
+    with pytest.raises(ValueError, match="duplicate override candidate_id"):
+        build_eligibility_artifacts(_snapshot(), policy, _repo_root(tmp_path))
 
 
 def test_current_repo_regression_detects_grok_ozempic_42_duplicate():

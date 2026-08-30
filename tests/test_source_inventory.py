@@ -1,12 +1,17 @@
 from __future__ import annotations
 
+import urllib.error
+import urllib.request
 from typing import Any
 
 import pytest
 
-from lib.github_client import GitHubClient, GitHubError
+from lib.github_client import GitHubClient, GitHubError, _SafeRedirectHandler
 from lib.source_inventory import (
+    CLOSING_ISSUES_QUERY,
     PULL_REQUESTS_QUERY,
+    _page_evidence,
+    _pull_request_source_hash,
     _pull_request_record,
     collect_source_inventory,
     parse_owner_spec,
@@ -14,9 +19,17 @@ from lib.source_inventory import (
 
 
 class FakeInventoryClient(GitHubClient):
-    def __init__(self, *, stalled: bool = False):
+    def __init__(
+        self,
+        *,
+        stalled: bool = False,
+        repeated_repository_page: bool = False,
+        include_non_public: bool = False,
+    ):
         super().__init__(token="fixture", base_url="https://api.github.test")
         self.stalled = stalled
+        self.repeated_repository_page = repeated_repository_page
+        self.include_non_public = include_non_public
 
     def get_json_with_headers(self, path_or_url: str):
         if "/users/rmems/repos" in path_or_url:
@@ -27,9 +40,8 @@ class FakeInventoryClient(GitHubClient):
             repo_id = "R_org"
         else:
             raise AssertionError(path_or_url)
-        return (
-            [
-                {
+        repositories = [
+            {
                     "node_id": repo_id,
                     "id": 1 if owner == "rmems" else 2,
                     "full_name": f"{owner}/repo",
@@ -46,10 +58,36 @@ class FakeInventoryClient(GitHubClient):
                     "updated_at": "2026-01-02T00:00:00Z",
                     "pushed_at": "2026-01-02T00:00:00Z",
                     "license": {"spdx_id": "MIT", "name": "MIT", "url": None},
-                }
-            ],
-            {"date": "Sun, 30 Aug 2026 12:00:00 GMT"},
-        )
+            }
+        ]
+        if self.include_non_public:
+            repositories.extend(
+                [
+                    {
+                        **repositories[0],
+                        "node_id": f"{repo_id}_internal",
+                        "id": 101,
+                        "full_name": f"{owner}/internal-repo",
+                        "name": "internal-repo",
+                        "html_url": f"https://github.com/{owner}/internal-repo",
+                        "visibility": "internal",
+                    },
+                    {
+                        **repositories[0],
+                        "node_id": f"{repo_id}_private",
+                        "id": 102,
+                        "full_name": f"{owner}/private-repo",
+                        "name": "private-repo",
+                        "html_url": f"https://github.com/{owner}/private-repo",
+                        "visibility": "private",
+                        "private": True,
+                    },
+                ]
+            )
+        headers = {"date": "Sun, 30 Aug 2026 12:00:00 GMT"}
+        if self.repeated_repository_page:
+            headers["link"] = f'<{path_or_url}>; rel="next"'
+        return repositories, headers
 
     def query_graphql(
         self,
@@ -100,6 +138,41 @@ def test_graphql_client_rejects_mutations_before_network():
         client.query_graphql("query { viewer { login } }")
 
 
+@pytest.mark.parametrize(
+    "document",
+    [PULL_REQUESTS_QUERY, CLOSING_ISSUES_QUERY],
+    ids=["pull_requests", "closing_issues"],
+)
+def test_production_queries_satisfy_the_read_only_guard(document, monkeypatch):
+    client = GitHubClient(token="fixture", max_retries=0)
+    calls: list[str] = []
+
+    def fail_after_guard(req, timeout=None):
+        calls.append(req.full_url)
+        raise urllib.error.URLError("stub")
+
+    monkeypatch.setattr(client._opener, "open", fail_after_guard)
+    with pytest.raises(GitHubError, match="network error"):
+        client.query_graphql(document, {"owner": "rmems", "name": "repo"})
+    assert calls == ["https://api.github.com/graphql"]
+
+
+@pytest.mark.parametrize(
+    "target",
+    ["http://api.github.com/graphql", "https://example.invalid/graphql"],
+)
+def test_redirect_handler_rejects_credential_leaking_targets(target):
+    handler = _SafeRedirectHandler()
+    request = urllib.request.Request(
+        "https://api.github.com/graphql",
+        data=b"{}",
+        headers={"Authorization": "Bearer fixture"},
+        method="POST",
+    )
+    with pytest.raises(GitHubError, match="Refusing GitHub API redirect"):
+        handler.redirect_request(request, None, 302, "Found", {}, target)
+
+
 def test_pull_request_record_rejects_truncated_labels():
     with pytest.raises(GitHubError, match="Label pagination is incomplete"):
         _pull_request_record(
@@ -109,6 +182,117 @@ def test_pull_request_record_rejects_truncated_labels():
                 "closingIssuesReferences": {"totalCount": 0, "nodes": []},
             },
             {"id": "R1", "database_id": 1, "name_with_owner": "rmems/repo"},
+        )
+
+
+def test_pull_request_record_preserves_full_body_and_discloses_any_text_limit():
+    raw = {
+        "number": 7,
+        "title": "t" * 1100,
+        "bodyText": "b" * 20000,
+        "labels": {"totalCount": 0, "nodes": []},
+        "closingIssuesReferences": {"totalCount": 0, "nodes": []},
+    }
+    record = _pull_request_record(
+        raw,
+        {"id": "R1", "database_id": 1, "name_with_owner": "rmems/repo"},
+    )
+    assert len(record["body"]) == 20000
+    assert len(record["title"]) == 1024
+    assert "source_text_truncated_at_1024_characters" in record["collection_warnings"]
+
+
+def test_page_hash_excludes_volatile_rate_limit_telemetry():
+    kwargs = {
+        "scope": "pull_requests",
+        "item_count": 0,
+        "page_index": 0,
+        "has_next_page": False,
+        "headers": {},
+    }
+    first = _page_evidence(
+        response={"repository": {"id": "R1"}, "rateLimit": {"remaining": 10}},
+        **kwargs,
+    )
+    second = _page_evidence(
+        response={"repository": {"id": "R1"}, "rateLimit": {"remaining": 9}},
+        **kwargs,
+    )
+    assert first["response_sha256"] == second["response_sha256"]
+
+
+class ClosingIssuePaginationClient(FakeInventoryClient):
+    def __init__(self):
+        super().__init__()
+        self.pull_raw = {
+            "id": "PR1",
+            "databaseId": 7,
+            "number": 7,
+            "url": "https://github.com/rmems/repo/pull/7",
+            "state": "MERGED",
+            "title": "feat: paginate issue lineage",
+            "bodyText": "Closes two issues.",
+            "labels": {"totalCount": 0, "nodes": []},
+            "closingIssuesReferences": {
+                "totalCount": 2,
+                "pageInfo": {"hasNextPage": True, "endCursor": "issue-cursor-1"},
+                "nodes": [self._issue(1)],
+            },
+        }
+
+    @staticmethod
+    def _issue(number: int) -> dict[str, Any]:
+        return {
+            "id": f"I{number}",
+            "databaseId": number,
+            "number": number,
+            "url": f"https://github.com/rmems/repo/issues/{number}",
+            "repository": {
+                "id": "R_user",
+                "databaseId": 1,
+                "nameWithOwner": "rmems/repo",
+            },
+        }
+
+    def query_graphql(self, query: str, variables: dict[str, Any] | None = None):
+        if query == CLOSING_ISSUES_QUERY:
+            return (
+                {
+                    "node": {
+                        "closingIssuesReferences": {
+                            "totalCount": 2,
+                            "pageInfo": {"hasNextPage": False, "endCursor": "issue-cursor-2"},
+                            "nodes": [self._issue(2)],
+                        }
+                    },
+                    "rateLimit": {
+                        "cost": 1,
+                        "remaining": 999,
+                        "resetAt": "2026-08-30T13:00:00Z",
+                    },
+                },
+                {"date": "Sun, 30 Aug 2026 12:00:00 GMT"},
+            )
+        assert query == PULL_REQUESTS_QUERY
+        return (
+            {
+                "repository": {
+                    "id": "R_user",
+                    "databaseId": 1,
+                    "nameWithOwner": "rmems/repo",
+                    "pullRequests": {
+                        "totalCount": 1,
+                        "pageInfo": {"hasNextPage": False, "endCursor": "pr-cursor-1"},
+                        "nodes": [self.pull_raw],
+                    },
+                },
+                "rateLimit": {
+                    "cost": 1,
+                    "remaining": 1000,
+                    "resetAt": "2026-08-30T13:00:00Z",
+                },
+            },
+            {"date": "Sun, 30 Aug 2026 12:00:00 GMT"},
         )
 
 
@@ -123,7 +307,7 @@ def test_collect_source_inventory_keeps_zero_pr_and_archived_repositories():
         "repository_count": 2,
         "pull_request_count": 0,
         "page_count": 4,
-        "private_repositories_ignored": 0,
+        "non_public_repositories_ignored": 0,
     }
     assert len(snapshot["repositories"]) == 2
     assert {row["archived"] for row in snapshot["repositories"]} == {False, True}
@@ -138,3 +322,43 @@ def test_collect_source_inventory_rejects_stalled_cursor():
             ["user:rmems"],
             collected_at="2026-08-30T12:00:00Z",
         )
+
+
+def test_collect_source_inventory_rejects_invalid_fixed_timestamp_before_collection():
+    with pytest.raises(ValueError, match="Invalid collected_at"):
+        collect_source_inventory(
+            FakeInventoryClient(),
+            ["user:rmems"],
+            collected_at="not-a-timestamp",
+        )
+
+
+def test_collect_source_inventory_excludes_every_non_public_visibility():
+    snapshot = collect_source_inventory(
+        FakeInventoryClient(include_non_public=True),
+        ["user:rmems"],
+        collected_at="2026-08-30T12:00:00Z",
+    )
+    assert [row["name_with_owner"] for row in snapshot["repositories"]] == ["rmems/repo"]
+    assert snapshot["collection"]["non_public_repositories_ignored"] == 2
+
+
+def test_collect_source_inventory_rejects_repeated_rest_pagination_url():
+    with pytest.raises(GitHubError, match="pagination URL repeated"):
+        collect_source_inventory(
+            FakeInventoryClient(repeated_repository_page=True),
+            ["user:rmems"],
+            collected_at="2026-08-30T12:00:00Z",
+        )
+
+
+def test_closing_issue_pagination_recomputes_pull_request_source_hash():
+    client = ClosingIssuePaginationClient()
+    snapshot = collect_source_inventory(
+        client,
+        ["user:rmems"],
+        collected_at="2026-08-30T12:00:00Z",
+    )
+    record = snapshot["pull_requests"][0]
+    assert len(record["linked_issues"]) == 2
+    assert record["source_hash"] == _pull_request_source_hash(client.pull_raw, record)

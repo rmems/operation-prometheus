@@ -41,14 +41,14 @@
         "repository_count",
         "pull_request_count",
         "page_count",
-        "private_repositories_ignored"
+        "non_public_repositories_ignored"
       ],
       "properties": {
         "complete": { "const": true },
         "repository_count": { "type": "integer", "minimum": 0 },
         "pull_request_count": { "type": "integer", "minimum": 0 },
         "page_count": { "type": "integer", "minimum": 0 },
-        "private_repositories_ignored": { "type": "integer", "minimum": 0 }
+        "non_public_repositories_ignored": { "type": "integer", "minimum": 0 }
       },
       "additionalProperties": false
     },

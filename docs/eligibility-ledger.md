@@ -50,22 +50,25 @@ manifest, shell transcript, or dataset card.
 
 Collection includes archived repositories and all PR states so closed-unmerged
 work and the mutable open watchlist cannot disappear behind a merged-only
-query. Private repositories returned to the authenticated caller are counted
-as ignored but their identities and metadata are not stored in the snapshot.
+query. Any non-public repositories returned to the authenticated caller are
+counted as ignored, but their identities and metadata are not stored in the
+snapshot.
 
 The collector records a response hash and pagination position for every REST
 and GraphQL page. It fails instead of emitting a partial snapshot when:
 
 - a repository, PR, or formally linked issue lacks an immutable node ID;
 - an immutable ID or repository/PR alias is duplicated;
-- a cursor stalls, a connection total changes, or the final count disagrees;
+- a cursor or REST pagination URL repeats, a connection total changes, or the
+  final count disagrees;
 - labels or closing-issue references exceed the collected connection page;
 - a repository changes identity during collection.
 
 The offline builder independently verifies the snapshot's canonical SHA-256,
-page count, repository count, global PR count, and each repository's PR count.
-It also rejects stale policy overrides, existing dataset rows absent from the
-inventory in strict mode, and audit-baseline drift without recorded evidence.
+declared owners, page count, repository count, global PR count, and each
+repository's PR count. It also rejects stale policy overrides, existing dataset
+rows absent from the inventory in strict mode, and audit-baseline drift without
+an exact event-count reconciliation and recorded evidence.
 Evidence-backed repository aliases in the policy map historical names and
 transfers onto the current immutable repository ID; mutable owner/name text is
 never allowed to orphan an otherwise conserved existing row.
@@ -85,13 +88,14 @@ Every candidate has exactly one state and one or more reason codes:
   artifact, policy, or licensing evidence is incomplete;
 - `excluded` — deterministic dependency, release, documentation, or formatting
   exclusions, or an evidence-backed policy override;
-- `watchlist_open` — open or draft work that remains mutable.
+- `watchlist_open` — open work that remains mutable, including open drafts.
 
 Automatic rules intentionally do not promote terminal PR metadata directly to
 positive or negative training data. An override in `policy.json` must name the
 immutable candidate ID and include non-empty `reason_codes` and
-`evidence_refs`. A positive override is permitted only for a merged source PR,
-and a watchlist override only for an open source PR.
+`evidence_refs`. A positive override is permitted only for a source PR in the
+`merged` state, a negative override only for a terminal source PR, and a
+watchlist override only for a source PR in the `open` state.
 
 ## Quality record
 
@@ -122,7 +126,7 @@ signal to later trajectory collectors rather than a low score to average away.
 - `repositories.jsonl` — one thin row per public repository;
 - `candidates.jsonl` — one immutable-ID row per discovered PR;
 - `duplicates.jsonl` — current-corpus exact duplicates, shared head OIDs, and
-  within-repository near-title matches;
+  connected within-repository exact- or near-title groups;
 - `baseline-report.json` — expected versus observed counts and drift evidence;
 - `manifest.json` — snapshot provenance, conservation counts, pagination
   hashes, state totals, and hashes of every generated output.

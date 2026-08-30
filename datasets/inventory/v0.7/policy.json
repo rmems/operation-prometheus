@@ -26,6 +26,7 @@
       {
         "metric": "active_public_repository_count",
         "reason_code": "baseline_repository_unavailable_after_verified_rename",
+        "countervailing_delta": -1,
         "evidence_refs": [
           "github:repository-database-id:1148448263",
           "github:status:404:rmems/agent-afk",
@@ -37,6 +38,7 @@
       {
         "metric": "closed_unmerged_pr_count",
         "reason_code": "post_baseline_closures_and_versioned_dependency_filter",
+        "countervailing_delta": 1,
         "evidence_refs": [
           "policy:v0.7-eligibility.1:closed-unmerged-excludes-dependency",
           "https://github.com/Limen-Neural/myelin-accelerator/pull/25",
@@ -48,8 +50,20 @@
       {
         "metric": "formally_issue_linked_merged_pr_count",
         "reason_code": "post_baseline_merges_and_mutable_formal_linkage",
+        "countervailing_delta": 1,
         "evidence_refs": [
-          "sha256:f6d1a2947cb04ff3440d82d7a2ce7dea4e5ee39879c5d6b645db6a75679e58e3",
+          "sha256:5542f6a1acb32a68afd4ed67da76c6e391e7372df311697ddf45ac6a2539a1af",
+          "https://github.com/rmems/operation-prometheus/issues/49"
+        ]
+      },
+      {
+        "metric": "merged_non_dependency_pr_count",
+        "reason_code": "post_baseline_merges_offset_by_source_unavailability",
+        "countervailing_delta": -5,
+        "evidence_refs": [
+          "github:status:404:rmems/agent-afk",
+          "sha256:5542f6a1acb32a68afd4ed67da76c6e391e7372df311697ddf45ac6a2539a1af",
+          "https://github.com/rmems/agent-afk",
           "https://github.com/rmems/operation-prometheus/issues/49"
         ]
       }

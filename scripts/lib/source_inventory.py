@@ -106,6 +106,16 @@ def _now_utc() -> str:
     return datetime.now(timezone.utc).isoformat().replace("+00:00", "Z")
 
 
+def _validate_collected_at(value: str) -> str:
+    try:
+        parsed = datetime.fromisoformat(value.replace("Z", "+00:00"))
+    except ValueError as exc:
+        raise ValueError(f"Invalid collected_at timestamp {value!r}") from exc
+    if parsed.tzinfo is None:
+        raise ValueError("collected_at timestamp must include a UTC offset")
+    return value
+
+
 def parse_owner_spec(value: str) -> dict[str, str]:
     """Parse ``user:login`` or ``org:login`` into a normalized owner record."""
     kind, separator, login = value.strip().partition(":")
@@ -166,14 +176,26 @@ def _issue_record(raw: dict[str, Any]) -> dict[str, Any]:
 
 def _sanitize_source_text(value: Any, *, limit: int | None = None) -> tuple[str, list[str]]:
     text = str(value or "")
-    if limit is not None:
+    truncated = limit is not None and len(text) > limit
+    if truncated:
         text = text[:limit]
-    return sanitize_text(text)
+    sanitized, warnings = sanitize_text(text)
+    if truncated:
+        warnings.append(f"source_text_truncated_at_{limit}_characters")
+    return sanitized, sorted(set(warnings))
+
+
+def _pull_request_source_hash(raw: dict[str, Any], record: dict[str, Any]) -> str:
+    """Hash the complete, sanitized record while binding original source text."""
+    payload = {key: value for key, value in record.items() if key != "source_hash"}
+    payload["title"] = str(raw.get("title") or "")
+    payload["body"] = str(raw.get("bodyText") or "")
+    return sha256_json(payload)
 
 
 def _pull_request_record(raw: dict[str, Any], repository: dict[str, Any]) -> dict[str, Any]:
     title, title_warnings = _sanitize_source_text(raw.get("title"), limit=1024)
-    body, body_warnings = _sanitize_source_text(raw.get("bodyText"), limit=16384)
+    body, body_warnings = _sanitize_source_text(raw.get("bodyText"))
     closing = raw.get("closingIssuesReferences") or {}
     label_connection = raw.get("labels") or {}
     label_nodes = label_connection.get("nodes") or []
@@ -232,13 +254,7 @@ def _pull_request_record(raw: dict[str, Any], repository: dict[str, Any]) -> dic
             f"Missing or duplicate linked-issue ID for "
             f"{repository['name_with_owner']}#{raw.get('number')}"
         )
-    selected["source_hash"] = sha256_json(
-        {
-            **selected,
-            "title": str(raw.get("title") or ""),
-            "body": str(raw.get("bodyText") or ""),
-        }
-    )
+    selected["source_hash"] = _pull_request_source_hash(raw, selected)
     return selected
 
 
@@ -256,6 +272,10 @@ def _page_evidence(
     next_cursor: str | None = None,
     total_count: int | None = None,
 ) -> dict[str, Any]:
+    hashable_response = response
+    if isinstance(response, dict) and "rateLimit" in response:
+        hashable_response = dict(response)
+        hashable_response.pop("rateLimit", None)
     return {
         "scope": scope,
         "owner": owner,
@@ -267,7 +287,7 @@ def _page_evidence(
         "total_count": total_count,
         "has_next_page": has_next_page,
         "server_date": headers.get("date"),
-        "response_sha256": sha256_json(response),
+        "response_sha256": sha256_json(hashable_response),
     }
 
 
@@ -277,13 +297,17 @@ def _collect_repositories(
 ) -> tuple[list[dict[str, Any]], list[dict[str, Any]], int]:
     repositories: list[dict[str, Any]] = []
     pages: list[dict[str, Any]] = []
-    private_ignored = 0
+    non_public_ignored = 0
     seen_ids: set[str] = set()
     for owner in owners:
         path = _repository_path(owner)
         next_url: str | None = client._resolve_url(path + "&per_page=100")
         page_index = 0
+        visited_urls: set[str] = set()
         while next_url:
+            if next_url in visited_urls:
+                raise GitHubError(f"Repository pagination URL repeated for {owner['login']}")
+            visited_urls.add(next_url)
             data, headers = client.get_json_with_headers(next_url)
             if not isinstance(data, list):
                 raise GitHubError(f"Expected repository list for {owner['login']}")
@@ -302,8 +326,8 @@ def _collect_repositories(
             for raw in data:
                 if not isinstance(raw, dict):
                     raise GitHubError(f"Non-object repository for {owner['login']}")
-                if raw.get("private") is True or raw.get("visibility") == "private":
-                    private_ignored += 1
+                if raw.get("private") is True or raw.get("visibility") != "public":
+                    non_public_ignored += 1
                     continue
                 repo = _safe_repository(raw, owner)
                 repo_id = str(repo.get("id") or "")
@@ -314,7 +338,7 @@ def _collect_repositories(
             next_url = next_link
             page_index += 1
     repositories.sort(key=lambda row: (str(row["id"]), str(row["name_with_owner"])))
-    return repositories, pages, private_ignored
+    return repositories, pages, non_public_ignored
 
 
 def _collect_additional_closing_issues(
@@ -440,6 +464,7 @@ def _collect_pull_requests(
                     pages,
                     str(repository["id"]),
                 )
+                record["source_hash"] = _pull_request_source_hash(raw, record)
             if len(record["linked_issues"]) != record["linked_issues_total_count"]:
                 raise GitHubError(
                     f"Linked-issue count mismatch for {repository['name_with_owner']}#{record['number']}"
@@ -477,8 +502,9 @@ def collect_source_inventory(
     owner_keys = {(row["kind"], row["login"].casefold()) for row in owners}
     if len(owner_keys) != len(owners):
         raise ValueError("Duplicate owner specification")
+    frozen_collected_at = _validate_collected_at(collected_at) if collected_at else _now_utc()
 
-    repositories, pages, private_ignored = _collect_repositories(client, owners)
+    repositories, pages, non_public_ignored = _collect_repositories(client, owners)
     pull_requests: list[dict[str, Any]] = []
     for repository in repositories:
         repo_prs = _collect_pull_requests(client, repository, pages)
@@ -489,14 +515,14 @@ def collect_source_inventory(
         "schema_version": SNAPSHOT_SCHEMA_VERSION,
         "provider": "github",
         "collector_version": __version__,
-        "collected_at": collected_at or _now_utc(),
+        "collected_at": frozen_collected_at,
         "owners": owners,
         "collection": {
             "complete": True,
             "repository_count": len(repositories),
             "pull_request_count": len(pull_requests),
             "page_count": len(pages),
-            "private_repositories_ignored": private_ignored,
+            "non_public_repositories_ignored": non_public_ignored,
         },
         "pages": pages,
         "repositories": repositories,

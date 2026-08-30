@@ -31,6 +31,20 @@ class GitHubError(RuntimeError):
         self.status = status
 
 
+class _SafeRedirectHandler(urllib.request.HTTPRedirectHandler):
+    """Allow redirects only within the original HTTPS API origin."""
+
+    def redirect_request(self, req, fp, code, msg, headers, newurl):
+        source = urllib.parse.urlsplit(req.full_url)
+        target = urllib.parse.urlsplit(newurl)
+        if target.scheme.casefold() != "https" or target.netloc.casefold() != source.netloc.casefold():
+            raise GitHubError(
+                f"Refusing GitHub API redirect from {source.netloc} to "
+                f"{target.scheme or '(missing)'}://{target.netloc or '(missing)'}"
+            )
+        return super().redirect_request(req, fp, code, msg, headers, newurl)
+
+
 class GitHubClient:
     """Minimal GET-only GitHub REST client with rate-limit awareness."""
 
@@ -48,6 +62,7 @@ class GitHubClient:
         self.max_retries = max_retries
         self.min_remaining = min_remaining
         self._sleep = sleep_fn
+        self._opener = urllib.request.build_opener(_SafeRedirectHandler())
         if not self.token:
             logger.warning(
                 "No GitHub token configured; unauthenticated rate limit is ~60 req/hr"
@@ -97,7 +112,7 @@ class GitHubClient:
             req = urllib.request.Request(url, headers=self._headers(accept), method="GET")
             try:
                 # Scheme already restricted to https:// above (Bandit B310).
-                with urllib.request.urlopen(req, timeout=60) as resp:  # nosec B310
+                with self._opener.open(req, timeout=60) as resp:  # nosec B310
                     body = resp.read()
                     headers = {k.lower(): v for k, v in resp.headers.items()}
                     self._maybe_throttle(headers)
@@ -264,7 +279,7 @@ class GitHubClient:
                 method="POST",
             )
             try:
-                with urllib.request.urlopen(req, timeout=60) as resp:  # nosec B310
+                with self._opener.open(req, timeout=60) as resp:  # nosec B310
                     body = resp.read()
                     response_headers = {k.lower(): v for k, v in resp.headers.items()}
                     self._maybe_throttle(response_headers)
