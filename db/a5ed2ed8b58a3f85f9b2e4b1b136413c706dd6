@@ -1,0 +1,46 @@
+scripts/lib/eligibility.py
+  s_7f419f27da8ebf::t_d29126ffb6335f 428-452,454-464,466-475,481,484-492
+  s_7f419f27da8ebf::t_360740177f5709 137,139-146,269,590,631-632,653-654,752-770,820-823,851-852
+  s_7f419f27da8ebf::t_66fcfc0880f48f 637-642
+tests/test_eligibility_ledger.py
+  s_7f419f27da8ebf::t_241f75ece80b0e 11,259-305,480-490
+  s_7f419f27da8ebf::t_360740177f5709 178
+  s_7f419f27da8ebf::t_c808f2eac9a8d3 239-242,383-457
+docs/eligibility-ledger.md
+  s_7f419f27da8ebf::t_66fcfc0880f48f 53-55,62-63,68-71,91
+  s_7f419f27da8ebf::t_d29126ffb6335f 96-98,129
+datasets/inventory/v0.7/policy.json
+  s_7f419f27da8ebf::t_166601c9fc455d 55,65
+  s_7f419f27da8ebf::t_66fcfc0880f48f 29,41,53,56-64,66
+scripts/lib/source_inventory.py
+  s_7f419f27da8ebf::t_d29126ffb6335f 109-118,275-278,290,505,518
+  s_7f419f27da8ebf::t_360740177f5709 179-180,182-193,198,257,300,306,308-310,329-330,341,467,507,525
+scripts/lib/github_client.py
+  s_7f419f27da8ebf::t_d29126ffb6335f 34-47,65,115,282
+tests/test_source_inventory.py
+  s_7f419f27da8ebf::t_241f75ece80b0e 3-4,9,141-175,203-221,325-332
+  s_7f419f27da8ebf::t_360740177f5709 310
+  s_7f419f27da8ebf::t_c808f2eac9a8d3 11,14,22-28,31-32,43-44,61-90,188-202,222-295,333-364
+  s_7f419f27da8ebf::t_9130f4bf65eb35 13
+schemas/source_inventory.schema.json
+  s_7f419f27da8ebf::t_360740177f5709 44,51
+schemas/eligibility_policy.schema.json
+  s_7f419f27da8ebf::t_d29126ffb6335f 119
+  s_7f419f27da8ebf::t_66fcfc0880f48f 64,68
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.5.2",
+  "base_commit_sha": "dba5ed2ed8b58a3f85f9b2e4b1b136413c706dd6",
+  "prompts": {},
+  "sessions": {
+    "s_7f419f27da8ebf": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a0503b-9695-7f51-9e26-2f3f8ac7006c",
+        "model": "gpt-5.6-sol"
+      },
+      "human_author": "Raul Montoya Cardenas <montoyaraul34@gmail.com>"
+    }
+  }
+}
