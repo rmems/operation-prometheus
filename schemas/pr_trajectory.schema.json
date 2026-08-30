@@ -47,6 +47,7 @@
     "license": {
       "type": "string",
       "minLength": 1,
+      "pattern": "\\S",
       "description": "SPDX license identifier or expression for the originating source repository; use NOASSERTION when it is not available."
     },
     "language": {

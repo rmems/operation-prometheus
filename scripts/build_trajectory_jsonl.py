@@ -26,7 +26,12 @@ _SCRIPTS = Path(__file__).resolve().parent
 if str(_SCRIPTS) not in sys.path:
     sys.path.insert(0, str(_SCRIPTS))
 
-from lib.normalize import load_card, load_raw_record, normalize_record  # noqa: E402
+from lib.normalize import (  # noqa: E402
+    load_card,
+    load_raw_record,
+    normalize_record,
+    resolve_source_license,
+)
 
 logging.basicConfig(level=logging.INFO, format="%(levelname)s: %(message)s")
 logger = logging.getLogger("build_trajectory_jsonl")
@@ -157,18 +162,13 @@ def main(argv: list[str] | None = None) -> int:
             pr = int((raw.get("source") or {}).get("pr_number") or 0)
             if pr_filter is not None and pr not in pr_filter:
                 continue
-            source_license = str(
-                (raw.get("source") or {}).get("license")
-                or card.get("source_license")
-                or card.get("license")
-                or "NOASSERTION"
-            ).strip()
+            source_license = resolve_source_license(raw.get("source") or {}, card)
             traj = normalize_record(
                 raw,
                 card,
                 raw_path=path,
                 max_patch_bytes=args.max_patch_bytes,
-                source_license=source_license or "NOASSERTION",
+                source_license=source_license,
             )
             schema_errors = _validate(traj, validator)
             if schema_errors:

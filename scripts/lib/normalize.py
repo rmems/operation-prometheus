@@ -1341,6 +1341,21 @@ def language_for(
     return "unknown"
 
 
+def resolve_source_license(source: dict[str, Any], card: dict[str, Any]) -> str:
+    """Resolve the originating source repository's SPDX license, or NOASSERTION.
+
+    Only ``source.license`` and the card's explicit ``source_license`` are
+    trusted — a bare ``card["license"]`` is not a reserved provenance field
+    and could mean something unrelated, so it is not used as a fallback.
+    Non-string values are rejected rather than coerced, so a stray dict or
+    number can never silently satisfy the schema as a license value.
+    """
+    for value in (source.get("license"), card.get("source_license")):
+        if isinstance(value, str) and value.strip():
+            return value.strip()
+    return "NOASSERTION"
+
+
 def normalize_record(
     raw: dict[str, Any],
     card: dict[str, Any] | None = None,
@@ -1358,15 +1373,9 @@ def normalize_record(
     owner_repo = repo.replace("/", "-") if "/" in repo else repo
     traj_id = f"{owner_repo}-{pr}"
     if source_license is None:
-        source_license = str(
-            source.get("license")
-            or card.get("source_license")
-            or card.get("license")
-            or "NOASSERTION"
-        ).strip()
+        source_license = resolve_source_license(source, card)
     else:
-        source_license = source_license.strip()
-    source_license = source_license or "NOASSERTION"
+        source_license = source_license.strip() or "NOASSERTION"
 
     linked_issues = enrich_linked_issues(raw, card)
     # Prefer enriched list for context/URLs without mutating caller's raw dict.
