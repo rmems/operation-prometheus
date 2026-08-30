@@ -1,0 +1,125 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "https://github.com/rmems/operation-prometheus/schemas/eligibility_manifest.schema.json",
+  "title": "Operation Prometheus eligibility manifest",
+  "type": "object",
+  "required": [
+    "schema_version",
+    "provider",
+    "snapshot_sha256",
+    "snapshot_collected_at",
+    "collector_version",
+    "policy_version",
+    "counts",
+    "pagination",
+    "baseline_report_complete",
+    "orphan_existing_dataset_candidates",
+    "files"
+  ],
+  "properties": {
+    "schema_version": { "const": "eligibility_manifest_v1" },
+    "provider": { "const": "github" },
+    "snapshot_sha256": { "$ref": "#/definitions/sha256" },
+    "snapshot_collected_at": { "type": "string", "format": "date-time" },
+    "collector_version": { "type": "string", "minLength": 1 },
+    "policy_version": { "type": "string", "minLength": 1 },
+    "counts": {
+      "type": "object",
+      "required": [
+        "public_repository_count",
+        "active_public_repository_count",
+        "merged_non_dependency_pr_count",
+        "formally_issue_linked_merged_pr_count",
+        "closed_unmerged_pr_count",
+        "existing_prometheus_row_count",
+        "existing_unique_pr_count",
+        "exact_current_duplicate_candidate_count",
+        "repository_record_count",
+        "candidate_record_count",
+        "duplicate_group_count",
+        "state_counts"
+      ],
+      "properties": {
+        "public_repository_count": { "$ref": "#/definitions/count" },
+        "active_public_repository_count": { "$ref": "#/definitions/count" },
+        "merged_non_dependency_pr_count": { "$ref": "#/definitions/count" },
+        "formally_issue_linked_merged_pr_count": { "$ref": "#/definitions/count" },
+        "closed_unmerged_pr_count": { "$ref": "#/definitions/count" },
+        "existing_prometheus_row_count": { "$ref": "#/definitions/count" },
+        "existing_unique_pr_count": { "$ref": "#/definitions/count" },
+        "exact_current_duplicate_candidate_count": { "$ref": "#/definitions/count" },
+        "repository_record_count": { "$ref": "#/definitions/count" },
+        "candidate_record_count": { "$ref": "#/definitions/count" },
+        "duplicate_group_count": { "$ref": "#/definitions/count" },
+        "state_counts": {
+          "type": "object",
+          "required": [
+            "included_positive",
+            "included_negative",
+            "quarantined",
+            "excluded",
+            "watchlist_open"
+          ],
+          "properties": {
+            "included_positive": { "$ref": "#/definitions/count" },
+            "included_negative": { "$ref": "#/definitions/count" },
+            "quarantined": { "$ref": "#/definitions/count" },
+            "excluded": { "$ref": "#/definitions/count" },
+            "watchlist_open": { "$ref": "#/definitions/count" }
+          },
+          "additionalProperties": false
+        }
+      },
+      "additionalProperties": false
+    },
+    "pagination": {
+      "type": "object",
+      "required": ["page_count", "page_hashes", "complete"],
+      "properties": {
+        "page_count": { "$ref": "#/definitions/count" },
+        "page_hashes": {
+          "type": "array",
+          "items": { "$ref": "#/definitions/sha256" }
+        },
+        "complete": { "const": true }
+      },
+      "additionalProperties": false
+    },
+    "baseline_report_complete": { "type": "boolean" },
+    "orphan_existing_dataset_candidates": {
+      "type": "array",
+      "uniqueItems": true,
+      "items": { "type": "string", "minLength": 1 }
+    },
+    "files": {
+      "type": "object",
+      "required": [
+        "repositories.jsonl",
+        "candidates.jsonl",
+        "duplicates.jsonl",
+        "baseline-report.json"
+      ],
+      "properties": {
+        "repositories.jsonl": { "$ref": "#/definitions/file" },
+        "candidates.jsonl": { "$ref": "#/definitions/file" },
+        "duplicates.jsonl": { "$ref": "#/definitions/file" },
+        "baseline-report.json": { "$ref": "#/definitions/file" }
+      },
+      "additionalProperties": false
+    }
+  },
+  "additionalProperties": false,
+  "definitions": {
+    "count": { "type": "integer", "minimum": 0 },
+    "sha256": { "type": "string", "pattern": "^[a-f0-9]{64}$" },
+    "file": {
+      "type": "object",
+      "required": ["bytes", "sha256"],
+      "properties": {
+        "bytes": { "type": "integer", "minimum": 0 },
+        "sha256": { "$ref": "#/definitions/sha256" }
+      },
+      "additionalProperties": false
+    }
+  }
+}

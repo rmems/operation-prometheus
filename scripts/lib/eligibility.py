@@ -68,6 +68,9 @@ _SUPERSEDE_REF = re.compile(
     r"\bsupersed(?:e|es|ed|ing)\b[^\n]{0,160}?" + _PR_REF_PATTERN,
     re.IGNORECASE,
 )
+_ISSUE_SCOPED_BARE_REF = re.compile(
+    r"(?i)\b(?:issues?|bugs?|tickets?|close[sd]?|fix(?:e[sd])?|resolve[sd]?)\s*:?[ \t]*#\d+\b"
+)
 _TOKEN_RE = re.compile(r"[a-z0-9]+")
 _STOP_TOKENS = {
     "a",
@@ -234,12 +237,15 @@ def assess_quality(pr: dict[str, Any], repository: dict[str, Any]) -> dict[str, 
 
 def infer_task_family(pr: dict[str, Any], policy: dict[str, Any]) -> tuple[str, list[str]]:
     title = str(pr.get("title") or "").strip()
-    author = str((pr.get("author") or {}).get("login") or "").casefold()
+    author_record = pr.get("author") or {}
+    author = str(author_record.get("login") or "").casefold()
+    author_type = str(author_record.get("type") or "").casefold()
     dependency_authors = {
         str(item).casefold() for item in (policy.get("dependency_authors") or [])
     }
-    if author in dependency_authors or any(
-        marker in author for marker in ("dependabot", "renovate", "snyk-bot")
+    if author in dependency_authors or (
+        author_type == "bot"
+        and any(marker in author for marker in ("dependabot", "renovate", "snyk-bot"))
     ):
         return "dependency", ["dependency_automation_author"]
     for pattern, family in _TASK_PATTERNS:
@@ -314,6 +320,8 @@ def _lineage(
         found: list[dict[str, str]] = []
         seen: set[str] = set()
         for match in pattern.finditer(text):
+            if match.group("repo") is None and _ISSUE_SCOPED_BARE_REF.search(match.group(0)):
+                continue
             number = int(match.group("number"))
             referenced_repo = str(match.group("repo") or repo_name).casefold()
             target = by_repo_number.get((referenced_repo, number))
@@ -370,6 +378,11 @@ def _title_tokens(title: str) -> set[str]:
     }
 
 
+def _normalized_exact_title(title: str) -> str:
+    """Normalize only casing and whitespace for exact-title assertions."""
+    return " ".join(title.split()).casefold()
+
+
 def _duplicate_records(
     candidates: list[dict[str, Any]],
     existing_rows: list[dict[str, Any]],
@@ -403,14 +416,22 @@ def _duplicate_records(
             }
         )
 
-    by_head: dict[str, list[str]] = defaultdict(list)
+    by_head: dict[str, list[dict[str, Any]]] = defaultdict(list)
     for candidate in candidates:
         head_oid = str(candidate.get("head_oid") or "")
         if head_oid:
-            by_head[head_oid].append(candidate["candidate_id"])
-    for head_oid, ids in sorted(by_head.items()):
-        if len(ids) < 2:
+            by_head[head_oid].append(candidate)
+    for head_oid, rows in sorted(by_head.items()):
+        if len(rows) < 2:
             continue
+        ids = sorted(str(row["candidate_id"]) for row in rows)
+        base_oids = sorted(
+            {str(row.get("base_oid")) for row in rows if str(row.get("base_oid") or "")}
+        )
+        missing_base_candidate_ids = sorted(
+            str(row["candidate_id"]) for row in rows if not str(row.get("base_oid") or "")
+        )
+        exact = len(base_oids) == 1 and not missing_base_candidate_ids
         group_id = "duplicate:" + hashlib.sha256(head_oid.encode()).hexdigest()[:20]
         duplicates.append(
             {
@@ -419,9 +440,15 @@ def _duplicate_records(
                 "kind": "shared_head_oid",
                 "candidate_ids": sorted(ids),
                 "source_candidate": None,
-                "exact": True,
-                "similarity": 1.0,
-                "evidence": [{"head_oid": head_oid}],
+                "exact": exact,
+                "similarity": 1.0 if exact else None,
+                "evidence": [
+                    {
+                        "head_oid": head_oid,
+                        "base_oids": base_oids,
+                        "missing_base_candidate_ids": missing_base_candidate_ids,
+                    }
+                ],
             }
         )
 
@@ -436,6 +463,11 @@ def _duplicate_records(
         adjacency: dict[str, set[str]] = defaultdict(set)
         edge_similarity: dict[tuple[str, str], float] = {}
         tokens_by_id = {candidate_id: tokens for candidate_id, tokens in entries}
+        exact_titles_by_id = {
+            row["candidate_id"]: _normalized_exact_title(str(row.get("title") or ""))
+            for row in candidates
+            if row["candidate_id"] in tokens_by_id
+        }
         for index, (left_id, left_tokens) in enumerate(entries):
             for right_id, right_tokens in entries[index + 1 :]:
                 union = left_tokens | right_tokens
@@ -471,7 +503,7 @@ def _duplicate_records(
                 for pair, similarity in sorted(edge_similarity.items())
                 if pair[0] in component and pair[1] in component
             ]
-            exact_title = len({tuple(sorted(tokens_by_id[candidate_id])) for candidate_id in ids}) == 1
+            exact_title = len({exact_titles_by_id[candidate_id] for candidate_id in ids}) == 1
             similarity = min(edge["similarity"] for edge in qualifying_edges)
             group_id = "duplicate:" + hashlib.sha256(canonical_json_bytes(ids)).hexdigest()[:20]
             duplicates.append(
@@ -485,7 +517,8 @@ def _duplicate_records(
                     "similarity": similarity,
                     "evidence": [
                         {
-                            "method": "title_token_jaccard_connected_components",
+                            "method": "normalized_title_equality_or_token_jaccard_components",
+                            "exact_normalization": "unicode_casefold_and_whitespace",
                             "threshold": near_threshold,
                             "qualifying_edges": qualifying_edges,
                         }
@@ -615,11 +648,14 @@ def build_baseline_report(
     cutoff = _parse_time(baseline.get("queried_at"))
     if cutoff is None:
         raise ValueError("Policy baseline.queried_at must be a valid timestamp")
-    manual = {
-        str(item.get("metric")): item
-        for item in (baseline.get("drift_explanations") or [])
-        if isinstance(item, dict) and item.get("metric")
-    }
+    manual: dict[str, dict[str, Any]] = {}
+    for item in baseline.get("drift_explanations") or []:
+        if not isinstance(item, dict) or not item.get("metric"):
+            continue
+        metric = str(item["metric"])
+        if metric in manual:
+            raise ValueError(f"Duplicate baseline drift explanation metric {metric}")
+        manual[metric] = item
     comparisons: list[dict[str, Any]] = []
     for metric, expected_value in expected.items():
         if metric not in actual:
@@ -667,7 +703,7 @@ def build_baseline_report(
 
 
 def _repository_row(raw: dict[str, Any]) -> dict[str, Any]:
-    return {
+    row = {
         "schema_version": REPOSITORY_SCHEMA_VERSION,
         "provider": "github",
         "repository_id": raw.get("id"),
@@ -688,8 +724,10 @@ def _repository_row(raw: dict[str, Any]) -> dict[str, Any]:
         "license": raw.get("license") or {},
         "pull_request_total_count": int(raw.get("pull_request_total_count") or 0),
         "aliases": [],
-        "source_hash": raw.get("source_hash"),
     }
+    source_payload = {key: value for key, value in raw.items() if key != "source_hash"}
+    row["source_hash"] = sha256_json(source_payload)
+    return row
 
 
 def _apply_repository_aliases(

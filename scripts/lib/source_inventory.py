@@ -159,6 +159,10 @@ def _safe_repository(raw: dict[str, Any], owner: dict[str, str]) -> dict[str, An
     return selected
 
 
+def _repository_source_hash(record: dict[str, Any]) -> str:
+    return sha256_json({key: value for key, value in record.items() if key != "source_hash"})
+
+
 def _issue_record(raw: dict[str, Any]) -> dict[str, Any]:
     repo = raw.get("repository") or {}
     selected = {
@@ -469,6 +473,14 @@ def _collect_pull_requests(
                 raise GitHubError(
                     f"Linked-issue count mismatch for {repository['name_with_owner']}#{record['number']}"
                 )
+            linked_issue_ids = [str(item.get("id") or "") for item in record["linked_issues"]]
+            if any(not issue_id for issue_id in linked_issue_ids) or len(
+                set(linked_issue_ids)
+            ) != len(linked_issue_ids):
+                raise GitHubError(
+                    f"Missing or duplicate linked-issue ID for "
+                    f"{repository['name_with_owner']}#{record['number']}"
+                )
             pull_requests.append(record)
         if not has_next:
             break
@@ -509,6 +521,7 @@ def collect_source_inventory(
     for repository in repositories:
         repo_prs = _collect_pull_requests(client, repository, pages)
         repository["pull_request_total_count"] = len(repo_prs)
+        repository["source_hash"] = _repository_source_hash(repository)
         pull_requests.extend(repo_prs)
 
     snapshot = {

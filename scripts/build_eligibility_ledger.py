@@ -25,6 +25,10 @@ DEFAULT_OUT = ROOT / "datasets" / "inventory" / "v0.7"
 SOURCE_SCHEMA = ROOT / "schemas" / "source_inventory.schema.json"
 POLICY_SCHEMA = ROOT / "schemas" / "eligibility_policy.schema.json"
 LEDGER_SCHEMA = ROOT / "schemas" / "eligibility_ledger.schema.json"
+REPOSITORY_SCHEMA = ROOT / "schemas" / "source_repository.schema.json"
+DUPLICATE_SCHEMA = ROOT / "schemas" / "duplicate_group.schema.json"
+BASELINE_REPORT_SCHEMA = ROOT / "schemas" / "eligibility_baseline_report.schema.json"
+MANIFEST_SCHEMA = ROOT / "schemas" / "eligibility_manifest.schema.json"
 
 
 def build_parser() -> argparse.ArgumentParser:
@@ -99,12 +103,24 @@ def _validate_inputs(snapshot: dict, policy: dict) -> None:
     _raise_validation_errors(errors)
 
 
-def _validate_candidates(artifacts: dict) -> None:
-    ledger_validator = _validator(LEDGER_SCHEMA)
+def _validate_artifacts(artifacts: dict, rendered: dict[str, bytes]) -> None:
     errors: list[tuple[str, object]] = []
-    for index, candidate in enumerate(artifacts["candidates"]):
-        for error in ledger_validator.iter_errors(candidate):
-            errors.append((f"candidate[{index}]", error))
+    for name, rows, schema_path in (
+        ("repository", artifacts["repositories"], REPOSITORY_SCHEMA),
+        ("candidate", artifacts["candidates"], LEDGER_SCHEMA),
+        ("duplicate", artifacts["duplicates"], DUPLICATE_SCHEMA),
+    ):
+        validator = _validator(schema_path)
+        for index, row in enumerate(rows):
+            for error in validator.iter_errors(row):
+                errors.append((f"{name}[{index}]", error))
+    for name, value, schema_path in (
+        ("baseline_report", artifacts["baseline_report"], BASELINE_REPORT_SCHEMA),
+        ("manifest", json.loads(rendered["manifest.json"]), MANIFEST_SCHEMA),
+    ):
+        validator = _validator(schema_path)
+        for error in validator.iter_errors(value):
+            errors.append((name, error))
     errors.sort(key=lambda item: (item[0], [str(part) for part in item[1].absolute_path]))
     _raise_validation_errors(errors)
 
@@ -142,8 +158,8 @@ def main(argv: list[str] | None = None) -> int:
         policy = _load_json(args.policy.resolve())
         _validate_inputs(snapshot, policy)
         artifacts = build_eligibility_artifacts(snapshot, policy, args.repo_root.resolve())
-        _validate_candidates(artifacts)
         rendered = render_artifacts(artifacts)
+        _validate_artifacts(artifacts, rendered)
         if args.check_determinism:
             second = render_artifacts(
                 build_eligibility_artifacts(snapshot, policy, args.repo_root.resolve())

@@ -5,13 +5,14 @@ from pathlib import Path
 
 import pytest
 
-from build_eligibility_ledger import _validate_inputs
+from build_eligibility_ledger import _validate_artifacts, _validate_inputs
 from lib.eligibility import (
     QUALITY_DIMENSIONS,
     _duplicate_records,
     _lineage,
     _load_existing_rows,
     build_eligibility_artifacts,
+    infer_task_family,
     render_artifacts,
 )
 from lib.source_inventory import sha256_json
@@ -262,30 +263,35 @@ def test_duplicate_detection_groups_connected_titles_and_exact_titles():
             "candidate_id": "a",
             "repository_name_with_owner": "rmems/repo",
             "title": "alpha beta gamma delta",
+            "base_oid": "base-shared",
             "head_oid": "shared-head",
         },
         {
             "candidate_id": "b",
             "repository_name_with_owner": "rmems/repo",
             "title": "alpha beta gamma epsilon",
+            "base_oid": "base-shared",
             "head_oid": "shared-head",
         },
         {
             "candidate_id": "c",
             "repository_name_with_owner": "rmems/repo",
             "title": "alpha beta epsilon zeta",
+            "base_oid": "base-c",
             "head_oid": "unique-head",
         },
         {
             "candidate_id": "d",
             "repository_name_with_owner": "rmems/other",
             "title": "identical title tokens here",
+            "base_oid": "base-d",
             "head_oid": "head-d",
         },
         {
             "candidate_id": "e",
             "repository_name_with_owner": "rmems/other",
             "title": "identical title tokens here",
+            "base_oid": "base-e",
             "head_oid": "head-e",
         },
     ]
@@ -301,6 +307,33 @@ def test_duplicate_detection_groups_connected_titles_and_exact_titles():
     assert connected["similarity"] == 0.6
     assert exact_title["candidate_ids"] == ["d", "e"]
     assert exact_title["exact"] is True
+
+
+def test_duplicate_exactness_preserves_base_state_and_literal_title_differences():
+    candidates = [
+        {
+            "candidate_id": "a",
+            "repository_name_with_owner": "rmems/repo",
+            "title": "build(deps): bump Ruff from 0.15.13 to 0.16.0",
+            "base_oid": "base-a",
+            "head_oid": "shared-head",
+        },
+        {
+            "candidate_id": "b",
+            "repository_name_with_owner": "rmems/repo",
+            "title": "build(deps): bump Ruff from 0.16.2 to 0.16.4",
+            "base_oid": "base-b",
+            "head_oid": "shared-head",
+        },
+    ]
+    groups = _duplicate_records(candidates, [], {}, near_threshold=0.9)
+    shared_head = next(group for group in groups if group["kind"] == "shared_head_oid")
+    title_group = next(group for group in groups if group["kind"] == "near_title_match")
+    assert shared_head["exact"] is False
+    assert shared_head["similarity"] is None
+    assert shared_head["evidence"][0]["base_oids"] == ["base-a", "base-b"]
+    assert title_group["exact"] is False
+    assert title_group["similarity"] == 1.0
 
 
 def test_repeated_build_is_byte_identical(tmp_path):
@@ -333,6 +366,47 @@ def test_lineage_resolves_same_repo_and_qualified_cross_repo_references():
     ]
 
 
+@pytest.mark.parametrize(
+    "body",
+    [
+        "Reverts the behavior described in issue #4.",
+        "This reverts the change; fixes #4.",
+        "Supersedes issue #4 after validation.",
+    ],
+)
+def test_lineage_does_not_treat_issue_scoped_bare_references_as_pull_requests(body):
+    lineage = _lineage(
+        {
+            "title": "fix: preserve lineage",
+            "body": body,
+            "repository_name_with_owner": "rmems/repo-a",
+            "source_hash": "a" * 64,
+        },
+        {("rmems/repo-a", 4): "same-repo-candidate"},
+    )
+    assert lineage["reverts"] == []
+    assert lineage["supersedes"] == []
+
+
+def test_explicit_dependency_author_list_is_retained_but_markers_require_bot_type():
+    policy = {"dependency_authors": ["explicit-human"]}
+    human_marker = {
+        "title": "feat: add user-facing behavior",
+        "author": {"login": "human-dependabot-maintainer", "type": "User"},
+    }
+    explicit = {
+        "title": "feat: add user-facing behavior",
+        "author": {"login": "explicit-human", "type": "User"},
+    }
+    bot_marker = {
+        "title": "feat: add user-facing behavior",
+        "author": {"login": "renovate-helper", "type": "Bot"},
+    }
+    assert infer_task_family(human_marker, policy)[0] == "feature"
+    assert infer_task_family(explicit, policy)[0] == "dependency"
+    assert infer_task_family(bot_marker, policy)[0] == "dependency"
+
+
 def test_snapshot_hash_and_per_repository_counts_fail_closed(tmp_path):
     snapshot = _snapshot()
     snapshot["pull_requests"][0]["title"] = "tampered after freeze"
@@ -354,6 +428,37 @@ def test_policy_schema_requires_the_complete_audit_baseline():
     del policy["baseline"]["expected_counts"]["closed_unmerged_pr_count"]
     with pytest.raises(ValueError, match="closed_unmerged_pr_count"):
         _validate_inputs(_snapshot(), policy)
+
+
+def test_duplicate_baseline_explanation_metrics_fail_closed(tmp_path):
+    policy = _policy()
+    policy["baseline"]["drift_explanations"] = [
+        {
+            "metric": "active_public_repository_count",
+            "reason_code": "first",
+            "countervailing_delta": 0,
+            "evidence_refs": ["evidence:first"],
+        },
+        {
+            "metric": "active_public_repository_count",
+            "reason_code": "second",
+            "countervailing_delta": 1,
+            "evidence_refs": ["evidence:second"],
+        },
+    ]
+    _validate_inputs(_snapshot(), policy)
+    with pytest.raises(ValueError, match="Duplicate baseline drift explanation metric"):
+        build_eligibility_artifacts(_snapshot(), policy, _repo_root(tmp_path))
+
+
+def test_every_generated_artifact_is_schema_validated(tmp_path):
+    artifacts = build_eligibility_artifacts(_snapshot(), _policy(), _repo_root(tmp_path))
+    rendered = render_artifacts(artifacts)
+    _validate_artifacts(artifacts, rendered)
+
+    artifacts["repositories"][0].pop("repository_id")
+    with pytest.raises(ValueError, match=r"repository\[0\].*repository_id"):
+        _validate_artifacts(artifacts, render_artifacts(artifacts))
 
 
 def test_repository_alias_preserves_existing_rows_across_transfer(tmp_path):

@@ -13,6 +13,7 @@ from lib.source_inventory import (
     _page_evidence,
     _pull_request_source_hash,
     _pull_request_record,
+    _repository_source_hash,
     collect_source_inventory,
     parse_owner_spec,
 )
@@ -296,6 +297,29 @@ class ClosingIssuePaginationClient(FakeInventoryClient):
         )
 
 
+class DuplicateClosingIssuePaginationClient(ClosingIssuePaginationClient):
+    def query_graphql(self, query: str, variables: dict[str, Any] | None = None):
+        if query != CLOSING_ISSUES_QUERY:
+            return super().query_graphql(query, variables)
+        return (
+            {
+                "node": {
+                    "closingIssuesReferences": {
+                        "totalCount": 2,
+                        "pageInfo": {"hasNextPage": False, "endCursor": "issue-cursor-2"},
+                        "nodes": [self._issue(1)],
+                    }
+                },
+                "rateLimit": {
+                    "cost": 1,
+                    "remaining": 999,
+                    "resetAt": "2026-08-30T13:00:00Z",
+                },
+            },
+            {"date": "Sun, 30 Aug 2026 12:00:00 GMT"},
+        )
+
+
 def test_collect_source_inventory_keeps_zero_pr_and_archived_repositories():
     snapshot = collect_source_inventory(
         FakeInventoryClient(),
@@ -312,7 +336,20 @@ def test_collect_source_inventory_keeps_zero_pr_and_archived_repositories():
     assert len(snapshot["repositories"]) == 2
     assert {row["archived"] for row in snapshot["repositories"]} == {False, True}
     assert all(row["pull_request_total_count"] == 0 for row in snapshot["repositories"])
+    assert all(
+        row["source_hash"] == _repository_source_hash(row) for row in snapshot["repositories"]
+    )
     assert len(snapshot["snapshot_sha256"]) == 64
+
+
+def test_repository_source_hash_changes_with_exhaustive_pull_request_count():
+    row = collect_source_inventory(
+        FakeInventoryClient(),
+        ["user:rmems"],
+        collected_at="2026-08-30T12:00:00Z",
+    )["repositories"][0]
+    changed = {**row, "pull_request_total_count": row["pull_request_total_count"] + 1}
+    assert _repository_source_hash(changed) != row["source_hash"]
 
 
 def test_collect_source_inventory_rejects_stalled_cursor():
@@ -362,3 +399,12 @@ def test_closing_issue_pagination_recomputes_pull_request_source_hash():
     record = snapshot["pull_requests"][0]
     assert len(record["linked_issues"]) == 2
     assert record["source_hash"] == _pull_request_source_hash(client.pull_raw, record)
+
+
+def test_closing_issue_pagination_rejects_duplicate_immutable_issue_ids():
+    with pytest.raises(GitHubError, match="duplicate linked-issue ID"):
+        collect_source_inventory(
+            DuplicateClosingIssuePaginationClient(),
+            ["user:rmems"],
+            collected_at="2026-08-30T12:00:00Z",
+        )

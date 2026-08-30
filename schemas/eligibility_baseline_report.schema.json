@@ -1,0 +1,111 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "https://github.com/rmems/operation-prometheus/schemas/eligibility_baseline_report.schema.json",
+  "title": "Operation Prometheus eligibility baseline report",
+  "type": "object",
+  "required": [
+    "schema_version",
+    "baseline_queried_at",
+    "snapshot_collected_at",
+    "comparisons",
+    "complete",
+    "orphan_existing_dataset_candidates"
+  ],
+  "properties": {
+    "schema_version": { "const": "eligibility_baseline_report_v1" },
+    "baseline_queried_at": { "type": "string", "format": "date-time" },
+    "snapshot_collected_at": { "type": "string", "format": "date-time" },
+    "comparisons": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": [
+          "metric",
+          "expected",
+          "actual",
+          "delta",
+          "post_cutoff_event_count",
+          "countervailing_delta",
+          "explained",
+          "explanation",
+          "evidence"
+        ],
+        "properties": {
+          "metric": { "$ref": "#/definitions/baseline_metric" },
+          "expected": { "type": "integer", "minimum": 0 },
+          "actual": { "type": "integer", "minimum": 0 },
+          "delta": { "type": "integer" },
+          "post_cutoff_event_count": { "type": "integer", "minimum": 0 },
+          "countervailing_delta": { "type": "integer" },
+          "explained": { "type": "boolean" },
+          "explanation": { "type": "string", "minLength": 1 },
+          "evidence": {
+            "type": "array",
+            "items": {
+              "oneOf": [
+                { "$ref": "#/definitions/evidence_ref" },
+                { "$ref": "#/definitions/merged_candidate_event" },
+                { "$ref": "#/definitions/closed_candidate_event" },
+                { "$ref": "#/definitions/repository_event" }
+              ]
+            }
+          }
+        },
+        "additionalProperties": false
+      }
+    },
+    "complete": { "type": "boolean" },
+    "orphan_existing_dataset_candidates": {
+      "type": "array",
+      "uniqueItems": true,
+      "items": { "type": "string", "minLength": 1 }
+    }
+  },
+  "additionalProperties": false,
+  "definitions": {
+    "baseline_metric": {
+      "enum": [
+        "active_public_repository_count",
+        "merged_non_dependency_pr_count",
+        "formally_issue_linked_merged_pr_count",
+        "closed_unmerged_pr_count",
+        "existing_prometheus_row_count",
+        "existing_unique_pr_count",
+        "exact_current_duplicate_candidate_count"
+      ]
+    },
+    "evidence_ref": {
+      "type": "object",
+      "required": ["evidence_ref"],
+      "properties": { "evidence_ref": { "type": "string", "minLength": 1 } },
+      "additionalProperties": false
+    },
+    "merged_candidate_event": {
+      "type": "object",
+      "required": ["candidate_id", "merged_at"],
+      "properties": {
+        "candidate_id": { "type": "string", "minLength": 1 },
+        "merged_at": { "type": "string", "format": "date-time" }
+      },
+      "additionalProperties": false
+    },
+    "closed_candidate_event": {
+      "type": "object",
+      "required": ["candidate_id", "closed_at"],
+      "properties": {
+        "candidate_id": { "type": "string", "minLength": 1 },
+        "closed_at": { "type": "string", "format": "date-time" }
+      },
+      "additionalProperties": false
+    },
+    "repository_event": {
+      "type": "object",
+      "required": ["repository_id", "created_at"],
+      "properties": {
+        "repository_id": { "type": "string", "minLength": 1 },
+        "created_at": { "type": "string", "format": "date-time" }
+      },
+      "additionalProperties": false
+    }
+  }
+}
