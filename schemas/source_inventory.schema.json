@@ -1,0 +1,250 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "https://github.com/rmems/operation-prometheus/schemas/source_inventory.schema.json",
+  "title": "Frozen GitHub source inventory",
+  "type": "object",
+  "required": [
+    "schema_version",
+    "provider",
+    "collector_version",
+    "collected_at",
+    "owners",
+    "collection",
+    "pages",
+    "repositories",
+    "pull_requests",
+    "snapshot_sha256"
+  ],
+  "properties": {
+    "schema_version": { "const": "source_inventory_v1" },
+    "provider": { "const": "github" },
+    "collector_version": { "type": "string", "minLength": 1 },
+    "collected_at": { "type": "string", "format": "date-time" },
+    "snapshot_sha256": { "$ref": "#/definitions/sha256" },
+    "owners": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "type": "object",
+        "required": ["kind", "login"],
+        "properties": {
+          "kind": { "enum": ["user", "org"] },
+          "login": { "type": "string", "minLength": 1 }
+        },
+        "additionalProperties": false
+      }
+    },
+    "collection": {
+      "type": "object",
+      "required": [
+        "complete",
+        "repository_count",
+        "pull_request_count",
+        "page_count",
+        "private_repositories_ignored"
+      ],
+      "properties": {
+        "complete": { "const": true },
+        "repository_count": { "type": "integer", "minimum": 0 },
+        "pull_request_count": { "type": "integer", "minimum": 0 },
+        "page_count": { "type": "integer", "minimum": 0 },
+        "private_repositories_ignored": { "type": "integer", "minimum": 0 }
+      },
+      "additionalProperties": false
+    },
+    "pages": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": [
+          "scope",
+          "page_index",
+          "item_count",
+          "has_next_page",
+          "response_sha256"
+        ],
+        "properties": {
+          "scope": { "enum": ["repositories", "pull_requests", "closing_issues"] },
+          "owner": { "type": ["string", "null"] },
+          "repository_id": { "type": ["string", "null"] },
+          "page_index": { "type": "integer", "minimum": 0 },
+          "cursor": { "type": ["string", "null"] },
+          "next_cursor": { "type": ["string", "null"] },
+          "item_count": { "type": "integer", "minimum": 0 },
+          "total_count": { "type": ["integer", "null"], "minimum": 0 },
+          "has_next_page": { "type": "boolean" },
+          "server_date": { "type": ["string", "null"] },
+          "response_sha256": { "$ref": "#/definitions/sha256" }
+        },
+        "additionalProperties": false
+      }
+    },
+    "repositories": {
+      "type": "array",
+      "items": { "$ref": "#/definitions/repository" }
+    },
+    "pull_requests": {
+      "type": "array",
+      "items": { "$ref": "#/definitions/pull_request" }
+    }
+  },
+  "additionalProperties": false,
+  "definitions": {
+    "sha256": {
+      "type": "string",
+      "pattern": "^[a-f0-9]{64}$"
+    },
+    "nullable_string": {
+      "type": ["string", "null"]
+    },
+    "issue": {
+      "type": "object",
+      "required": [
+        "id",
+        "database_id",
+        "number",
+        "url",
+        "repository_id",
+        "repository_database_id",
+        "repository_name_with_owner",
+        "source_hash"
+      ],
+      "properties": {
+        "id": { "type": "string", "minLength": 1 },
+        "database_id": { "type": ["integer", "null"] },
+        "number": { "type": "integer", "minimum": 1 },
+        "url": { "type": ["string", "null"], "format": "uri" },
+        "repository_id": { "type": "string", "minLength": 1 },
+        "repository_database_id": { "type": ["integer", "null"] },
+        "repository_name_with_owner": { "type": "string", "minLength": 3 },
+        "source_hash": { "$ref": "#/definitions/sha256" }
+      },
+      "additionalProperties": false
+    },
+    "repository": {
+      "type": "object",
+      "required": [
+        "id",
+        "database_id",
+        "name_with_owner",
+        "owner_login",
+        "owner_kind",
+        "name",
+        "url",
+        "visibility",
+        "archived",
+        "disabled",
+        "fork",
+        "default_branch",
+        "created_at",
+        "updated_at",
+        "pushed_at",
+        "license",
+        "pull_request_total_count",
+        "source_hash"
+      ],
+      "properties": {
+        "id": { "type": "string", "minLength": 1 },
+        "database_id": { "type": ["integer", "null"] },
+        "name_with_owner": { "type": "string", "minLength": 3 },
+        "owner_login": { "type": "string", "minLength": 1 },
+        "owner_kind": { "enum": ["user", "org"] },
+        "name": { "type": "string", "minLength": 1 },
+        "url": { "type": ["string", "null"], "format": "uri" },
+        "visibility": { "const": "public" },
+        "archived": { "type": "boolean" },
+        "disabled": { "type": "boolean" },
+        "fork": { "type": "boolean" },
+        "default_branch": { "$ref": "#/definitions/nullable_string" },
+        "created_at": { "type": ["string", "null"], "format": "date-time" },
+        "updated_at": { "type": ["string", "null"], "format": "date-time" },
+        "pushed_at": { "type": ["string", "null"], "format": "date-time" },
+        "license": {
+          "type": "object",
+          "required": ["spdx_id", "name", "url"],
+          "properties": {
+            "spdx_id": { "$ref": "#/definitions/nullable_string" },
+            "name": { "$ref": "#/definitions/nullable_string" },
+            "url": { "$ref": "#/definitions/nullable_string" }
+          },
+          "additionalProperties": false
+        },
+        "pull_request_total_count": { "type": "integer", "minimum": 0 },
+        "source_hash": { "$ref": "#/definitions/sha256" }
+      },
+      "additionalProperties": false
+    },
+    "pull_request": {
+      "type": "object",
+      "required": [
+        "id",
+        "database_id",
+        "repository_id",
+        "repository_database_id",
+        "repository_name_with_owner",
+        "number",
+        "url",
+        "state",
+        "draft",
+        "title",
+        "body",
+        "body_sha256",
+        "created_at",
+        "updated_at",
+        "closed_at",
+        "merged_at",
+        "base_oid",
+        "head_oid",
+        "merge_commit_oid",
+        "additions",
+        "deletions",
+        "changed_files",
+        "author",
+        "labels",
+        "linked_issues",
+        "linked_issues_total_count",
+        "collection_warnings",
+        "source_hash"
+      ],
+      "properties": {
+        "id": { "type": "string", "minLength": 1 },
+        "database_id": { "type": ["integer", "null"] },
+        "repository_id": { "type": "string", "minLength": 1 },
+        "repository_database_id": { "type": ["integer", "null"] },
+        "repository_name_with_owner": { "type": "string", "minLength": 3 },
+        "number": { "type": "integer", "minimum": 1 },
+        "url": { "type": ["string", "null"], "format": "uri" },
+        "state": { "enum": ["open", "closed", "merged"] },
+        "draft": { "type": "boolean" },
+        "title": { "type": "string" },
+        "body": { "type": "string" },
+        "body_sha256": { "$ref": "#/definitions/sha256" },
+        "created_at": { "type": ["string", "null"], "format": "date-time" },
+        "updated_at": { "type": ["string", "null"], "format": "date-time" },
+        "closed_at": { "type": ["string", "null"], "format": "date-time" },
+        "merged_at": { "type": ["string", "null"], "format": "date-time" },
+        "base_oid": { "$ref": "#/definitions/nullable_string" },
+        "head_oid": { "$ref": "#/definitions/nullable_string" },
+        "merge_commit_oid": { "$ref": "#/definitions/nullable_string" },
+        "additions": { "type": ["integer", "null"], "minimum": 0 },
+        "deletions": { "type": ["integer", "null"], "minimum": 0 },
+        "changed_files": { "type": ["integer", "null"], "minimum": 0 },
+        "author": {
+          "type": "object",
+          "required": ["login", "type"],
+          "properties": {
+            "login": { "$ref": "#/definitions/nullable_string" },
+            "type": { "$ref": "#/definitions/nullable_string" }
+          },
+          "additionalProperties": false
+        },
+        "labels": { "type": "array", "items": { "type": "string" }, "uniqueItems": true },
+        "linked_issues": { "type": "array", "items": { "$ref": "#/definitions/issue" } },
+        "linked_issues_total_count": { "type": "integer", "minimum": 0 },
+        "collection_warnings": { "type": "array", "items": { "type": "string" }, "uniqueItems": true },
+        "source_hash": { "$ref": "#/definitions/sha256" }
+      },
+      "additionalProperties": false
+    }
+  }
+}

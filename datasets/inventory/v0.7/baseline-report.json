@@ -1,0 +1,488 @@
+{
+  "baseline_queried_at": "2026-08-24T01:39:05Z",
+  "comparisons": [
+    {
+      "actual": 46,
+      "delta": -1,
+      "evidence": [
+        {
+          "evidence_ref": "github:repository-database-id:1148448263"
+        },
+        {
+          "evidence_ref": "github:status:404:rmems/agent-afk"
+        },
+        {
+          "evidence_ref": "https://github.com/rmems/Ship-of-Theseus-HPC"
+        },
+        {
+          "evidence_ref": "https://github.com/rmems/Ship-of-Theseus-Workstation"
+        },
+        {
+          "evidence_ref": "https://github.com/rmems/agent-afk"
+        }
+      ],
+      "expected": 47,
+      "explained": true,
+      "explanation": "baseline_repository_unavailable_after_verified_rename",
+      "metric": "active_public_repository_count"
+    },
+    {
+      "actual": 62,
+      "delta": 4,
+      "evidence": [
+        {
+          "candidate_id": "github:repository:R_kgDOR9xLKQ:pull:PR_kwDOR9xLKc737gnm",
+          "closed_at": "2026-08-29T03:53:22Z"
+        },
+        {
+          "candidate_id": "github:repository:R_kgDORu58TA:pull:PR_kwDORu58TM72bzmE",
+          "closed_at": "2026-08-25T00:43:13Z"
+        },
+        {
+          "candidate_id": "github:repository:R_kgDORytylg:pull:PR_kwDORytyls735uqF",
+          "closed_at": "2026-08-29T05:08:09Z"
+        },
+        {
+          "evidence_ref": "policy:v0.7-eligibility.1:closed-unmerged-excludes-dependency"
+        },
+        {
+          "evidence_ref": "https://github.com/Limen-Neural/myelin-accelerator/pull/25"
+        },
+        {
+          "evidence_ref": "https://github.com/rmems/kinetic-signals/pull/40"
+        },
+        {
+          "evidence_ref": "https://github.com/rmems/operation-prometheus/issues/49"
+        },
+        {
+          "evidence_ref": "https://github.com/rmems/silicon-bridge/pull/25"
+        }
+      ],
+      "expected": 58,
+      "explained": true,
+      "explanation": "post_baseline_closures_and_versioned_dependency_filter",
+      "metric": "closed_unmerged_pr_count"
+    },
+    {
+      "actual": 1,
+      "delta": 0,
+      "evidence": [],
+      "expected": 1,
+      "explained": true,
+      "explanation": "unchanged_from_baseline",
+      "metric": "exact_current_duplicate_candidate_count"
+    },
+    {
+      "actual": 72,
+      "delta": 0,
+      "evidence": [],
+      "expected": 72,
+      "explained": true,
+      "explanation": "unchanged_from_baseline",
+      "metric": "existing_prometheus_row_count"
+    },
+    {
+      "actual": 71,
+      "delta": 0,
+      "evidence": [],
+      "expected": 71,
+      "explained": true,
+      "explanation": "unchanged_from_baseline",
+      "metric": "existing_unique_pr_count"
+    },
+    {
+      "actual": 456,
+      "delta": 35,
+      "evidence": [
+        {
+          "candidate_id": "github:repository:R_kgDOR-iKMQ:pull:PR_kwDOR-iKMc8AAAABA3p4iw",
+          "merged_at": "2026-08-25T00:29:42Z"
+        },
+        {
+          "candidate_id": "github:repository:R_kgDOR-iKMQ:pull:PR_kwDOR-iKMc8AAAABAsJNiQ",
+          "merged_at": "2026-08-24T23:16:11Z"
+        },
+        {
+          "candidate_id": "github:repository:R_kgDOR6sY0w:pull:PR_kwDOR6sY087_lWPn",
+          "merged_at": "2026-08-29T09:53:41Z"
+        },
+        {
+          "candidate_id": "github:repository:R_kgDOR6wRZQ:pull:PR_kwDOR6wRZc8AAAABBbKtnQ",
+          "merged_at": "2026-08-29T16:44:06Z"
+        },
+        {
+          "candidate_id": "github:repository:R_kgDOR7qErQ:pull:PR_kwDOR7qErc8AAAABBawq6g",
+          "merged_at": "2026-08-29T07:41:55Z"
+        },
+        {
+          "candidate_id": "github:repository:R_kgDOR9xLKQ:pull:PR_kwDOR9xLKc8AAAABBa9_dw",
+          "merged_at": "2026-08-29T08:20:34Z"
+        },
+        {
+          "candidate_id": "github:repository:R_kgDOR9xLKQ:pull:PR_kwDOR9xLKc8AAAABBakmnA",
+          "merged_at": "2026-08-29T06:08:04Z"
+        },
+        {
+          "candidate_id": "github:repository:R_kgDOR9xLKQ:pull:PR_kwDOR9xLKc8AAAABBbVPwg",
+          "merged_at": "2026-08-30T01:03:03Z"
+        },
+        {
+          "candidate_id": "github:repository:R_kgDORHPuBw:pull:PR_kwDORHPuB88AAAABBVyXWg",
+          "merged_at": "2026-08-28T16:16:56Z"
+        },
+        {
+          "candidate_id": "github:repository:R_kgDORugSnA:pull:PR_kwDORugSnM8AAAABAi4feA",
+          "merged_at": "2026-08-25T00:06:45Z"
+        },
+        {
+          "candidate_id": "github:repository:R_kgDORytysQ:pull:PR_kwDORytysc8AAAABBawimw",
+          "merged_at": "2026-08-29T08:42:28Z"
+        },
+        {
+          "candidate_id": "github:repository:R_kgDOShYOIw:pull:PR_kwDOShYOI88AAAABAnk22A",
+          "merged_at": "2026-08-24T01:53:57Z"
+        },
+        {
+          "candidate_id": "github:repository:R_kgDOShYOIw:pull:PR_kwDOShYOI88AAAABAvpfCw",
+          "merged_at": "2026-08-28T11:43:13Z"
+        },
+        {
+          "candidate_id": "github:repository:R_kgDOSxeAYg:pull:PR_kwDOSxeAYs8AAAABBSIkYg",
+          "merged_at": "2026-08-29T10:00:42Z"
+        },
+        {
+          "candidate_id": "github:repository:R_kgDOSxeAYg:pull:PR_kwDOSxeAYs8AAAABBcCn3g",
+          "merged_at": "2026-08-30T01:13:22Z"
+        },
+        {
+          "candidate_id": "github:repository:R_kgDOT8agJw:pull:PR_kwDOT8agJ88AAAABAn88Zg",
+          "merged_at": "2026-08-27T06:13:27Z"
+        },
+        {
+          "candidate_id": "github:repository:R_kgDOT8agJw:pull:PR_kwDOT8agJ88AAAABAvl8ew",
+          "merged_at": "2026-08-27T09:50:16Z"
+        },
+        {
+          "candidate_id": "github:repository:R_kgDOT8agJw:pull:PR_kwDOT8agJ88AAAABAvmjSg",
+          "merged_at": "2026-08-28T14:22:37Z"
+        },
+        {
+          "candidate_id": "github:repository:R_kgDOT8agJw:pull:PR_kwDOT8agJ88AAAABAvmjZw",
+          "merged_at": "2026-08-28T14:22:38Z"
+        },
+        {
+          "candidate_id": "github:repository:R_kgDOT8agJw:pull:PR_kwDOT8agJ88AAAABAvmucA",
+          "merged_at": "2026-08-29T04:45:39Z"
+        },
+        {
+          "candidate_id": "github:repository:R_kgDOT8agJw:pull:PR_kwDOT8agJ88AAAABAvn7CA",
+          "merged_at": "2026-08-27T09:50:17Z"
+        },
+        {
+          "candidate_id": "github:repository:R_kgDOT8agJw:pull:PR_kwDOT8agJ88AAAABAvn9IA",
+          "merged_at": "2026-08-30T08:45:40Z"
+        },
+        {
+          "candidate_id": "github:repository:R_kgDOT8agJw:pull:PR_kwDOT8agJ88AAAABAvn_1w",
+          "merged_at": "2026-08-30T01:06:13Z"
+        },
+        {
+          "candidate_id": "github:repository:R_kgDOT8agJw:pull:PR_kwDOT8agJ88AAAABAvn_9Q",
+          "merged_at": "2026-08-30T01:06:17Z"
+        },
+        {
+          "candidate_id": "github:repository:R_kgDOT8agJw:pull:PR_kwDOT8agJ88AAAABAvndIQ",
+          "merged_at": "2026-08-27T06:38:43Z"
+        },
+        {
+          "candidate_id": "github:repository:R_kgDOT8agJw:pull:PR_kwDOT8agJ88AAAABAvnk9g",
+          "merged_at": "2026-08-28T14:22:39Z"
+        },
+        {
+          "candidate_id": "github:repository:R_kgDOT8agJw:pull:PR_kwDOT8agJ88AAAABAvoBPg",
+          "merged_at": "2026-08-29T04:45:40Z"
+        },
+        {
+          "candidate_id": "github:repository:R_kgDOT8agJw:pull:PR_kwDOT8agJ88AAAABAvpBaA",
+          "merged_at": "2026-08-30T01:06:18Z"
+        },
+        {
+          "candidate_id": "github:repository:R_kgDOT8agJw:pull:PR_kwDOT8agJ88AAAABAvpxRQ",
+          "merged_at": "2026-08-30T01:06:12Z"
+        },
+        {
+          "candidate_id": "github:repository:R_kgDOT8agJw:pull:PR_kwDOT8agJ88AAAABAvqoxQ",
+          "merged_at": "2026-08-30T08:45:41Z"
+        },
+        {
+          "candidate_id": "github:repository:R_kgDOT8agJw:pull:PR_kwDOT8agJ88AAAABAvqrNw",
+          "merged_at": "2026-08-28T14:22:40Z"
+        },
+        {
+          "candidate_id": "github:repository:R_kgDOT8agJw:pull:PR_kwDOT8agJ88AAAABAvxX-w",
+          "merged_at": "2026-08-27T09:51:08Z"
+        },
+        {
+          "candidate_id": "github:repository:R_kgDOTT7TeA:pull:PR_kwDOTT7TeM8AAAABAJ7Aog",
+          "merged_at": "2026-08-25T03:30:23Z"
+        },
+        {
+          "candidate_id": "github:repository:R_kgDOTiy1lw:pull:PR_kwDOTiy1l88AAAABAiRS_g",
+          "merged_at": "2026-08-30T02:39:57Z"
+        },
+        {
+          "evidence_ref": "sha256:f6d1a2947cb04ff3440d82d7a2ce7dea4e5ee39879c5d6b645db6a75679e58e3"
+        },
+        {
+          "evidence_ref": "https://github.com/rmems/operation-prometheus/issues/49"
+        }
+      ],
+      "expected": 421,
+      "explained": true,
+      "explanation": "post_baseline_merges_and_mutable_formal_linkage",
+      "metric": "formally_issue_linked_merged_pr_count"
+    },
+    {
+      "actual": 710,
+      "delta": 40,
+      "evidence": [
+        {
+          "candidate_id": "github:repository:R_kgDOR-W7cg:pull:PR_kwDOR-W7cs8AAAABAvhhkQ",
+          "merged_at": "2026-08-29T06:04:55Z"
+        },
+        {
+          "candidate_id": "github:repository:R_kgDOR-iKMQ:pull:PR_kwDOR-iKMc8AAAABA3p4iw",
+          "merged_at": "2026-08-25T00:29:42Z"
+        },
+        {
+          "candidate_id": "github:repository:R_kgDOR-iKMQ:pull:PR_kwDOR-iKMc8AAAABAsJNiQ",
+          "merged_at": "2026-08-24T23:16:11Z"
+        },
+        {
+          "candidate_id": "github:repository:R_kgDOR6sY0w:pull:PR_kwDOR6sY087_lWPn",
+          "merged_at": "2026-08-29T09:53:41Z"
+        },
+        {
+          "candidate_id": "github:repository:R_kgDOR6sY0w:pull:PR_kwDOR6sY088AAAABBbkwSw",
+          "merged_at": "2026-08-29T10:12:25Z"
+        },
+        {
+          "candidate_id": "github:repository:R_kgDOR6wRZQ:pull:PR_kwDOR6wRZc78t6r5",
+          "merged_at": "2026-08-29T07:20:03Z"
+        },
+        {
+          "candidate_id": "github:repository:R_kgDOR6wRZQ:pull:PR_kwDOR6wRZc7_ybQb",
+          "merged_at": "2026-08-29T07:20:20Z"
+        },
+        {
+          "candidate_id": "github:repository:R_kgDOR6wRZQ:pull:PR_kwDOR6wRZc8AAAABAuQz0A",
+          "merged_at": "2026-08-29T07:22:39Z"
+        },
+        {
+          "candidate_id": "github:repository:R_kgDOR6wRZQ:pull:PR_kwDOR6wRZc8AAAABBbKtnQ",
+          "merged_at": "2026-08-29T16:44:06Z"
+        },
+        {
+          "candidate_id": "github:repository:R_kgDOR7qErQ:pull:PR_kwDOR7qErc73cP2w",
+          "merged_at": "2026-08-29T04:38:29Z"
+        },
+        {
+          "candidate_id": "github:repository:R_kgDOR7qErQ:pull:PR_kwDOR7qErc76imcz",
+          "merged_at": "2026-08-29T04:38:42Z"
+        },
+        {
+          "candidate_id": "github:repository:R_kgDOR7qErQ:pull:PR_kwDOR7qErc79grbI",
+          "merged_at": "2026-08-29T04:38:57Z"
+        },
+        {
+          "candidate_id": "github:repository:R_kgDOR7qErQ:pull:PR_kwDOR7qErc8AAAABA72olQ",
+          "merged_at": "2026-08-29T04:39:27Z"
+        },
+        {
+          "candidate_id": "github:repository:R_kgDOR7qErQ:pull:PR_kwDOR7qErc8AAAABA72sww",
+          "merged_at": "2026-08-29T04:39:42Z"
+        },
+        {
+          "candidate_id": "github:repository:R_kgDOR7qErQ:pull:PR_kwDOR7qErc8AAAABBawq6g",
+          "merged_at": "2026-08-29T07:41:55Z"
+        },
+        {
+          "candidate_id": "github:repository:R_kgDOR9xLKQ:pull:PR_kwDOR9xLKc8AAAABBa9_dw",
+          "merged_at": "2026-08-29T08:20:34Z"
+        },
+        {
+          "candidate_id": "github:repository:R_kgDOR9xLKQ:pull:PR_kwDOR9xLKc8AAAABBakmnA",
+          "merged_at": "2026-08-29T06:08:04Z"
+        },
+        {
+          "candidate_id": "github:repository:R_kgDOR9xLKQ:pull:PR_kwDOR9xLKc8AAAABBbVPwg",
+          "merged_at": "2026-08-30T01:03:03Z"
+        },
+        {
+          "candidate_id": "github:repository:R_kgDOR9xLKQ:pull:PR_kwDOR9xLKc8AAAABBbjQww",
+          "merged_at": "2026-08-30T01:18:09Z"
+        },
+        {
+          "candidate_id": "github:repository:R_kgDOR9xLKQ:pull:PR_kwDOR9xLKc8AAAABBbpNBw",
+          "merged_at": "2026-08-30T00:58:38Z"
+        },
+        {
+          "candidate_id": "github:repository:R_kgDORHPuBw:pull:PR_kwDORHPuB88AAAABBVnI9g",
+          "merged_at": "2026-08-28T12:49:12Z"
+        },
+        {
+          "candidate_id": "github:repository:R_kgDORHPuBw:pull:PR_kwDORHPuB88AAAABBVyXWg",
+          "merged_at": "2026-08-28T16:16:56Z"
+        },
+        {
+          "candidate_id": "github:repository:R_kgDORuK0gw:pull:PR_kwDORuK0g88AAAABBHF5nQ",
+          "merged_at": "2026-08-29T05:00:00Z"
+        },
+        {
+          "candidate_id": "github:repository:R_kgDORugSnA:pull:PR_kwDORugSnM8AAAABAi4feA",
+          "merged_at": "2026-08-25T00:06:45Z"
+        },
+        {
+          "candidate_id": "github:repository:R_kgDORytysQ:pull:PR_kwDORytysc8AAAABBawimw",
+          "merged_at": "2026-08-29T08:42:28Z"
+        },
+        {
+          "candidate_id": "github:repository:R_kgDOS1DPTQ:pull:PR_kwDOS1DPTc8AAAABBYMOHQ",
+          "merged_at": "2026-08-28T19:48:19Z"
+        },
+        {
+          "candidate_id": "github:repository:R_kgDOShYOIw:pull:PR_kwDOShYOI88AAAABAQPXUQ",
+          "merged_at": "2026-08-28T11:28:58Z"
+        },
+        {
+          "candidate_id": "github:repository:R_kgDOShYOIw:pull:PR_kwDOShYOI88AAAABAQPZLA",
+          "merged_at": "2026-08-28T11:29:17Z"
+        },
+        {
+          "candidate_id": "github:repository:R_kgDOShYOIw:pull:PR_kwDOShYOI88AAAABAnk22A",
+          "merged_at": "2026-08-24T01:53:57Z"
+        },
+        {
+          "candidate_id": "github:repository:R_kgDOShYOIw:pull:PR_kwDOShYOI88AAAABAvpfCw",
+          "merged_at": "2026-08-28T11:43:13Z"
+        },
+        {
+          "candidate_id": "github:repository:R_kgDOShYOIw:pull:PR_kwDOShYOI88AAAABBDChLQ",
+          "merged_at": "2026-08-28T11:29:43Z"
+        },
+        {
+          "candidate_id": "github:repository:R_kgDOSxeAYg:pull:PR_kwDOSxeAYs8AAAABBSIkYg",
+          "merged_at": "2026-08-29T10:00:42Z"
+        },
+        {
+          "candidate_id": "github:repository:R_kgDOSxeAYg:pull:PR_kwDOSxeAYs8AAAABBcCn3g",
+          "merged_at": "2026-08-30T01:13:22Z"
+        },
+        {
+          "candidate_id": "github:repository:R_kgDOT8agJw:pull:PR_kwDOT8agJ88AAAABAn88Zg",
+          "merged_at": "2026-08-27T06:13:27Z"
+        },
+        {
+          "candidate_id": "github:repository:R_kgDOT8agJw:pull:PR_kwDOT8agJ88AAAABAvl8ew",
+          "merged_at": "2026-08-27T09:50:16Z"
+        },
+        {
+          "candidate_id": "github:repository:R_kgDOT8agJw:pull:PR_kwDOT8agJ88AAAABAvmjSg",
+          "merged_at": "2026-08-28T14:22:37Z"
+        },
+        {
+          "candidate_id": "github:repository:R_kgDOT8agJw:pull:PR_kwDOT8agJ88AAAABAvmjZw",
+          "merged_at": "2026-08-28T14:22:38Z"
+        },
+        {
+          "candidate_id": "github:repository:R_kgDOT8agJw:pull:PR_kwDOT8agJ88AAAABAvmucA",
+          "merged_at": "2026-08-29T04:45:39Z"
+        },
+        {
+          "candidate_id": "github:repository:R_kgDOT8agJw:pull:PR_kwDOT8agJ88AAAABAvn7CA",
+          "merged_at": "2026-08-27T09:50:17Z"
+        },
+        {
+          "candidate_id": "github:repository:R_kgDOT8agJw:pull:PR_kwDOT8agJ88AAAABAvn9IA",
+          "merged_at": "2026-08-30T08:45:40Z"
+        },
+        {
+          "candidate_id": "github:repository:R_kgDOT8agJw:pull:PR_kwDOT8agJ88AAAABAvn_1w",
+          "merged_at": "2026-08-30T01:06:13Z"
+        },
+        {
+          "candidate_id": "github:repository:R_kgDOT8agJw:pull:PR_kwDOT8agJ88AAAABAvn_9Q",
+          "merged_at": "2026-08-30T01:06:17Z"
+        },
+        {
+          "candidate_id": "github:repository:R_kgDOT8agJw:pull:PR_kwDOT8agJ88AAAABAvndIQ",
+          "merged_at": "2026-08-27T06:38:43Z"
+        },
+        {
+          "candidate_id": "github:repository:R_kgDOT8agJw:pull:PR_kwDOT8agJ88AAAABAvnk9g",
+          "merged_at": "2026-08-28T14:22:39Z"
+        },
+        {
+          "candidate_id": "github:repository:R_kgDOT8agJw:pull:PR_kwDOT8agJ88AAAABAvo9JA",
+          "merged_at": "2026-08-30T01:06:14Z"
+        },
+        {
+          "candidate_id": "github:repository:R_kgDOT8agJw:pull:PR_kwDOT8agJ88AAAABAvoBPg",
+          "merged_at": "2026-08-29T04:45:40Z"
+        },
+        {
+          "candidate_id": "github:repository:R_kgDOT8agJw:pull:PR_kwDOT8agJ88AAAABAvpBaA",
+          "merged_at": "2026-08-30T01:06:18Z"
+        },
+        {
+          "candidate_id": "github:repository:R_kgDOT8agJw:pull:PR_kwDOT8agJ88AAAABAvpFLQ",
+          "merged_at": "2026-08-30T01:06:16Z"
+        },
+        {
+          "candidate_id": "github:repository:R_kgDOT8agJw:pull:PR_kwDOT8agJ88AAAABAvpxRQ",
+          "merged_at": "2026-08-30T01:06:12Z"
+        },
+        {
+          "candidate_id": "github:repository:R_kgDOT8agJw:pull:PR_kwDOT8agJ88AAAABAvqoxQ",
+          "merged_at": "2026-08-30T08:45:41Z"
+        },
+        {
+          "candidate_id": "github:repository:R_kgDOT8agJw:pull:PR_kwDOT8agJ88AAAABAvqrNw",
+          "merged_at": "2026-08-28T14:22:40Z"
+        },
+        {
+          "candidate_id": "github:repository:R_kgDOT8agJw:pull:PR_kwDOT8agJ88AAAABAvxX-w",
+          "merged_at": "2026-08-27T09:51:08Z"
+        },
+        {
+          "candidate_id": "github:repository:R_kgDOTT7TeA:pull:PR_kwDOTT7TeM8AAAABAJ7Aog",
+          "merged_at": "2026-08-25T03:30:23Z"
+        },
+        {
+          "candidate_id": "github:repository:R_kgDOTT7TeA:pull:PR_kwDOTT7TeM8AAAABBaj8ZA",
+          "merged_at": "2026-08-29T09:31:41Z"
+        },
+        {
+          "candidate_id": "github:repository:R_kgDOTT7TeA:pull:PR_kwDOTT7TeM8AAAABBbrIXw",
+          "merged_at": "2026-08-29T23:05:11Z"
+        },
+        {
+          "candidate_id": "github:repository:R_kgDOTiy1lw:pull:PR_kwDOTiy1l88AAAABAiRS_g",
+          "merged_at": "2026-08-30T02:39:57Z"
+        },
+        {
+          "candidate_id": "github:repository:R_kgDOTms49Q:pull:PR_kwDOTms49c8AAAABBfATAQ",
+          "merged_at": "2026-08-30T05:41:37Z"
+        }
+      ],
+      "expected": 670,
+      "explained": true,
+      "explanation": "post_baseline_source_events",
+      "metric": "merged_non_dependency_pr_count"
+    }
+  ],
+  "complete": true,
+  "orphan_existing_dataset_candidates": [],
+  "schema_version": "eligibility_baseline_report_v1",
+  "snapshot_collected_at": "2026-08-30T09:44:06.248511Z"
+}

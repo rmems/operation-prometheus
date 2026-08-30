@@ -38,6 +38,14 @@ Large raw exports should live outside the repo (local disk, object storage, or a
 
 Preferred local layout for scale: set **`PROMETHEUS_DATA_ROOT`** (e.g. `~/rmems/prometheus-data`) so the collector writes `raw/<owner_repo>/pr-N.json` outside the git tree. See [datasets/README.md](../datasets/README.md).
 
+The exhaustive eligibility ledger uses a separate frozen source snapshot under
+`$PROMETHEUS_DATA_ROOT/inventory/`. That snapshot stays outside Git. The
+tracked ledger stores only selected public metadata, immutable identifiers,
+reasoned classifications, and hashes. Private repositories visible to the
+collector are ignored without retaining their names or metadata. See
+[eligibility-ledger.md](eligibility-ledger.md) for the pagination,
+conservation, and read-only guarantees.
+
 ## Manual Inspection Requirement
 
 Before any generated dataset is published or used for training:

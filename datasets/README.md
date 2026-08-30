@@ -12,6 +12,12 @@ This directory contains generated artifacts for Operation Prometheus trajectory 
 
 Large data should live outside the repo (e.g. on object storage, Dolt, or a separate private datasets repo) and be referenced via manifests or cards.
 
+The exhaustive eligibility workflow follows the same boundary. Its frozen raw
+GitHub snapshot lives at
+`$PROMETHEUS_DATA_ROOT/inventory/github-source-snapshot.json`; only the thin,
+hashed artifacts under `inventory/v0.7/` are tracked. See
+[the eligibility-ledger operator guide](../docs/eligibility-ledger.md).
+
 ## Sibling data root (`PROMETHEUS_DATA_ROOT`)
 
 For scale collects, set a sibling directory so raw dumps never bloat the git tree:
@@ -44,3 +50,5 @@ See:
 - `manifests/` — per-dataset hashes and per-record quality summary
 - `raw/` — local collector output only (gitignored)
 - `examples/` — tiny synthetic samples for schema demos
+- `inventory/` — thin eligibility rows, policy, drift evidence, and manifests;
+  never the frozen raw source snapshot

@@ -1,0 +1,268 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "https://github.com/rmems/operation-prometheus/schemas/eligibility_ledger.schema.json",
+  "title": "Operation Prometheus eligibility ledger candidate",
+  "type": "object",
+  "required": [
+    "schema_version",
+    "candidate_id",
+    "provider",
+    "repository_id",
+    "repository_database_id",
+    "repository_name_with_owner",
+    "pull_request_id",
+    "pull_request_database_id",
+    "pull_request_number",
+    "url",
+    "source_state",
+    "draft",
+    "title",
+    "body_sha256",
+    "created_at",
+    "updated_at",
+    "closed_at",
+    "merged_at",
+    "base_oid",
+    "head_oid",
+    "merge_commit_oid",
+    "change_summary",
+    "author",
+    "labels",
+    "linked_issues",
+    "state",
+    "primary_reason",
+    "reason_codes",
+    "task_family",
+    "task_family_basis",
+    "lineage",
+    "quality",
+    "existing_dataset_refs",
+    "duplicate_group_ids",
+    "source_hash",
+    "policy_version",
+    "classification"
+  ],
+  "properties": {
+    "schema_version": { "const": "eligibility_ledger_v1" },
+    "candidate_id": { "type": "string", "pattern": "^github:repository:.+:pull:.+$" },
+    "provider": { "const": "github" },
+    "repository_id": { "type": "string", "minLength": 1 },
+    "repository_database_id": { "type": ["integer", "null"] },
+    "repository_name_with_owner": { "type": "string", "minLength": 3 },
+    "pull_request_id": { "type": "string", "minLength": 1 },
+    "pull_request_database_id": { "type": ["integer", "null"] },
+    "pull_request_number": { "type": "integer", "minimum": 1 },
+    "url": { "type": ["string", "null"], "format": "uri" },
+    "source_state": { "enum": ["open", "closed", "merged"] },
+    "draft": { "type": "boolean" },
+    "title": { "type": "string" },
+    "body_sha256": { "$ref": "#/definitions/sha256" },
+    "created_at": { "type": ["string", "null"], "format": "date-time" },
+    "updated_at": { "type": ["string", "null"], "format": "date-time" },
+    "closed_at": { "type": ["string", "null"], "format": "date-time" },
+    "merged_at": { "type": ["string", "null"], "format": "date-time" },
+    "base_oid": { "$ref": "#/definitions/nullable_string" },
+    "head_oid": { "$ref": "#/definitions/nullable_string" },
+    "merge_commit_oid": { "$ref": "#/definitions/nullable_string" },
+    "change_summary": {
+      "type": "object",
+      "required": ["additions", "deletions", "changed_files"],
+      "properties": {
+        "additions": { "type": ["integer", "null"], "minimum": 0 },
+        "deletions": { "type": ["integer", "null"], "minimum": 0 },
+        "changed_files": { "type": ["integer", "null"], "minimum": 0 }
+      },
+      "additionalProperties": false
+    },
+    "author": {
+      "type": "object",
+      "required": ["login", "type"],
+      "properties": {
+        "login": { "$ref": "#/definitions/nullable_string" },
+        "type": { "$ref": "#/definitions/nullable_string" }
+      },
+      "additionalProperties": false
+    },
+    "labels": { "type": "array", "items": { "type": "string" }, "uniqueItems": true },
+    "linked_issues": { "type": "array", "items": { "$ref": "#/definitions/linked_issue" } },
+    "state": {
+      "enum": ["included_positive", "included_negative", "quarantined", "excluded", "watchlist_open"]
+    },
+    "primary_reason": { "type": "string", "minLength": 1 },
+    "reason_codes": {
+      "type": "array",
+      "minItems": 1,
+      "uniqueItems": true,
+      "items": { "type": "string", "minLength": 1 }
+    },
+    "task_family": {
+      "enum": [
+        "feature",
+        "bugfix",
+        "refactor",
+        "test",
+        "performance",
+        "security",
+        "ci",
+        "data",
+        "documentation",
+        "release",
+        "dependency",
+        "research_experiment",
+        "other"
+      ]
+    },
+    "task_family_basis": {
+      "type": "array",
+      "minItems": 1,
+      "uniqueItems": true,
+      "items": { "type": "string", "minLength": 1 }
+    },
+    "lineage": {
+      "type": "object",
+      "required": ["reverts", "supersedes", "multi_pr_links"],
+      "properties": {
+        "reverts": { "$ref": "#/definitions/lineage_edges" },
+        "supersedes": { "$ref": "#/definitions/lineage_edges" },
+        "multi_pr_links": { "$ref": "#/definitions/lineage_edges" }
+      },
+      "additionalProperties": false
+    },
+    "quality": {
+      "type": "object",
+      "required": [
+        "task_hypothesis_clarity",
+        "before_state_completeness",
+        "patch_action_fidelity",
+        "chronology_confidence",
+        "validation_strength",
+        "outcome_confidence",
+        "artifact_reproducibility",
+        "license_clarity",
+        "policy_privacy_result"
+      ],
+      "properties": {
+        "task_hypothesis_clarity": { "$ref": "#/definitions/quality_dimension" },
+        "before_state_completeness": { "$ref": "#/definitions/quality_dimension" },
+        "patch_action_fidelity": { "$ref": "#/definitions/quality_dimension" },
+        "chronology_confidence": { "$ref": "#/definitions/quality_dimension" },
+        "validation_strength": { "$ref": "#/definitions/quality_dimension" },
+        "outcome_confidence": { "$ref": "#/definitions/quality_dimension" },
+        "artifact_reproducibility": { "$ref": "#/definitions/quality_dimension" },
+        "license_clarity": { "$ref": "#/definitions/quality_dimension" },
+        "policy_privacy_result": { "$ref": "#/definitions/quality_dimension" }
+      },
+      "additionalProperties": false
+    },
+    "existing_dataset_refs": {
+      "type": "array",
+      "items": { "$ref": "#/definitions/dataset_ref" }
+    },
+    "duplicate_group_ids": {
+      "type": "array",
+      "uniqueItems": true,
+      "items": { "type": "string", "minLength": 1 }
+    },
+    "source_hash": { "$ref": "#/definitions/sha256" },
+    "policy_version": { "type": "string", "minLength": 1 },
+    "classification": {
+      "type": "object",
+      "required": ["method", "evidence_refs"],
+      "properties": {
+        "method": { "enum": ["deterministic_rules", "explicit_override"] },
+        "evidence_refs": {
+          "type": "array",
+          "minItems": 1,
+          "uniqueItems": true,
+          "items": { "type": "string", "minLength": 1 }
+        }
+      },
+      "additionalProperties": false
+    }
+  },
+  "additionalProperties": false,
+  "definitions": {
+    "sha256": { "type": "string", "pattern": "^[a-f0-9]{64}$" },
+    "nullable_string": { "type": ["string", "null"] },
+    "linked_issue": {
+      "type": "object",
+      "required": [
+        "id",
+        "database_id",
+        "number",
+        "url",
+        "repository_id",
+        "repository_database_id",
+        "repository_name_with_owner",
+        "source_hash"
+      ],
+      "properties": {
+        "id": { "type": "string", "minLength": 1 },
+        "database_id": { "type": ["integer", "null"] },
+        "number": { "type": "integer", "minimum": 1 },
+        "url": { "type": ["string", "null"], "format": "uri" },
+        "repository_id": { "type": "string", "minLength": 1 },
+        "repository_database_id": { "type": ["integer", "null"] },
+        "repository_name_with_owner": { "type": "string", "minLength": 3 },
+        "source_hash": { "$ref": "#/definitions/sha256" }
+      },
+      "additionalProperties": false
+    },
+    "quality_dimension": {
+      "type": "object",
+      "required": ["assessment", "reason_codes", "evidence_refs"],
+      "properties": {
+        "assessment": {
+          "enum": ["verified", "partial", "missing", "failed", "unknown", "not_applicable"]
+        },
+        "reason_codes": {
+          "type": "array",
+          "minItems": 1,
+          "uniqueItems": true,
+          "items": { "type": "string", "minLength": 1 }
+        },
+        "evidence_refs": {
+          "type": "array",
+          "uniqueItems": true,
+          "items": { "type": "string", "minLength": 1 }
+        }
+      },
+      "additionalProperties": false
+    },
+    "lineage_edges": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["relation", "target_candidate_id", "evidence_ref"],
+        "properties": {
+          "relation": { "enum": ["reverts", "supersedes", "shares_formal_issue"] },
+          "target_candidate_id": { "type": "string", "minLength": 1 },
+          "evidence_ref": { "type": "string", "minLength": 1 }
+        },
+        "additionalProperties": false
+      }
+    },
+    "dataset_ref": {
+      "type": "object",
+      "required": [
+        "repo",
+        "resolved_repository_name_with_owner",
+        "pr_number",
+        "record_id",
+        "file",
+        "line",
+        "canonical_sha256"
+      ],
+      "properties": {
+        "repo": { "type": "string", "minLength": 3 },
+        "resolved_repository_name_with_owner": { "type": "string", "minLength": 3 },
+        "pr_number": { "type": "integer", "minimum": 1 },
+        "record_id": { "type": ["string", "null"] },
+        "file": { "type": "string", "minLength": 1 },
+        "line": { "type": "integer", "minimum": 1 },
+        "canonical_sha256": { "$ref": "#/definitions/sha256" }
+      },
+      "additionalProperties": false
+    }
+  }
+}
