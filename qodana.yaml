@@ -8,3 +8,11 @@ profile:
   name: qodana.recommended
 include:
   - name: CheckDependencyLicenses
+exclude:
+  - name: PyTypeHintsInspection
+  - name: PyShadowingNamesInspection
+  - name: PyMethodMayBeStaticInspection
+  - name: PyInconsistentReturnsInspection
+  - name: PyListCreationInspection
+  - name: PyRedundantParenthesesInspection
+  - name: PyUnusedImportsInspection

@@ -65,7 +65,7 @@ _CODEANT_BLOCK = re.compile(
 # single block matters: a `.*?` reaching forward for the attribution would span
 # an earlier human note and any validation prose between them and delete it too.
 _NOTE_BLOCK = re.compile(
-    r"(?im)(?:^|\n)[ \t]*>[ \t]*\[!NOTE\][ \t]*\n(?:[ \t]*>[^\n]*(?:\n|$))*",
+    r"(?im)(^|\n)[ \t]*>[ \t]*\[!NOTE][ \t]*\n(?:[ \t]*>[^\n]*(?:\n|$))*",
 )
 # Attribution inside such a block. Rendered as `<a ...>Macroscope</a> summarized`,
 # so name and verb are not adjacent — tolerate markup between them.
@@ -86,7 +86,7 @@ def _drop_macroscope_note(m: "re.Match[str]") -> str:
 # Continuation lines use [ \t]* only — not \s* — so a blank line ends the match
 # and a later actionable blockquote is preserved.
 _GEMINI_IMPORTANT_BLOCK = re.compile(
-    r"(?im)(?:^|\n)[ \t]*>[ \t]*\[!IMPORTANT\][ \t]*\n(?:[ \t]*>[^\n]*(?:\n|$))*",
+    r"(?im)(^|\n)[ \t]*>[ \t]*\[!IMPORTANT][ \t]*\n(?:[ \t]*>[^\n]*(?:\n|$))*",
 )
 # Codex review transport footer (product chrome, not engineering signal).
 _CODEX_REACT_FOOTER = re.compile(

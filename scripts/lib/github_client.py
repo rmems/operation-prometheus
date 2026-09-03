@@ -108,7 +108,7 @@ class GitHubClient:
                 # HTTPError body can only be read once — cache for rate-limit + error detail.
                 try:
                     err_body = exc.read()
-                except Exception:
+                except OSError:
                     err_body = b""
                 err_text = err_body.decode("utf-8", errors="replace")
 
@@ -146,7 +146,8 @@ class GitHubClient:
                 raise GitHubError(f"GET {url} network error: {exc}") from exc
         raise GitHubError(f"GET {url} failed after retries: {last_err}")
 
-    def _is_rate_limit_403(self, exc: urllib.error.HTTPError, body_text: str = "") -> bool:
+    @staticmethod
+    def _is_rate_limit_403(exc: urllib.error.HTTPError, body_text: str = "") -> bool:
         """Check if a 403 error is rate-limit related (headers + cached body)."""
         if exc.headers:
             remaining = exc.headers.get("X-RateLimit-Remaining")
@@ -159,8 +160,8 @@ class GitHubClient:
         text = (body_text or "").lower()
         return "rate limit" in text or "abuse detection" in text
 
+    @staticmethod
     def _backoff_seconds(
-        self,
         attempt: int,
         retry_after: str | None,
         exc: urllib.error.HTTPError,
