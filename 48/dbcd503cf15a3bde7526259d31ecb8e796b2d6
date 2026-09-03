@@ -1,0 +1,20 @@
+.cursor/Dockerfile
+  s_8d43daab2c823d::t_14b28dc2a5d1ea 17
+  s_8d43daab2c823d::t_2e4a2cc8807542 11
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.5.2",
+  "base_commit_sha": "48dbcd503cf15a3bde7526259d31ecb8e796b2d6",
+  "prompts": {},
+  "sessions": {
+    "s_8d43daab2c823d": {
+      "agent_id": {
+        "tool": "cursor",
+        "id": "7a3125d7-4082-4be7-a1dc-5b378e27976f",
+        "model": "kimi-k3"
+      },
+      "human_author": "Raul Montoya Cardenas <montoyaraul34@gmail.com>"
+    }
+  }
+}
