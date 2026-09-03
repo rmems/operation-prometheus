@@ -67,7 +67,7 @@ FEATURE_BUCKET_TO_TRAINING = {
 # "owner/name" and must be looked up through ``_override_key``.
 def _override_key(repo: str, pr: int) -> tuple[str, int]:
     """Build a case-folded (repo, pr) key for the per-PR override tables."""
-    return (str(repo).strip().lower(), pr)
+    return str(repo).strip().lower(), pr
 
 
 # Per-PR overrides live on the dataset card first, so a new extract ships its
@@ -298,7 +298,7 @@ def enrich_linked_issues(
 
     def _key(repo_i: str, num: Any) -> tuple[str, int] | None:
         try:
-            return (str(repo_i).lower(), int(num))
+            return str(repo_i).lower(), int(num)
         except (TypeError, ValueError):
             return None
 
@@ -317,10 +317,10 @@ def enrich_linked_issues(
         linked.append(issue)
 
     def _stub(i_owner: str, i_repo: str, num: int, *, closed_by_pr: bool) -> None:
-        key = (f"{i_owner}/{i_repo}".lower(), num)
-        if key in seen or key == (self_repo, self_pr):
+        stub_key = (f"{i_owner}/{i_repo}".lower(), num)
+        if stub_key in seen or stub_key == (self_repo, self_pr):
             return
-        seen.add(key)
+        seen.add(stub_key)
         linked.append(
             {
                 "number": num,
@@ -339,10 +339,10 @@ def enrich_linked_issues(
         msg = c.get("message") if isinstance(c, dict) else None
         if msg:
             parts.append(str(msg))
-    for i_owner, i_repo, num in parse_linked_issue_numbers(
+    for ref_owner, ref_repo, ref_num in parse_linked_issue_numbers(
         "\n".join(parts), owner, name
     ):
-        _stub(i_owner, i_repo, num, closed_by_pr=True)
+        _stub(ref_owner, ref_repo, ref_num, closed_by_pr=True)
 
     if self_pr is not None:
         # Card first, then the legacy shared table (see CARD_OVERRIDE_KEYS).
@@ -542,27 +542,27 @@ def extract_review_signals(raw: dict[str, Any], *, max_items: int = 8) -> list[d
 
     def _push(
         author: str | None,
-        body: str,
+        text: str,
         *,
-        suggestion: str | None = None,
+        suggestion_text: str | None = None,
     ) -> None:
-        body = (body or "").strip()
-        if not body or _is_non_actionable_review_body(body):
+        text = (text or "").strip()
+        if not text or _is_non_actionable_review_body(text):
             return
-        key = _signal_body_key(body)
-        if not key and suggestion:
+        key = _signal_body_key(text)
+        if not key and suggestion_text:
             # Suggestion-only bodies remain valid schema signals.
-            key = "suggestion:" + (_signal_body_key(suggestion) or suggestion.strip().lower()[:120])
+            key = "suggestion:" + (_signal_body_key(suggestion_text) or suggestion_text.strip().lower()[:120])
         if not key:
             return
         entry: dict[str, Any] = {
             "author": author or "unknown",
-            "comment": body[:2000],
+            "comment": text[:2000],
             "key": key,
-            "ack": _is_ack_shaped_review_body(body),
+            "ack": _is_ack_shaped_review_body(text),
         }
-        if suggestion:
-            entry["suggestion"] = suggestion
+        if suggestion_text:
+            entry["suggestion"] = suggestion_text
         candidates.append(entry)
 
     # Process reviews first to preserve maintainer approve/request-changes signals
@@ -599,7 +599,7 @@ def extract_review_signals(raw: dict[str, Any], *, max_items: int = 8) -> list[d
                 sug = m.group(1).strip()[:2000]
                 if sug:
                     suggestion = sug
-        _push(c.get("user_login"), body, suggestion=suggestion)
+        _push(c.get("user_login"), body, suggestion_text=suggestion)
 
     for c in raw.get("issue_comments") or []:
         if is_bot_user(c.get("user_login"), c.get("user_type")):

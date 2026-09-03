@@ -1,0 +1,12 @@
+# Qodana Cloud configuration.
+#
+# The linter's default interpreter predates PEP 604, so every ``str | None``
+# annotation was reported as "Invalid type hints definitions and usages"
+# (70+ false positives on PR #64). The project targets Python 3.12 (see
+# .github/workflows/ci.yml), so give the analyzer a matching interpreter via
+# the documented conda bootstrap.
+version: "1.0"
+bootstrap: |
+  . ~/.bashrc
+  conda create -y -n qodana-env python=3.12
+  conda activate qodana-env

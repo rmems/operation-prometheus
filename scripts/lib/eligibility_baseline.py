@@ -152,7 +152,7 @@ def _manual_drift_map(baseline: dict[str, Any]) -> dict[str, dict[str, Any]]:
 def _initial_reconciliation(delta: int, automatic_event_count: int) -> tuple[bool, str]:
     if delta == 0:
         return True, "unchanged_from_baseline"
-    return delta > 0 and automatic_event_count == delta, "post_baseline_source_events"
+    return 0 < delta == automatic_event_count, "post_baseline_source_events"
 
 
 class _BaselineContext(NamedTuple):

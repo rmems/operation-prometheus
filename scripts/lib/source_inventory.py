@@ -197,10 +197,8 @@ def _pull_request_source_hash(raw: dict[str, Any], record: dict[str, Any]) -> st
     return sha256_json(payload)
 
 
-def _pull_request_record(raw: dict[str, Any], repository: dict[str, Any]) -> dict[str, Any]:
-    title, title_warnings = _sanitize_source_text(raw.get("title"), limit=1024)
-    body, body_warnings = _sanitize_source_text(raw.get("bodyText"))
-    closing = raw.get("closingIssuesReferences") or {}
+def _extract_labels(raw: dict[str, Any], repository: dict[str, Any]) -> list[str]:
+    """Return the deduped, sorted label names, rejecting truncated pagination."""
     label_connection = raw.get("labels") or {}
     label_nodes = label_connection.get("nodes") or []
     label_total = int(label_connection.get("totalCount") or 0)
@@ -214,6 +212,25 @@ def _pull_request_record(raw: dict[str, Any], repository: dict[str, Any]) -> dic
         for node in label_nodes
         if isinstance(node, dict) and node.get("name")
     ]
+    return sorted(set(labels), key=str.casefold)
+
+
+def _validate_linked_issue_ids(record: dict[str, Any]) -> None:
+    """Reject missing or duplicate linked-issue IDs in a pull-request record."""
+    linked_issue_ids = [str(item.get("id") or "") for item in record["linked_issues"]]
+    if any(not issue_id for issue_id in linked_issue_ids) or len(set(linked_issue_ids)) != len(
+        linked_issue_ids
+    ):
+        raise GitHubError(
+            f"Missing or duplicate linked-issue ID for "
+            f"{record['repository_name_with_owner']}#{record['number']}"
+        )
+
+
+def _pull_request_record(raw: dict[str, Any], repository: dict[str, Any]) -> dict[str, Any]:
+    title, title_warnings = _sanitize_source_text(raw.get("title"), limit=1024)
+    body, body_warnings = _sanitize_source_text(raw.get("bodyText"))
+    closing = raw.get("closingIssuesReferences") or {}
     selected = {
         "id": raw.get("id"),
         "database_id": raw.get("databaseId"),
@@ -241,7 +258,7 @@ def _pull_request_record(raw: dict[str, Any], repository: dict[str, Any]) -> dic
             "login": ((raw.get("author") or {}).get("login")),
             "type": ((raw.get("author") or {}).get("__typename")),
         },
-        "labels": sorted(set(labels), key=str.casefold),
+        "labels": _extract_labels(raw, repository),
         "linked_issues": [
             _issue_record(node)
             for node in (closing.get("nodes") or [])
@@ -250,14 +267,7 @@ def _pull_request_record(raw: dict[str, Any], repository: dict[str, Any]) -> dic
         "linked_issues_total_count": int(closing.get("totalCount") or 0),
         "collection_warnings": sorted(set(title_warnings + body_warnings)),
     }
-    linked_issue_ids = [str(item.get("id") or "") for item in selected["linked_issues"]]
-    if any(not issue_id for issue_id in linked_issue_ids) or len(set(linked_issue_ids)) != len(
-        linked_issue_ids
-    ):
-        raise GitHubError(
-            f"Missing or duplicate linked-issue ID for "
-            f"{repository['name_with_owner']}#{raw.get('number')}"
-        )
+    _validate_linked_issue_ids(selected)
     selected["source_hash"] = _pull_request_source_hash(raw, selected)
     return selected
 
@@ -295,6 +305,24 @@ def _page_evidence(
     }
 
 
+def _accept_repository(
+    raw: Any,
+    owner: dict[str, str],
+    seen_ids: set[str],
+) -> dict[str, Any] | None:
+    """Validate one raw repository; return None when it is not public."""
+    if not isinstance(raw, dict):
+        raise GitHubError(f"Non-object repository for {owner['login']}")
+    if raw.get("private") is True or raw.get("visibility") != "public":
+        return None
+    repo = _safe_repository(raw, owner)
+    repo_id = str(repo.get("id") or "")
+    if not repo_id or repo_id in seen_ids:
+        raise GitHubError(f"Missing or duplicate repository node ID for {repo.get('name_with_owner')}")
+    seen_ids.add(repo_id)
+    return repo
+
+
 def _collect_repositories(
     client: GitHubClient,
     owners: list[dict[str, str]],
@@ -305,7 +333,7 @@ def _collect_repositories(
     seen_ids: set[str] = set()
     for owner in owners:
         path = _repository_path(owner)
-        next_url: str | None = client._resolve_url(path + "&per_page=100")
+        next_url: str | None = client.resolve_url(path + "&per_page=100")
         page_index = 0
         visited_urls: set[str] = set()
         while next_url:
@@ -328,21 +356,67 @@ def _collect_repositories(
                 )
             )
             for raw in data:
-                if not isinstance(raw, dict):
-                    raise GitHubError(f"Non-object repository for {owner['login']}")
-                if raw.get("private") is True or raw.get("visibility") != "public":
+                repo = _accept_repository(raw, owner, seen_ids)
+                if repo is None:
                     non_public_ignored += 1
-                    continue
-                repo = _safe_repository(raw, owner)
-                repo_id = str(repo.get("id") or "")
-                if not repo_id or repo_id in seen_ids:
-                    raise GitHubError(f"Missing or duplicate repository node ID for {repo.get('name_with_owner')}")
-                seen_ids.add(repo_id)
-                repositories.append(repo)
+                else:
+                    repositories.append(repo)
             next_url = next_link
             page_index += 1
     repositories.sort(key=lambda row: (str(row["id"]), str(row["name_with_owner"])))
     return repositories, pages, non_public_ignored
+
+
+def _fetch_closing_issues_page(
+    client: GitHubClient,
+    pr_id: str,
+    cursor: str | None,
+) -> tuple[dict[str, Any], dict[str, Any], dict[str, str]]:
+    """Fetch one closing-issues page; return (connection, raw data, headers)."""
+    if not cursor:
+        raise GitHubError(f"Closing-issue pagination for {pr_id} has no cursor")
+    data, headers = client.query_graphql(
+        CLOSING_ISSUES_QUERY,
+        {"id": pr_id, "cursor": cursor},
+    )
+    node = data.get("node")
+    if not isinstance(node, dict):
+        raise GitHubError(f"Pull request node {pr_id} disappeared during collection")
+    return node.get("closingIssuesReferences") or {}, data, headers
+
+
+def _process_closing_issues_page(
+    client: GitHubClient,
+    pr_id: str,
+    cursor: str | None,
+    page_index: int,
+    repository_id: str,
+    pages: list[dict[str, Any]],
+    collected: list[dict[str, Any]],
+) -> tuple[dict[str, Any], str | None]:
+    """Fetch and record one closing-issues page; return (page_info, next_cursor)."""
+    connection, data, headers = _fetch_closing_issues_page(client, pr_id, cursor)
+    nodes = connection.get("nodes") or []
+    page_info = connection.get("pageInfo") or {}
+    next_cursor = page_info.get("endCursor")
+    pages.append(
+        _page_evidence(
+            scope="closing_issues",
+            response=data,
+            item_count=len(nodes),
+            page_index=page_index,
+            has_next_page=bool(page_info.get("hasNextPage")),
+            headers=headers,
+            repository_id=repository_id,
+            cursor=cursor,
+            next_cursor=next_cursor,
+            total_count=int(connection.get("totalCount") or 0),
+        )
+    )
+    collected.extend(_issue_record(item) for item in nodes if isinstance(item, dict))
+    if next_cursor == cursor and page_info.get("hasNextPage"):
+        raise GitHubError(f"Closing-issue pagination cursor repeated for {pr_id}")
+    return page_info, next_cursor
 
 
 def _collect_additional_closing_issues(
@@ -361,38 +435,9 @@ def _collect_additional_closing_issues(
     cursor = page_info.get("endCursor")
     page_index = 1
     while page_info.get("hasNextPage"):
-        if not cursor:
-            raise GitHubError(f"Closing-issue pagination for {pr_id} has no cursor")
-        data, headers = client.query_graphql(
-            CLOSING_ISSUES_QUERY,
-            {"id": pr_id, "cursor": cursor},
+        page_info, cursor = _process_closing_issues_page(
+            client, pr_id, cursor, page_index, repository_id, pages, collected
         )
-        node = data.get("node")
-        if not isinstance(node, dict):
-            raise GitHubError(f"Pull request node {pr_id} disappeared during collection")
-        connection = node.get("closingIssuesReferences") or {}
-        nodes = connection.get("nodes") or []
-        new_page_info = connection.get("pageInfo") or {}
-        next_cursor = new_page_info.get("endCursor")
-        pages.append(
-            _page_evidence(
-                scope="closing_issues",
-                response=data,
-                item_count=len(nodes),
-                page_index=page_index,
-                has_next_page=bool(new_page_info.get("hasNextPage")),
-                headers=headers,
-                repository_id=repository_id,
-                cursor=cursor,
-                next_cursor=next_cursor,
-                total_count=int(connection.get("totalCount") or 0),
-            )
-        )
-        collected.extend(_issue_record(item) for item in nodes if isinstance(item, dict))
-        if next_cursor == cursor and new_page_info.get("hasNextPage"):
-            raise GitHubError(f"Closing-issue pagination cursor repeated for {pr_id}")
-        cursor = next_cursor
-        page_info = new_page_info
         page_index += 1
     expected = int(first_connection.get("totalCount") or 0)
     if len(collected) != expected:
@@ -402,37 +447,89 @@ def _collect_additional_closing_issues(
     return collected
 
 
+def _fetch_pull_request_page(
+    client: GitHubClient,
+    repository: dict[str, Any],
+    cursor: str | None,
+    expected_total: int | None,
+) -> tuple[list[Any], dict[str, Any], int, dict[str, Any], dict[str, str]]:
+    """Fetch one pull-request page; return (nodes, page_info, total, data, headers)."""
+    owner, name = str(repository["name_with_owner"]).split("/", 1)
+    data, headers = client.query_graphql(
+        PULL_REQUESTS_QUERY,
+        {"owner": owner, "name": name, "cursor": cursor},
+    )
+    repo_data = data.get("repository")
+    if not isinstance(repo_data, dict):
+        raise GitHubError(f"Repository {repository['name_with_owner']} disappeared during collection")
+    if str(repo_data.get("id") or "") != str(repository["id"]):
+        raise GitHubError(f"Repository identity changed for {repository['name_with_owner']}")
+    connection = repo_data.get("pullRequests") or {}
+    total_count = int(connection.get("totalCount") or 0)
+    if expected_total is not None and expected_total != total_count:
+        raise GitHubError(
+            f"Pull-request total changed during collection for {repository['name_with_owner']}"
+        )
+    return (
+        connection.get("nodes") or [],
+        connection.get("pageInfo") or {},
+        total_count,
+        data,
+        headers,
+    )
+
+
+def _build_pull_request(
+    client: GitHubClient,
+    raw: Any,
+    repository: dict[str, Any],
+    pages: list[dict[str, Any]],
+    seen_ids: set[str],
+) -> dict[str, Any]:
+    """Validate one raw PR node and build its inventory record."""
+    if not isinstance(raw, dict):
+        raise GitHubError(f"Non-object pull request in {repository['name_with_owner']}")
+    pr_id = str(raw.get("id") or "")
+    if not pr_id or pr_id in seen_ids:
+        raise GitHubError(
+            f"Missing or duplicate pull-request node ID in {repository['name_with_owner']}"
+        )
+    seen_ids.add(pr_id)
+    closing = raw.get("closingIssuesReferences") or {}
+    record = _pull_request_record(raw, repository)
+    if (closing.get("pageInfo") or {}).get("hasNextPage"):
+        record["linked_issues"] = _collect_additional_closing_issues(
+            client,
+            pr_id,
+            closing,
+            pages,
+            str(repository["id"]),
+        )
+        record["source_hash"] = _pull_request_source_hash(raw, record)
+    if len(record["linked_issues"]) != record["linked_issues_total_count"]:
+        raise GitHubError(
+            f"Linked-issue count mismatch for {repository['name_with_owner']}#{record['number']}"
+        )
+    _validate_linked_issue_ids(record)
+    return record
+
+
 def _collect_pull_requests(
     client: GitHubClient,
     repository: dict[str, Any],
     pages: list[dict[str, Any]],
 ) -> list[dict[str, Any]]:
-    owner, name = str(repository["name_with_owner"]).split("/", 1)
     cursor: str | None = None
     page_index = 0
     expected_total: int | None = None
     pull_requests: list[dict[str, Any]] = []
     seen_ids: set[str] = set()
     while True:
-        data, headers = client.query_graphql(
-            PULL_REQUESTS_QUERY,
-            {"owner": owner, "name": name, "cursor": cursor},
+        nodes, page_info, total_count, data, headers = _fetch_pull_request_page(
+            client, repository, cursor, expected_total
         )
-        repo_data = data.get("repository")
-        if not isinstance(repo_data, dict):
-            raise GitHubError(f"Repository {repository['name_with_owner']} disappeared during collection")
-        if str(repo_data.get("id") or "") != str(repository["id"]):
-            raise GitHubError(f"Repository identity changed for {repository['name_with_owner']}")
-        connection = repo_data.get("pullRequests") or {}
-        total_count = int(connection.get("totalCount") or 0)
         if expected_total is None:
             expected_total = total_count
-        elif expected_total != total_count:
-            raise GitHubError(
-                f"Pull-request total changed during collection for {repository['name_with_owner']}"
-            )
-        nodes = connection.get("nodes") or []
-        page_info = connection.get("pageInfo") or {}
         has_next = bool(page_info.get("hasNextPage"))
         next_cursor = page_info.get("endCursor")
         pages.append(
@@ -450,38 +547,7 @@ def _collect_pull_requests(
             )
         )
         for raw in nodes:
-            if not isinstance(raw, dict):
-                raise GitHubError(f"Non-object pull request in {repository['name_with_owner']}")
-            pr_id = str(raw.get("id") or "")
-            if not pr_id or pr_id in seen_ids:
-                raise GitHubError(
-                    f"Missing or duplicate pull-request node ID in {repository['name_with_owner']}"
-                )
-            seen_ids.add(pr_id)
-            closing = raw.get("closingIssuesReferences") or {}
-            record = _pull_request_record(raw, repository)
-            if (closing.get("pageInfo") or {}).get("hasNextPage"):
-                record["linked_issues"] = _collect_additional_closing_issues(
-                    client,
-                    pr_id,
-                    closing,
-                    pages,
-                    str(repository["id"]),
-                )
-                record["source_hash"] = _pull_request_source_hash(raw, record)
-            if len(record["linked_issues"]) != record["linked_issues_total_count"]:
-                raise GitHubError(
-                    f"Linked-issue count mismatch for {repository['name_with_owner']}#{record['number']}"
-                )
-            linked_issue_ids = [str(item.get("id") or "") for item in record["linked_issues"]]
-            if any(not issue_id for issue_id in linked_issue_ids) or len(
-                set(linked_issue_ids)
-            ) != len(linked_issue_ids):
-                raise GitHubError(
-                    f"Missing or duplicate linked-issue ID for "
-                    f"{repository['name_with_owner']}#{record['number']}"
-                )
-            pull_requests.append(record)
+            pull_requests.append(_build_pull_request(client, raw, repository, pages, seen_ids))
         if not has_next:
             break
         if not next_cursor or next_cursor == cursor:
