@@ -1,0 +1,15 @@
+.codacy/.gitignore
+  ai_agent 1
+.codacy/codacy.config.baseline.json
+  ai_agent 1-6038
+.codacy/codacy.config.json
+  ai_agent 1-6038
+.cursor/rules/codacy.mdc
+  ai_agent 1-73
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.5.2",
+  "base_commit_sha": "ac87daa3fc4d90dd5b64ee244a9a436aff512c0d",
+  "prompts": {}
+}
