@@ -113,7 +113,7 @@ def _validate_collected_at(value: str) -> str:
         raise ValueError(f"Invalid collected_at timestamp {value!r}") from exc
     if parsed.tzinfo is None:
         raise ValueError("collected_at timestamp must include a UTC offset")
-    return value
+    return parsed.isoformat()
 
 
 def parse_owner_spec(value: str) -> dict[str, str]:
@@ -180,10 +180,10 @@ def _issue_record(raw: dict[str, Any]) -> dict[str, Any]:
 
 def _sanitize_source_text(value: Any, *, limit: int | None = None) -> tuple[str, list[str]]:
     text = str(value or "")
-    truncated = limit is not None and len(text) > limit
-    if truncated:
-        text = text[:limit]
     sanitized, warnings = sanitize_text(text)
+    truncated = limit is not None and len(sanitized) > limit
+    if truncated:
+        sanitized = sanitized[:limit]
     if truncated:
         warnings.append(f"source_text_truncated_at_{limit}_characters")
     return sanitized, sorted(set(warnings))

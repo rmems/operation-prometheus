@@ -309,6 +309,25 @@ def test_duplicate_detection_groups_connected_titles_and_exact_titles():
     assert exact_title["exact"] is True
 
 
+def test_duplicate_detection_matches_identical_short_titles():
+    candidates = [
+        {
+            "candidate_id": candidate_id,
+            "repository_name_with_owner": "rmems/repo",
+            "title": title,
+            "base_oid": f"base-{candidate_id}",
+            "head_oid": f"head-{candidate_id}",
+        }
+        for candidate_id, title in (("a", "Fix typo"), ("b", "Fix typo"))
+    ]
+
+    groups = _duplicate_records(candidates, [], {}, near_threshold=0.6)
+
+    exact_title = next(group for group in groups if group["kind"] == "exact_title_match")
+    assert exact_title["candidate_ids"] == ["a", "b"]
+    assert exact_title["exact"] is True
+
+
 def test_duplicate_exactness_preserves_base_state_and_literal_title_differences():
     candidates = [
         {

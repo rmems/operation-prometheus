@@ -452,32 +452,36 @@ def _duplicate_records(
             }
         )
 
-    by_repository: dict[str, list[tuple[str, set[str]]]] = defaultdict(list)
+    by_repository: dict[str, list[tuple[str, set[str], str]]] = defaultdict(list)
     for row in candidates:
         tokens = _title_tokens(row["title"])
-        if len(tokens) >= 4:
+        exact_title = _normalized_exact_title(str(row.get("title") or ""))
+        if exact_title:
             by_repository[row["repository_name_with_owner"].casefold()].append(
-                (row["candidate_id"], tokens)
+                (row["candidate_id"], tokens, exact_title)
             )
     for _repository, entries in sorted(by_repository.items()):
         adjacency: dict[str, set[str]] = defaultdict(set)
         edge_similarity: dict[tuple[str, str], float] = {}
-        tokens_by_id = {candidate_id: tokens for candidate_id, tokens in entries}
         exact_titles_by_id = {
-            row["candidate_id"]: _normalized_exact_title(str(row.get("title") or ""))
-            for row in candidates
-            if row["candidate_id"] in tokens_by_id
+            candidate_id: exact_title for candidate_id, _tokens, exact_title in entries
         }
-        for index, (left_id, left_tokens) in enumerate(entries):
-            for right_id, right_tokens in entries[index + 1 :]:
+        for index, (left_id, left_tokens, left_title) in enumerate(entries):
+            for right_id, right_tokens, right_title in entries[index + 1 :]:
                 union = left_tokens | right_tokens
                 similarity = len(left_tokens & right_tokens) / len(union) if union else 0.0
-                if similarity < near_threshold:
+                exact_match = left_title == right_title
+                near_match = (
+                    len(left_tokens) >= 4
+                    and len(right_tokens) >= 4
+                    and similarity >= near_threshold
+                )
+                if not exact_match and not near_match:
                     continue
                 pair = tuple(sorted((left_id, right_id)))
                 adjacency[left_id].add(right_id)
                 adjacency[right_id].add(left_id)
-                edge_similarity[pair] = similarity
+                edge_similarity[pair] = 1.0 if exact_match else similarity
 
         visited: set[str] = set()
         for start in sorted(adjacency):

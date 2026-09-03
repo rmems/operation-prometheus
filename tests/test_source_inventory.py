@@ -203,6 +203,27 @@ def test_pull_request_record_preserves_full_body_and_discloses_any_text_limit():
     assert "source_text_truncated_at_1024_characters" in record["collection_warnings"]
 
 
+def test_pull_request_record_redacts_secret_spanning_title_limit():
+    secret = "sk-proj-" + ("x" * 24)
+    raw = {
+        "number": 7,
+        "title": ("t" * 1007) + " " + secret + " " + ("z" * 32),
+        "labels": {"totalCount": 0, "nodes": []},
+        "closingIssuesReferences": {"totalCount": 0, "nodes": []},
+    }
+
+    record = _pull_request_record(
+        raw,
+        {"id": "R1", "database_id": 1, "name_with_owner": "rmems/repo"},
+    )
+
+    assert secret not in record["title"]
+    assert "[REDACTED]" in record["title"]
+    assert len(record["title"]) == 1024
+    assert "redacted_1_secret_matches" in record["collection_warnings"]
+    assert "source_text_truncated_at_1024_characters" in record["collection_warnings"]
+
+
 def test_page_hash_excludes_volatile_rate_limit_telemetry():
     kwargs = {
         "scope": "pull_requests",
@@ -368,6 +389,16 @@ def test_collect_source_inventory_rejects_invalid_fixed_timestamp_before_collect
             ["user:rmems"],
             collected_at="not-a-timestamp",
         )
+
+
+def test_collect_source_inventory_normalizes_fixed_timestamp():
+    snapshot = collect_source_inventory(
+        FakeInventoryClient(),
+        ["user:rmems"],
+        collected_at="2026-08-30 12:00:00+00:00",
+    )
+
+    assert snapshot["collected_at"] == "2026-08-30T12:00:00+00:00"
 
 
 def test_collect_source_inventory_excludes_every_non_public_visibility():
