@@ -25,6 +25,7 @@ from pathlib import Path
 try:
     import jsonschema
 except ImportError:
+    jsonschema = None
     print("ERROR: jsonschema is required. Install with: pip install jsonschema", file=sys.stderr)
     sys.exit(2)
 
@@ -37,7 +38,7 @@ from lib.secrets import find_secrets  # noqa: E402
 SCHEMA_V0_PATH = Path(__file__).resolve().parent.parent / "schemas" / "pr_trajectory.schema.json"
 SCHEMA_V1_PATH = Path(__file__).resolve().parent.parent / "schemas" / "trajectory_v1.schema.json"
 HOME_PATH_RE = re.compile(
-    r"(?:"
+    r"("
     r"/home/[A-Za-z0-9._-]+"
     r"|/Users/[A-Za-z0-9._-]+"
     r"|/root(?:/[^\s\"']+)?"

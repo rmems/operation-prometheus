@@ -67,7 +67,7 @@ FEATURE_BUCKET_TO_TRAINING = {
 # "owner/name" and must be looked up through ``_override_key``.
 def _override_key(repo: str, pr: int) -> tuple[str, int]:
     """Build a case-folded (repo, pr) key for the per-PR override tables."""
-    return (str(repo).strip().lower(), pr)
+    return str(repo).strip().lower(), pr
 
 
 # Per-PR overrides live on the dataset card first, so a new extract ships its
@@ -287,7 +287,7 @@ def enrich_linked_issues(
     repo = str(source.get("repo") or "")
     try:
         owner, name = parse_repo(repo)
-    except Exception:
+    except (TypeError, ValueError):
         return list(raw.get("linked_issues") or [])
 
     self_repo = f"{owner}/{name}".lower()
@@ -296,9 +296,9 @@ def enrich_linked_issues(
     except (TypeError, ValueError):
         self_pr = None
 
-    def _key(repo_i: str, num: Any) -> tuple[str, int] | None:
+    def _key(repo_name: str, issue_number: Any) -> tuple[str, int] | None:
         try:
-            return (str(repo_i).lower(), int(num))
+            return str(repo_name).lower(), int(issue_number)
         except (TypeError, ValueError):
             return None
 
@@ -316,19 +316,25 @@ def enrich_linked_issues(
             seen.add(key)
         linked.append(issue)
 
-    def _stub(i_owner: str, i_repo: str, num: int, *, closed_by_pr: bool) -> None:
-        key = (f"{i_owner}/{i_repo}".lower(), num)
-        if key in seen or key == (self_repo, self_pr):
+    def _stub(
+        owner_name: str,
+        repo_name: str,
+        issue_number: int,
+        *,
+        closed_by_pr: bool,
+    ) -> None:
+        stub_key = (f"{owner_name}/{repo_name}".lower(), issue_number)
+        if stub_key in seen or stub_key == (self_repo, self_pr):
             return
-        seen.add(key)
+        seen.add(stub_key)
         linked.append(
             {
-                "number": num,
-                "repo": f"{i_owner}/{i_repo}",
+                "number": issue_number,
+                "repo": f"{owner_name}/{repo_name}",
                 "title": "",
                 "body": "",
                 "state": "unknown",
-                "html_url": f"https://github.com/{i_owner}/{i_repo}/issues/{num}",
+                "html_url": f"https://github.com/{owner_name}/{repo_name}/issues/{issue_number}",
                 "closed_by_pr": closed_by_pr,
                 "synthetic": True,
             }
@@ -339,10 +345,10 @@ def enrich_linked_issues(
         msg = c.get("message") if isinstance(c, dict) else None
         if msg:
             parts.append(str(msg))
-    for i_owner, i_repo, num in parse_linked_issue_numbers(
+    for i_owner, i_repo, issue_num in parse_linked_issue_numbers(
         "\n".join(parts), owner, name
     ):
-        _stub(i_owner, i_repo, num, closed_by_pr=True)
+        _stub(i_owner, i_repo, issue_num, closed_by_pr=True)
 
     if self_pr is not None:
         # Card first, then the legacy shared table (see CARD_OVERRIDE_KEYS).
@@ -542,27 +548,30 @@ def extract_review_signals(raw: dict[str, Any], *, max_items: int = 8) -> list[d
 
     def _push(
         author: str | None,
-        body: str,
+        comment_body: str,
         *,
-        suggestion: str | None = None,
+        suggestion_text: str | None = None,
     ) -> None:
-        body = (body or "").strip()
-        if not body or _is_non_actionable_review_body(body):
+        comment_body = (comment_body or "").strip()
+        if not comment_body or _is_non_actionable_review_body(comment_body):
             return
-        key = _signal_body_key(body)
-        if not key and suggestion:
+        key = _signal_body_key(comment_body)
+        if not key and suggestion_text:
             # Suggestion-only bodies remain valid schema signals.
-            key = "suggestion:" + (_signal_body_key(suggestion) or suggestion.strip().lower()[:120])
+            key = (
+                "suggestion:"
+                + (_signal_body_key(suggestion_text) or suggestion_text.strip().lower()[:120])
+            )
         if not key:
             return
         entry: dict[str, Any] = {
             "author": author or "unknown",
-            "comment": body[:2000],
+            "comment": comment_body[:2000],
             "key": key,
-            "ack": _is_ack_shaped_review_body(body),
+            "ack": _is_ack_shaped_review_body(comment_body),
         }
-        if suggestion:
-            entry["suggestion"] = suggestion
+        if suggestion_text:
+            entry["suggestion"] = suggestion_text
         candidates.append(entry)
 
     # Process reviews first to preserve maintainer approve/request-changes signals
@@ -599,7 +608,7 @@ def extract_review_signals(raw: dict[str, Any], *, max_items: int = 8) -> list[d
                 sug = m.group(1).strip()[:2000]
                 if sug:
                     suggestion = sug
-        _push(c.get("user_login"), body, suggestion=suggestion)
+        _push(c.get("user_login"), body, suggestion_text=suggestion)
 
     for c in raw.get("issue_comments") or []:
         if is_bot_user(c.get("user_login"), c.get("user_type")):
@@ -623,7 +632,7 @@ def extract_review_signals(raw: dict[str, Any], *, max_items: int = 8) -> list[d
 # failed" are ordinary failure reports, and matching them here would systematically
 # invert them to `pass`.
 _EXPECTED_FAILURE_CUE = re.compile(
-    r"(?:"
+    r"("
     # Deliberately NOT widened to allow modifiers between the marker and the
     # fail word: "expected to be failing on Linux until the runner is repaired"
     # describes a known-broken run, and suppressing it fabricates a pass.
@@ -656,7 +665,7 @@ _FAIL_WORD = re.compile(r"\b(?:failed|failing|failures?)\b")
 # An expected failure that did not occur — the negative test accepted input it was
 # supposed to reject. Intent alone does not prove the failure happened.
 _EXPECTED_FAILURE_CONTRADICTED = re.compile(
-    r"(?:"
+    r"("
     r"\bbut\s+(?:it\s+)?(?:passed|succeeded|was\s+accepted)\b"
     r"|\b(?:passed|succeeded)\s+unexpectedly\b"
     r"|\bunexpectedly\s+(?:passed|succeeded)\b"
@@ -712,11 +721,11 @@ def _fail_words_all_expected(low: str) -> bool:
 
 # Unchecked markdown task items; text capture may be empty (bare `- [ ]`).
 _UNCHECKED_CHECKBOX_LINE = re.compile(
-    r"^(?P<full>\s*[-*]\s*\[\s\]\s*(?P<text>.*?))\s*$"
+    r"^(?P<full>\s*[-*]\s*\[\s]\s*(?P<text>.*?))\s*$"
 )
 # Negated / required phrasing that must never be treated as optional.
 _NEGATED_OPTIONAL_CUE = re.compile(
-    r"(?:"
+    r"("
     r"\bnot\s+optional\b"
     r"|\bisn'?t\s+optional\b"
     r"|\bnon[- ]optional\b"
@@ -770,7 +779,7 @@ _ZERO_FAIL_SUMMARY = re.compile(
     r"\b(?:0|no)\s+(?:tests?\s+)?fail(?:ed|ing|ures?)\b", re.IGNORECASE
 )
 _RESOLVED_FAILED_LINE = re.compile(
-    r"(?:"
+    r"("
     r"\b(?:previously|formerly|no longer)\s+fail(?:ed|ing|ures?)?\b"
     r"|\bfail(?:ed|ing)\s+(?:tests?\s+)?(?:are\s+)?now\s+pass"
     r"|\bhas\s+not\s+fail(?:ed|ing)\b"
@@ -1114,7 +1123,7 @@ def _decode_git_path(token: str) -> str:
                 .encode("latin-1")
                 .decode("utf-8", errors="replace")
             )
-        except Exception:
+        except (UnicodeDecodeError, UnicodeEncodeError):
             s = inner.replace('\\"', '"').replace("\\\\", "\\")
     # Strip a/ or b/ prefix used by unified diffs.
     if s.startswith("a/") or s.startswith("b/"):

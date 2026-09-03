@@ -93,18 +93,19 @@ def render_block(manifests: list[dict[str, Any]]) -> str:
     total_records = sum(int(m.get("record_count") or 0) for m in manifests)
     last_updated = max((str(m.get("created_at") or "") for m in manifests), default="")
 
-    out: list[str] = [BEGIN_MARKER, ""]
-    out.append(f"**Last updated:** {last_updated or 'unknown'}  ")
-    out.append(
-        f"**Extracts:** {len(manifests)} · **Trajectories:** {total_records}  "
-    )
-    out.append("")
-    out.append("<!-- Derived from datasets/manifests/*.manifest.json — do not edit by hand. -->")
-    out.append("")
-    out.append("## Extracted datasets")
-    out.append("")
-    out.append("| dataset | source repo | records | schema | extracted |")
-    out.append("|---------|-------------|---------|--------|-----------|")
+    out: list[str] = [
+        BEGIN_MARKER,
+        "",
+        f"**Last updated:** {last_updated or 'unknown'}  ",
+        f"**Extracts:** {len(manifests)} · **Trajectories:** {total_records}  ",
+        "",
+        "<!-- Derived from datasets/manifests/*.manifest.json — do not edit by hand. -->",
+        "",
+        "## Extracted datasets",
+        "",
+        "| dataset | source repo | records | schema | extracted |",
+        "|---------|-------------|---------|--------|-----------|",
+    ]
     for m in manifests:
         out.append(
             "| `{name}` | {repo} | {count} | {schema} | {created} |".format(
@@ -147,11 +148,14 @@ def load_index_entries(docs_dir: Path) -> list[tuple[str, str, str]]:
 
 def render_index_block(entries: list[tuple[str, str, str]]) -> str:
     """Build the generated Index table for _index.md (markers included)."""
-    out: list[str] = [INDEX_BEGIN_MARKER, ""]
-    out.append("<!-- Derived from the index line in each per-repo doc - do not edit by hand. -->")
-    out.append("")
-    out.append("| Source repo | Doc | Status |")
-    out.append("|-------------|-----|--------|")
+    out: list[str] = [
+        INDEX_BEGIN_MARKER,
+        "",
+        "<!-- Derived from the index line in each per-repo doc - do not edit by hand. -->",
+        "",
+        "| Source repo | Doc | Status |",
+        "|-------------|-----|--------|",
+    ]
     for repo, doc, status in entries:
         out.append(f"| {repo} | [{doc}]({doc}) | {status} |")
     out.append("")
