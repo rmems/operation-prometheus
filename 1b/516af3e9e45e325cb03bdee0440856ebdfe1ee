@@ -1,0 +1,31 @@
+scripts/build_status.py
+  s_cad6814abfdb34::t_8fe6c93ce16587 96-108,151-158
+scripts/lib/github_client.py
+  s_cad6814abfdb34::t_29f3af1e12a39f 111
+  s_cad6814abfdb34::t_7207cb58ef6bfa 149-150,163
+scripts/lib/normalize.py
+  s_cad6814abfdb34::t_e19ba26058f73d 635,668,724,728,782
+  s_cad6814abfdb34::t_315f466bccd71a 551,553,555-556,558-559,561-564,569,571,573-574,611
+  s_cad6814abfdb34::t_5dc609f89784f5 70,290,299,301,319-327,329,332-333,337,348,351,1126
+scripts/lib/bots.py
+  s_cad6814abfdb34::t_f74e64aabc926f 68,89
+scripts/validate_jsonl.py
+  s_cad6814abfdb34::t_fbd4919ba9df6e 28
+  s_cad6814abfdb34::t_722a977692e6b1 41
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.5.2",
+  "base_commit_sha": "1b516af3e9e45e325cb03bdee0440856ebdfe1ee",
+  "prompts": {},
+  "sessions": {
+    "s_cad6814abfdb34": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a06932-71b0-7552-ac2f-f3973e91604f",
+        "model": "gpt-5.3-codex-spark"
+      },
+      "human_author": "Raul Montoya Cardenas <montoyaraul34@gmail.com>"
+    }
+  }
+}
