@@ -81,13 +81,25 @@ def _repository_path(owner: dict[str, str]) -> str:
     return f"/users/{login}/repos?type=owner&sort=full_name&direction=asc"
 
 
-def _safe_repository(raw: dict[str, Any], owner: dict[str, str]) -> dict[str, Any]:
+def _repository_license(raw: dict[str, Any]) -> dict[str, Any]:
     license_obj = raw.get("license") or {}
+    return {
+        "spdx_id": license_obj.get("spdx_id"),
+        "name": license_obj.get("name"),
+        "url": license_obj.get("url"),
+    }
+
+
+def _repository_owner_login(raw: dict[str, Any], owner: dict[str, str]) -> str:
+    return (raw.get("owner") or {}).get("login") or owner["login"]
+
+
+def _safe_repository(raw: dict[str, Any], owner: dict[str, str]) -> dict[str, Any]:
     selected = {
         "id": raw.get("node_id"),
         "database_id": raw.get("id"),
         "name_with_owner": raw.get("full_name"),
-        "owner_login": ((raw.get("owner") or {}).get("login") or owner["login"]),
+        "owner_login": _repository_owner_login(raw, owner),
         "owner_kind": owner["kind"],
         "name": raw.get("name"),
         "url": raw.get("html_url"),
@@ -99,11 +111,7 @@ def _safe_repository(raw: dict[str, Any], owner: dict[str, str]) -> dict[str, An
         "created_at": raw.get("created_at"),
         "updated_at": raw.get("updated_at"),
         "pushed_at": raw.get("pushed_at"),
-        "license": {
-            "spdx_id": license_obj.get("spdx_id"),
-            "name": license_obj.get("name"),
-            "url": license_obj.get("url"),
-        },
+        "license": _repository_license(raw),
     }
     selected["source_hash"] = sha256_json(selected)
     return selected
@@ -117,6 +125,15 @@ def _is_non_public(raw: dict[str, Any]) -> bool:
     return raw.get("private") is True or raw.get("visibility") != "public"
 
 
+def _claim_repository_id(repo: dict[str, Any], seen_ids: set[str]) -> None:
+    repo_id = str(repo.get("id") or "")
+    if not repo_id:
+        raise GitHubError(f"Missing or duplicate repository node ID for {repo.get('name_with_owner')}")
+    if repo_id in seen_ids:
+        raise GitHubError(f"Missing or duplicate repository node ID for {repo.get('name_with_owner')}")
+    seen_ids.add(repo_id)
+
+
 def _accept_repository(
     raw: Any,
     owner: dict[str, str],
@@ -128,10 +145,7 @@ def _accept_repository(
     if _is_non_public(raw):
         return None
     repo = _safe_repository(raw, owner)
-    repo_id = str(repo.get("id") or "")
-    if not repo_id or repo_id in seen_ids:
-        raise GitHubError(f"Missing or duplicate repository node ID for {repo.get('name_with_owner')}")
-    seen_ids.add(repo_id)
+    _claim_repository_id(repo, seen_ids)
     return repo
 
 
@@ -206,6 +220,31 @@ def _collect_repositories(
     return repositories, pages, non_public_ignored
 
 
+def _validate_owners(owner_specs: list[str]) -> list[dict[str, str]]:
+    owners = [parse_owner_spec(value) for value in owner_specs]
+    if not owners:
+        raise ValueError("At least one owner is required")
+    owner_keys = {(row["kind"], row["login"].casefold()) for row in owners}
+    if len(owner_keys) != len(owners):
+        raise ValueError("Duplicate owner specification")
+    return owners
+
+
+def _attach_pull_requests(
+    client: GitHubClient,
+    repositories: list[dict[str, Any]],
+    pages: list[dict[str, Any]],
+) -> list[dict[str, Any]]:
+    """Collect each repository's PRs and stamp per-repo counts and hashes."""
+    pull_requests: list[dict[str, Any]] = []
+    for repository in repositories:
+        repo_prs = _collect_pull_requests(client, repository, pages)
+        repository["pull_request_total_count"] = len(repo_prs)
+        repository["source_hash"] = _repository_source_hash(repository)
+        pull_requests.extend(repo_prs)
+    return pull_requests
+
+
 def collect_source_inventory(
     client: GitHubClient,
     owner_specs: list[str],
@@ -217,21 +256,11 @@ def collect_source_inventory(
     The function either returns a snapshot with ``complete: true`` or raises;
     callers must never publish an incomplete candidate ledger.
     """
-    owners = [parse_owner_spec(value) for value in owner_specs]
-    if not owners:
-        raise ValueError("At least one owner is required")
-    owner_keys = {(row["kind"], row["login"].casefold()) for row in owners}
-    if len(owner_keys) != len(owners):
-        raise ValueError("Duplicate owner specification")
+    owners = _validate_owners(owner_specs)
     frozen_collected_at = _validate_collected_at(collected_at) if collected_at else _now_utc()
 
     repositories, pages, non_public_ignored = _collect_repositories(client, owners)
-    pull_requests: list[dict[str, Any]] = []
-    for repository in repositories:
-        repo_prs = _collect_pull_requests(client, repository, pages)
-        repository["pull_request_total_count"] = len(repo_prs)
-        repository["source_hash"] = _repository_source_hash(repository)
-        pull_requests.extend(repo_prs)
+    pull_requests = _attach_pull_requests(client, repositories, pages)
 
     snapshot = {
         "schema_version": SNAPSHOT_SCHEMA_VERSION,

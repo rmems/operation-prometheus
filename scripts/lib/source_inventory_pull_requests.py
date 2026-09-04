@@ -101,43 +101,57 @@ def _issue_record(raw: dict[str, Any]) -> dict[str, Any]:
 def _sanitize_source_text(value: Any, *, limit: int | None = None) -> tuple[str, list[str]]:
     text = str(value or "")
     sanitized, warnings = sanitize_text(text)
-    truncated = limit is not None and len(sanitized) > limit
-    if truncated:
-        sanitized = sanitized[:limit]
-    if truncated:
-        warnings.append(f"source_text_truncated_at_{limit}_characters")
-    return sanitized, sorted(set(warnings))
+    if limit is None:
+        return sanitized, sorted(set(warnings))
+    if len(sanitized) <= limit:
+        return sanitized, sorted(set(warnings))
+    warnings.append(f"source_text_truncated_at_{limit}_characters")
+    return sanitized[:limit], sorted(set(warnings))
+
+
+def _source_text_bindings(raw: dict[str, Any]) -> dict[str, str]:
+    """Original (unsanitized) title/body, bound into the source hash."""
+    return {
+        "title": str(raw.get("title") or ""),
+        "body": str(raw.get("bodyText") or ""),
+    }
 
 
 def _pull_request_source_hash(raw: dict[str, Any], record: dict[str, Any]) -> str:
     """Hash the complete, sanitized record while binding original source text."""
     payload = {key: value for key, value in record.items() if key != "source_hash"}
-    payload["title"] = str(raw.get("title") or "")
-    payload["body"] = str(raw.get("bodyText") or "")
+    payload.update(_source_text_bindings(raw))
     return sha256_json(payload)
+
+
+def _label_connection(raw: dict[str, Any]) -> tuple[list[Any], int]:
+    connection = raw.get("labels") or {}
+    return connection.get("nodes") or [], int(connection.get("totalCount") or 0)
 
 
 def _extract_labels(raw: dict[str, Any], repository: dict[str, Any]) -> list[str]:
     """Return the deduped, sorted label names, rejecting truncated pagination."""
-    label_connection = raw.get("labels") or {}
-    label_nodes = label_connection.get("nodes") or []
-    label_total = int(label_connection.get("totalCount") or 0)
+    label_nodes, label_total = _label_connection(raw)
     if len(label_nodes) != label_total:
         raise GitHubError(
             f"Label pagination is incomplete for {repository['name_with_owner']}#{raw.get('number')}: "
             f"expected {label_total}, got {len(label_nodes)}"
         )
-    labels = [
+    labels = {
         str(node.get("name"))
         for node in label_nodes
         if isinstance(node, dict) and node.get("name")
-    ]
-    return sorted(set(labels), key=str.casefold)
+    }
+    return sorted(labels, key=str.casefold)
+
+
+def _linked_issue_ids(record: dict[str, Any]) -> list[str]:
+    return [str(item.get("id") or "") for item in record["linked_issues"]]
 
 
 def _validate_linked_issue_ids(record: dict[str, Any]) -> None:
     """Reject missing or duplicate linked-issue IDs in a pull-request record."""
-    ids = [str(item.get("id") or "") for item in record["linked_issues"]]
+    ids = _linked_issue_ids(record)
     has_missing = any(not issue_id for issue_id in ids)
     has_duplicates = len(set(ids)) != len(ids)
     if has_missing or has_duplicates:
@@ -169,6 +183,10 @@ def _linked_issue_records(closing: dict[str, Any]) -> list[dict[str, Any]]:
     ]
 
 
+def _pr_body_sha256(raw: dict[str, Any]) -> str:
+    return hashlib.sha256(str(raw.get("bodyText") or "").encode("utf-8")).hexdigest()
+
+
 def _pull_request_record(raw: dict[str, Any], repository: dict[str, Any]) -> dict[str, Any]:
     title, title_warnings = _sanitize_source_text(raw.get("title"), limit=1024)
     body, body_warnings = _sanitize_source_text(raw.get("bodyText"))
@@ -186,7 +204,7 @@ def _pull_request_record(raw: dict[str, Any], repository: dict[str, Any]) -> dic
         "draft": bool(raw.get("isDraft")),
         "title": title,
         "body": body,
-        "body_sha256": hashlib.sha256(str(raw.get("bodyText") or "").encode("utf-8")).hexdigest(),
+        "body_sha256": _pr_body_sha256(raw),
         "created_at": raw.get("createdAt"),
         "updated_at": raw.get("updatedAt"),
         "closed_at": raw.get("closedAt"),
@@ -236,6 +254,25 @@ class _ClosingIssuePagination(NamedTuple):
     collected: list[dict[str, Any]]
 
 
+def _connection_parts(
+    connection: dict[str, Any],
+) -> tuple[list[Any], dict[str, Any], str | None, int]:
+    """Unpack a GraphQL connection into (nodes, page_info, end_cursor, total)."""
+    page_info = connection.get("pageInfo") or {}
+    return (
+        connection.get("nodes") or [],
+        page_info,
+        page_info.get("endCursor"),
+        int(connection.get("totalCount") or 0),
+    )
+
+
+def _cursor_stalled(cursor: str | None, next_cursor: str | None, page_info: dict[str, Any]) -> bool:
+    if not page_info.get("hasNextPage"):
+        return False
+    return next_cursor == cursor
+
+
 def _process_closing_issues_page(
     ctx: _ClosingIssuePagination,
     cursor: str | None,
@@ -243,9 +280,7 @@ def _process_closing_issues_page(
 ) -> tuple[dict[str, Any], str | None]:
     """Fetch and record one closing-issues page; return (page_info, next_cursor)."""
     connection, data, headers = _fetch_closing_issues_page(ctx.client, ctx.pr_id, cursor)
-    nodes = connection.get("nodes") or []
-    page_info = connection.get("pageInfo") or {}
-    next_cursor = page_info.get("endCursor")
+    nodes, page_info, next_cursor, total_count = _connection_parts(connection)
     ctx.pages.append(
         _page_evidence(
             _Page(
@@ -258,25 +293,29 @@ def _process_closing_issues_page(
                 repository_id=ctx.repository_id,
                 cursor=cursor,
                 next_cursor=next_cursor,
-                total_count=int(connection.get("totalCount") or 0),
+                total_count=total_count,
             )
         )
     )
     ctx.collected.extend(_issue_record(item) for item in nodes if isinstance(item, dict))
-    if next_cursor == cursor and page_info.get("hasNextPage"):
+    if _cursor_stalled(cursor, next_cursor, page_info):
         raise GitHubError(f"Closing-issue pagination cursor repeated for {ctx.pr_id}")
     return page_info, next_cursor
+
+
+def _first_page_issue_records(first_connection: dict[str, Any]) -> list[dict[str, Any]]:
+    return [
+        _issue_record(node)
+        for node in (first_connection.get("nodes") or [])
+        if isinstance(node, dict)
+    ]
 
 
 def _collect_additional_closing_issues(
     ctx: _ClosingIssuePagination,
     first_connection: dict[str, Any],
 ) -> list[dict[str, Any]]:
-    ctx.collected.extend(
-        _issue_record(node)
-        for node in (first_connection.get("nodes") or [])
-        if isinstance(node, dict)
-    )
+    ctx.collected.extend(_first_page_issue_records(first_connection))
     page_info = first_connection.get("pageInfo") or {}
     cursor = page_info.get("endCursor")
     page_index = 1
@@ -323,18 +362,14 @@ def _fetch_pull_request_page(
         {"owner": owner, "name": name, "cursor": cursor},
     )
     connection = _pull_request_connection(data, crawl.repository)
-    total_count = int(connection.get("totalCount") or 0)
-    if expected_total is not None and expected_total != total_count:
+    nodes, page_info, _, total_count = _connection_parts(connection)
+    if expected_total is None:
+        return nodes, page_info, total_count, data, headers
+    if expected_total != total_count:
         raise GitHubError(
             f"Pull-request total changed during collection for {crawl.repository['name_with_owner']}"
         )
-    return (
-        connection.get("nodes") or [],
-        connection.get("pageInfo") or {},
-        total_count,
-        data,
-        headers,
-    )
+    return nodes, page_info, total_count, data, headers
 
 
 def _claim_pr_id(crawl: _PullRequestCrawl, raw: Any) -> str:
@@ -342,7 +377,11 @@ def _claim_pr_id(crawl: _PullRequestCrawl, raw: Any) -> str:
     if not isinstance(raw, dict):
         raise GitHubError(f"Non-object pull request in {crawl.repository['name_with_owner']}")
     pr_id = str(raw.get("id") or "")
-    if not pr_id or pr_id in crawl.seen_ids:
+    if not pr_id:
+        raise GitHubError(
+            f"Missing or duplicate pull-request node ID in {crawl.repository['name_with_owner']}"
+        )
+    if pr_id in crawl.seen_ids:
         raise GitHubError(
             f"Missing or duplicate pull-request node ID in {crawl.repository['name_with_owner']}"
         )
@@ -407,7 +446,9 @@ def _advance_pr_cursor(
     """Return the cursor for the next page, or None when pagination is done."""
     if not has_next:
         return None
-    if not next_cursor or next_cursor == cursor:
+    if not next_cursor:
+        raise GitHubError(f"Pull-request pagination cursor stalled for {repository['name_with_owner']}")
+    if next_cursor == cursor:
         raise GitHubError(f"Pull-request pagination cursor stalled for {repository['name_with_owner']}")
     return next_cursor
 
