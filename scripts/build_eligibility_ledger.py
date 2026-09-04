@@ -103,6 +103,20 @@ def _validate_inputs(snapshot: dict, policy: dict) -> None:
     _raise_validation_errors(errors)
 
 
+def _row_validation_errors(name: str, rows: list, schema_path: Path) -> list[tuple[str, object]]:
+    validator = _validator(schema_path)
+    return [
+        (f"{name}[{index}]", error)
+        for index, row in enumerate(rows)
+        for error in validator.iter_errors(row)
+    ]
+
+
+def _document_validation_errors(name: str, value: dict, schema_path: Path) -> list[tuple[str, object]]:
+    validator = _validator(schema_path)
+    return [(name, error) for error in validator.iter_errors(value)]
+
+
 def _validate_artifacts(artifacts: dict, rendered: dict[str, bytes]) -> None:
     errors: list[tuple[str, object]] = []
     for name, rows, schema_path in (
@@ -110,17 +124,12 @@ def _validate_artifacts(artifacts: dict, rendered: dict[str, bytes]) -> None:
         ("candidate", artifacts["candidates"], LEDGER_SCHEMA),
         ("duplicate", artifacts["duplicates"], DUPLICATE_SCHEMA),
     ):
-        validator = _validator(schema_path)
-        for index, row in enumerate(rows):
-            for error in validator.iter_errors(row):
-                errors.append((f"{name}[{index}]", error))
+        errors.extend(_row_validation_errors(name, rows, schema_path))
     for name, value, schema_path in (
         ("baseline_report", artifacts["baseline_report"], BASELINE_REPORT_SCHEMA),
         ("manifest", json.loads(rendered["manifest.json"]), MANIFEST_SCHEMA),
     ):
-        validator = _validator(schema_path)
-        for error in validator.iter_errors(value):
-            errors.append((name, error))
+        errors.extend(_document_validation_errors(name, value, schema_path))
     errors.sort(key=lambda item: (item[0], [str(part) for part in item[1].absolute_path]))
     _raise_validation_errors(errors)
 

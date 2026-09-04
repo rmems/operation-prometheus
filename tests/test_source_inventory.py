@@ -10,6 +10,7 @@ from lib.github_client import GitHubClient, GitHubError, _SafeRedirectHandler
 from lib.source_inventory import (
     CLOSING_ISSUES_QUERY,
     PULL_REQUESTS_QUERY,
+    _Page,
     _page_evidence,
     _pull_request_source_hash,
     _pull_request_record,
@@ -233,12 +234,10 @@ def test_page_hash_excludes_volatile_rate_limit_telemetry():
         "headers": {},
     }
     first = _page_evidence(
-        response={"repository": {"id": "R1"}, "rateLimit": {"remaining": 10}},
-        **kwargs,
+        _Page(response={"repository": {"id": "R1"}, "rateLimit": {"remaining": 10}}, **kwargs),
     )
     second = _page_evidence(
-        response={"repository": {"id": "R1"}, "rateLimit": {"remaining": 9}},
-        **kwargs,
+        _Page(response={"repository": {"id": "R1"}, "rateLimit": {"remaining": 9}}, **kwargs),
     )
     assert first["response_sha256"] == second["response_sha256"]
 
