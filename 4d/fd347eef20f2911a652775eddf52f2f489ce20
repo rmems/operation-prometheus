@@ -1,0 +1,33 @@
+qodana.yaml
+  ai_agent 1-4,6-12,17-26
+scripts/lib/normalize.py
+  s_8d43daab2c823d::t_a93dcfd994507e 290,299,301,319-326,332-333,337,348,351,551,555-556,558,561-564,569,571,635,668,724,728,782,1126
+.github/workflows/qodana_code_quality.yml
+  s_8d43daab2c823d::t_6e40fe6075362d 1-28
+scripts/lib/bots.py
+  s_8d43daab2c823d::t_6e40fe6075362d 68,89
+scripts/build_status.py
+  s_8d43daab2c823d::t_6e40fe6075362d 96-108,151-158
+scripts/validate_jsonl.py
+  s_8d43daab2c823d::t_6e40fe6075362d 28,41
+.cursor/Dockerfile
+  s_8d43daab2c823d::t_6e40fe6075362d 11,17
+scripts/lib/github_client.py
+  ai_agent 179
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.5.2",
+  "base_commit_sha": "4dfd347eef20f2911a652775eddf52f2f489ce20",
+  "prompts": {},
+  "sessions": {
+    "s_8d43daab2c823d": {
+      "agent_id": {
+        "tool": "cursor",
+        "id": "7a3125d7-4082-4be7-a1dc-5b378e27976f",
+        "model": "kimi-k3"
+      },
+      "human_author": "Raul Montoya Cardenas <montoyaraul34@gmail.com>"
+    }
+  }
+}
