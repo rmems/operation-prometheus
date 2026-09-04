@@ -236,10 +236,24 @@ def _check_linked_issues_complete(record: dict[str, Any]) -> None:
     _validate_linked_issue_ids(record)
 
 
+def _author_record(raw: dict[str, Any]) -> dict[str, Any]:
+    author = raw.get("author") or {}
+    return {"login": author.get("login"), "type": author.get("__typename")}
+
+
+def _linked_issue_records(closing: dict[str, Any]) -> list[dict[str, Any]]:
+    return [
+        _issue_record(node)
+        for node in (closing.get("nodes") or [])
+        if isinstance(node, dict)
+    ]
+
+
 def _pull_request_record(raw: dict[str, Any], repository: dict[str, Any]) -> dict[str, Any]:
     title, title_warnings = _sanitize_source_text(raw.get("title"), limit=1024)
     body, body_warnings = _sanitize_source_text(raw.get("bodyText"))
     closing = raw.get("closingIssuesReferences") or {}
+    merge_commit = raw.get("mergeCommit") or {}
     selected = {
         "id": raw.get("id"),
         "database_id": raw.get("databaseId"),
@@ -259,20 +273,13 @@ def _pull_request_record(raw: dict[str, Any], repository: dict[str, Any]) -> dic
         "merged_at": raw.get("mergedAt"),
         "base_oid": raw.get("baseRefOid"),
         "head_oid": raw.get("headRefOid"),
-        "merge_commit_oid": ((raw.get("mergeCommit") or {}).get("oid")),
+        "merge_commit_oid": merge_commit.get("oid"),
         "additions": raw.get("additions"),
         "deletions": raw.get("deletions"),
         "changed_files": raw.get("changedFiles"),
-        "author": {
-            "login": ((raw.get("author") or {}).get("login")),
-            "type": ((raw.get("author") or {}).get("__typename")),
-        },
+        "author": _author_record(raw),
         "labels": _extract_labels(raw, repository),
-        "linked_issues": [
-            _issue_record(node)
-            for node in (closing.get("nodes") or [])
-            if isinstance(node, dict)
-        ],
+        "linked_issues": _linked_issue_records(closing),
         "linked_issues_total_count": int(closing.get("totalCount") or 0),
         "collection_warnings": sorted(set(title_warnings + body_warnings)),
     }
