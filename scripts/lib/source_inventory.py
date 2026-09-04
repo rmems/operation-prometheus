@@ -119,7 +119,11 @@ def _validate_collected_at(value: str) -> str:
 def parse_owner_spec(value: str) -> dict[str, str]:
     """Parse ``user:login`` or ``org:login`` into a normalized owner record."""
     kind, separator, login = value.strip().partition(":")
-    if not separator or kind not in {"user", "org"} or not login.strip():
+    if not separator:
+        raise ValueError(f"Invalid owner {value!r}; expected user:LOGIN or org:LOGIN")
+    if kind not in {"user", "org"}:
+        raise ValueError(f"Invalid owner {value!r}; expected user:LOGIN or org:LOGIN")
+    if not login.strip():
         raise ValueError(f"Invalid owner {value!r}; expected user:LOGIN or org:LOGIN")
     return {"kind": kind, "login": login.strip()}
 
