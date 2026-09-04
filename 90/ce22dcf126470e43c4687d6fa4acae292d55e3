@@ -1,0 +1,23 @@
+scripts/lib/source_inventory_common.py
+  s_8d43daab2c823d::t_09a11c53af9af1 1-62
+scripts/lib/source_inventory_pull_requests.py
+  s_8d43daab2c823d::t_569f774c991813 1-450
+scripts/lib/source_inventory.py
+  s_8d43daab2c823d::t_004fe337994e2e 6-10,20-32,36-48
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.5.2",
+  "base_commit_sha": "90ce22dcf126470e43c4687d6fa4acae292d55e3",
+  "prompts": {},
+  "sessions": {
+    "s_8d43daab2c823d": {
+      "agent_id": {
+        "tool": "cursor",
+        "id": "7a3125d7-4082-4be7-a1dc-5b378e27976f",
+        "model": "kimi-k3"
+      },
+      "human_author": "Raul Montoya Cardenas <montoyaraul34@gmail.com>"
+    }
+  }
+}
