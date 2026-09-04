@@ -176,7 +176,7 @@ class GitHubClient:
         """Read and decode an HTTPError body once, tolerating read failures."""
         try:
             err_body = exc.read()
-        except Exception:
+        except OSError:
             err_body = b""
         return err_body.decode("utf-8", errors="replace")
 

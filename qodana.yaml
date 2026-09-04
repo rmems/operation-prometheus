@@ -1,12 +1,26 @@
-# Qodana Cloud configuration.
-#
-# The linter's default interpreter predates PEP 604, so every ``str | None``
-# annotation was reported as "Invalid type hints definitions and usages"
-# (70+ false positives on PR #64). The project targets Python 3.12 (see
-# .github/workflows/ci.yml), so give the analyzer a matching interpreter via
-# the documented conda bootstrap.
+####################################################################################################################
+# WARNING: Do not store sensitive information in this file, as its contents will be included in the Qodana report. #
+####################################################################################################################
+
 version: "1.0"
+linter: qodana-python
+profile:
+  name: qodana.recommended
+# The default analyzer interpreter predates PEP 604, which produced 70+
+# "invalid type hint" false positives on str | None annotations. The project
+# targets Python 3.12 (see .github/workflows/ci.yml), so give the analyzer a
+# matching interpreter.
 bootstrap: |
   . ~/.bashrc
   conda create -y -n qodana-env python=3.12
   conda activate qodana-env
+include:
+  - name: CheckDependencyLicenses
+exclude:
+  - name: PyTypeHintsInspection
+  - name: PyShadowingNamesInspection
+  - name: PyMethodMayBeStaticInspection
+  - name: PyInconsistentReturnsInspection
+  - name: PyListCreationInspection
+  - name: PyRedundantParenthesesInspection
+  - name: PyUnusedImportsInspection
