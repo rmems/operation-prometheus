@@ -4,8 +4,8 @@
 
 <!-- BEGIN GENERATED: scripts/build_status.py -->
 
-**Last updated:** 2026-08-20  
-**Extracts:** 15 · **Trajectories:** 72  
+**Last updated:** 2026-09-04  
+**Extracts:** 21 · **Trajectories:** 97  
 
 <!-- Derived from datasets/manifests/*.manifest.json — do not edit by hand. -->
 
@@ -28,6 +28,12 @@
 | `thalamic-relay-v0` | rmems/thalamic-relay | 3 | pr_trajectory_v0 | 2026-08-20 |
 | `worktrees-hives-v0` | rmems/worktrees-hives | 5 | pr_trajectory_v0 | 2026-08-20 |
 | `xai-dissect-v0` | rmems/xai-dissect | 4 | pr_trajectory_v0 | 2026-08-20 |
+| `agoge-forger-v0` | rmems/agoge-forger | 4 | pr_trajectory_v0 | 2026-09-04 |
+| `limbic-critic-v0` | rmems/limbic-critic | 4 | pr_trajectory_v0 | 2026-09-04 |
+| `liquidcortex-jl-v0` | rmems/LiquidCortex.jl | 3 | pr_trajectory_v0 | 2026-09-04 |
+| `nir-rs-v0` | Limen-Neural/nir-rs | 4 | pr_trajectory_v0 | 2026-09-04 |
+| `silicon-hdl-v0` | rmems/silicon-hdl | 5 | pr_trajectory_v0 | 2026-09-04 |
+| `synaptic-mesh-v0` | Limen-Neural/synaptic-mesh | 5 | pr_trajectory_v0 | 2026-09-04 |
 
 ## Trajectory quality
 
@@ -177,6 +183,61 @@
 | #34 | export | feature | feature | 0.90 | 7 | 3 |
 | #32 | export | feature | feature | 0.95 | 8 | 3 |
 | #24 | ml-infra | feature | feature | 0.95 | 7 | 3 |
+
+### agoge-forger-v0
+
+| PR | domain | training_use | task_type | quality | signals | validation |
+|----|--------|--------------|-----------|---------|---------|------------|
+| #120 | ml-infra | feature | feature | 0.90 | 7 | 4 |
+| #86 | training | repair | bugfix | 0.90 | 2 | 4 |
+| #85 | ml-infra | repair | bugfix | 0.85 | 5 | 4 |
+| #67 | training | repair | bugfix | 0.95 | 8 | 4 |
+
+### limbic-critic-v0
+
+| PR | domain | training_use | task_type | quality | signals | validation |
+|----|--------|--------------|-----------|---------|---------|------------|
+| #30 | snn | feature | feature | 0.95 | 7 | 4 |
+| #29 | api | repair | refactor | 0.95 | 3 | 3 |
+| #3 | api | repair | refactor | 0.75 | 1 | 1 |
+| #2 | snn | repair | refactor | 0.75 | 3 | 1 |
+
+### liquidcortex-jl-v0
+
+| PR | domain | training_use | task_type | quality | signals | validation |
+|----|--------|--------------|-----------|---------|---------|------------|
+| #45 | gpu-compute | feature | feature | 0.95 | 8 | 4 |
+| #33 | snn | validation | test | 0.90 | 4 | 3 |
+| #12 | snn | repair | refactor | 0.95 | 8 | 3 |
+
+### nir-rs-v0
+
+| PR | domain | training_use | task_type | quality | signals | validation |
+|----|--------|--------------|-----------|---------|---------|------------|
+| #24 | api | feature | feature | 0.95 | 4 | 4 |
+| #23 | io | repair | security | 0.90 | 8 | 4 |
+| #20 | io | feature | feature | 0.90 | 8 | 4 |
+| #18 | io | feature | feature | 0.95 | 8 | 2 |
+
+### silicon-hdl-v0
+
+| PR | domain | training_use | task_type | quality | signals | validation |
+|----|--------|--------------|-----------|---------|---------|------------|
+| #81 | hdl | feature | feature | 0.95 | 8 | 4 |
+| #52 | hdl | feature | feature | 0.95 | 5 | 4 |
+| #51 | hdl | feature | feature | 0.95 | 8 | 4 |
+| #15 | hdl | review-to-patch | bugfix | 0.95 | 8 | 3 |
+| #11 | hdl | repair | bugfix | 0.90 | 8 | 3 |
+
+### synaptic-mesh-v0
+
+| PR | domain | training_use | task_type | quality | signals | validation |
+|----|--------|--------------|-----------|---------|---------|------------|
+| #30 | snn | repair | refactor | 0.90 | 4 | 3 |
+| #8 | snn | feature | feature | 0.95 | 8 | 3 |
+| #7 | api | repair | refactor | 0.90 | 8 | 2 |
+| #2 | snn | feature | feature | 0.75 | 4 | 1 |
+| #1 | snn | feature | feature | 0.90 | 1 | 2 |
 
 <!-- END GENERATED -->
 
