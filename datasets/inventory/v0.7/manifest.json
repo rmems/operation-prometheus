@@ -1,0 +1,102 @@
+{
+  "baseline_report_complete": true,
+  "collector_version": "0.6.0",
+  "counts": {
+    "active_public_repository_count": 46,
+    "candidate_record_count": 1006,
+    "closed_unmerged_pr_count": 62,
+    "duplicate_group_count": 39,
+    "exact_current_duplicate_candidate_count": 1,
+    "existing_prometheus_row_count": 72,
+    "existing_unique_pr_count": 71,
+    "formally_issue_linked_merged_pr_count": 456,
+    "merged_non_dependency_pr_count": 710,
+    "public_repository_count": 46,
+    "repository_record_count": 46,
+    "state_counts": {
+      "excluded": 288,
+      "included_negative": 0,
+      "included_positive": 0,
+      "quarantined": 615,
+      "watchlist_open": 103
+    }
+  },
+  "files": {
+    "baseline-report.json": {
+      "bytes": 16920,
+      "sha256": "8009feebd875533d0831a5fb969757e2aba95368231c554e585a091d2a555863"
+    },
+    "candidates.jsonl": {
+      "bytes": 3744652,
+      "sha256": "6d3c7aaf781a156d5879bc763ab70fcf369470335b102178e886a0c90debc051"
+    },
+    "duplicates.jsonl": {
+      "bytes": 47508,
+      "sha256": "77547a1488e052c5e7fa3ad3ee79ee8d5d4bdff20f15c7fab08ab6f1bee91024"
+    },
+    "repositories.jsonl": {
+      "bytes": 32746,
+      "sha256": "151fd25912d71f21eaf15cf6b1f9e8c554d58c1098a4aa88cfc5ffbb70786191"
+    }
+  },
+  "orphan_existing_dataset_candidates": [],
+  "pagination": {
+    "complete": true,
+    "page_count": 48,
+    "page_hashes": [
+      "20411c7dcb30e9d4746e540afba60d9c4fee8c8be6c8f1d97445e7dbbe5da8ba",
+      "21a0d4a3d1cc795ed201cc12a067f574d93e0cc71968eab223b898127c71b193",
+      "f0007e61bca6f96a8d9aceca1e4b3c2052bb4fbbfd75f31c143cc60f28bc0e8f",
+      "e3408ca2b4575314b9ffa63bd96ffb69ed42f16cf037fe0913955f507b8f559f",
+      "9ab11fe1de37d03e6d5997b4068b2c15338925549120ab0a7291c167746de067",
+      "d8a6706d234e6b8a3b33e811fe6fe8b4bddd38e1750709a01d8984e5cb407c99",
+      "7a06f7da4bcaf8c2a07cce942a9211592fbbfb429dd9cd83bbbbd07a9c5c7728",
+      "cdf20402b58f5093167ddef5e4eed9317f0a9f10cab75516465b4399ee06e072",
+      "b1c8080375cf8264cd129a38d48813c4da96fcd1f8584f1e485bf88340c07cfc",
+      "5367e1f2e6856cd38b6bc1001dcdd4db36d2a9d8d0854a9b9f5dc5fef102d243",
+      "2ac89ecd7e9fdfb93f82579d428c69d3cdd7b607146ac8bcf33c165a0c56f02c",
+      "51f4da85d179effb153a371863619ddf1f427c9c779df6d73c4d3e20ba3b4c8d",
+      "bb49a19e75e60c640ee21dac17f8e7b316ac1a62c55abc8ddc4bd2c1d5b17378",
+      "a1bc9de5e398fbff7416c79d6168cfbf1d2a2ef4963dcd376b4592953542b9b5",
+      "bb37ff050e7c8dae05ed8725710001c00337a7863851b10399831d02cf9ff838",
+      "fb385788de557c6194033768906985fdc0a1b421cc0a548604f9046c2a71890b",
+      "cd55f5b10b099bd56ae7faae97db0758a32abc90a28ea3182c4639ef2a342a71",
+      "67d39d84417fe39dd90c47aee3a16fe54482edcc7089fa7b41024104b57e9d39",
+      "93bb5a7c6552cf06c6cbebf209be74340f08cebbbd448729701102fadfce2608",
+      "5aa2bc937a75745f47faf2102b80e2023ac53bdba4bf1c61fdb72f99636cd31c",
+      "9a72aecdf9fefc7760eadc618bb1bf6693b0e69afa5c1f18124a112efdfeb2f9",
+      "c56639b0fdfba7a58093ab609d4796560a03a6a97d17f889f2739bd0ffa10b7b",
+      "1048f631d416805279321c09b67c0c2608f29bb8a92dc7426bdfa6d7fc6920d4",
+      "62d2ce7d012066ae6d7e5be244eb9877eaeffe9e4a3cf50c4dcdfb58b5dc7508",
+      "daee3e9bd472b2a34dc95f0f9d46fef3445a4066797d597964e05f22e9d3be16",
+      "1168b3cba2585de92fcde01b645820c66f73ec2751c3d466e1069863ceb0d8b4",
+      "b3a3f4ab3a5b520eddcb7d1d06b115ca2de063b2c819c3501ff3668ff38e3d42",
+      "efe434618cf776b5f42eaff22c22331b0d993ed3b392318fb086a4cbb2ae0348",
+      "90f206aabb98f47ca442376a195227e63b6e4fbb437b76a18c24c00c9a4717b0",
+      "f7d2dbbcfb1b4023eb654e9b02869692b5f41c1b5ed47f10a5b956449d92d772",
+      "b56c1fe4bb55aa29a80339e6b17fe34cc553564ca7488e23ff52add19d17558d",
+      "6072a4a0bb0ab9daf5108721de6876039a5ef4802928d3086b831e15785d2db8",
+      "7fb49f67556f879be2a806d9abcbbb73f29cd8f912aa641dc905de14ce8b5729",
+      "15cd556fca05a5f3a297e52cd2b370d29f10b2a40b37269439705f1e1e4b1865",
+      "450ae1e4b1196882c0bdd024a3a4acc2e53cdab076de39d360f696a3a9565e69",
+      "cd6c7c20d0985ebc6de312c87296b4fe4481bc5b7f95d0ac5a456c91ff46d8ba",
+      "dc55396edd3a5dd3e5764f5a1f9a08447c575a9571d4802d3b84833b84d43672",
+      "0aca8cd9b9cf8a5502b7f6955cf6ff66bd1a4c43c0037cc156cc1c77e7b36e51",
+      "bcbe4e3e8d22cb932d310ca7894f1ef58de9b73ddf17e90013c2a44aa70ee255",
+      "7d8faff2f14658e22da9499e655aacb8c3e3decb236a9a36cf3e15f43f267ca5",
+      "f0d0e894271512e065ce16822e96c0cb1231f93f7d7e8e3d0a0ab36aea29acd4",
+      "7898a9f714bc99b6bdf3c0f57043fe6eeea9eb7ccce523b2a6590d9108850e38",
+      "a1edd6b6c36f3c053e45f0688583792f3cb4134ecedd6cc503ca60eb7e6bcc10",
+      "eb80c8a855b7b1a97cb9c6f4ed5d5dbe891d339136f38b40dcf5674d611c33f4",
+      "a18800deb867b9021b059ed531c4f73750c1a7608fc4ea36017d0ea38f3ed7d8",
+      "e5c3bcb554769152e34fa376d7fa33c9d14b2cc493ec33444e3a6f917e760d59",
+      "e57942d72e92865beae5e904acd71f977119d43a2cc4fedb6c005b3f90c10d7e",
+      "c70e7c84d3a37168b7d099efe2cb2e24131055145d7e286d5e3ee9750e490a42"
+    ]
+  },
+  "policy_version": "v0.7-eligibility.1",
+  "provider": "github",
+  "schema_version": "eligibility_manifest_v1",
+  "snapshot_collected_at": "2026-08-30T10:10:07.915076Z",
+  "snapshot_sha256": "5542f6a1acb32a68afd4ed67da76c6e391e7372df311697ddf45ac6a2539a1af"
+}

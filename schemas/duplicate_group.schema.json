@@ -1,0 +1,172 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "https://github.com/rmems/operation-prometheus/schemas/duplicate_group.schema.json",
+  "title": "Operation Prometheus duplicate group",
+  "type": "object",
+  "required": [
+    "schema_version",
+    "group_id",
+    "kind",
+    "candidate_ids",
+    "source_candidate",
+    "exact",
+    "similarity",
+    "evidence"
+  ],
+  "properties": {
+    "schema_version": { "const": "duplicate_group_v1" },
+    "group_id": { "type": "string", "pattern": "^duplicate:[a-f0-9]{20}$" },
+    "kind": {
+      "enum": [
+        "current_corpus_duplicate",
+        "shared_head_oid",
+        "exact_title_match",
+        "near_title_match"
+      ]
+    },
+    "candidate_ids": {
+      "type": "array",
+      "uniqueItems": true,
+      "items": { "type": "string", "minLength": 1 }
+    },
+    "source_candidate": { "type": ["string", "null"] },
+    "exact": { "type": "boolean" },
+    "similarity": { "type": ["number", "null"], "minimum": 0, "maximum": 1 },
+    "evidence": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "oneOf": [
+          { "$ref": "#/definitions/dataset_record" },
+          { "$ref": "#/definitions/shared_head_evidence" },
+          { "$ref": "#/definitions/title_evidence" }
+        ]
+      }
+    }
+  },
+  "additionalProperties": false,
+  "allOf": [
+    {
+      "if": { "properties": { "kind": { "const": "exact_title_match" } } },
+      "then": {
+        "properties": {
+          "candidate_ids": { "minItems": 2 },
+          "exact": { "const": true },
+          "source_candidate": { "type": "null" },
+          "evidence": {
+            "items": { "$ref": "#/definitions/title_evidence" }
+          }
+        }
+      }
+    },
+    {
+      "if": { "properties": { "kind": { "const": "near_title_match" } } },
+      "then": {
+        "properties": {
+          "candidate_ids": { "minItems": 2 },
+          "exact": { "const": false },
+          "source_candidate": { "type": "null" },
+          "evidence": {
+            "items": { "$ref": "#/definitions/title_evidence" }
+          }
+        }
+      }
+    },
+    {
+      "if": { "properties": { "kind": { "const": "shared_head_oid" } } },
+      "then": {
+        "properties": {
+          "candidate_ids": { "minItems": 2 },
+          "source_candidate": { "type": "null" },
+          "evidence": {
+            "items": { "$ref": "#/definitions/shared_head_evidence" }
+          }
+        }
+      }
+    },
+    {
+      "if": { "properties": { "kind": { "const": "current_corpus_duplicate" } } },
+      "then": {
+        "properties": {
+          "candidate_ids": { "minItems": 1 },
+          "source_candidate": { "type": "string", "minLength": 3 },
+          "evidence": {
+            "items": { "$ref": "#/definitions/dataset_record" }
+          }
+        }
+      }
+    }
+  ],
+  "definitions": {
+    "sha256": { "type": "string", "pattern": "^[a-f0-9]{64}$" },
+    "dataset_record": {
+      "type": "object",
+      "required": [
+        "repo",
+        "resolved_repository_name_with_owner",
+        "pr_number",
+        "record_id",
+        "file",
+        "line",
+        "canonical_sha256"
+      ],
+      "properties": {
+        "repo": { "type": "string", "minLength": 3 },
+        "resolved_repository_name_with_owner": { "type": "string", "minLength": 3 },
+        "pr_number": { "type": "integer", "minimum": 1 },
+        "record_id": { "type": ["string", "null"] },
+        "file": { "type": "string", "minLength": 1 },
+        "line": { "type": "integer", "minimum": 1 },
+        "canonical_sha256": { "$ref": "#/definitions/sha256" }
+      },
+      "additionalProperties": false
+    },
+    "shared_head_evidence": {
+      "type": "object",
+      "required": ["head_oid", "base_oids", "missing_base_candidate_ids"],
+      "properties": {
+        "head_oid": { "type": "string", "minLength": 1 },
+        "base_oids": {
+          "type": "array",
+          "uniqueItems": true,
+          "items": { "type": "string", "minLength": 1 }
+        },
+        "missing_base_candidate_ids": {
+          "type": "array",
+          "uniqueItems": true,
+          "items": { "type": "string", "minLength": 1 }
+        }
+      },
+      "additionalProperties": false
+    },
+    "title_evidence": {
+      "type": "object",
+      "required": ["method", "exact_normalization", "threshold", "qualifying_edges"],
+      "properties": {
+        "method": { "const": "normalized_title_equality_or_token_jaccard_components" },
+        "exact_normalization": { "const": "unicode_casefold_and_whitespace" },
+        "threshold": { "type": "number", "exclusiveMinimum": 0, "maximum": 1 },
+        "qualifying_edges": {
+          "type": "array",
+          "minItems": 1,
+          "items": {
+            "type": "object",
+            "required": ["candidate_ids", "similarity"],
+            "properties": {
+              "candidate_ids": {
+                "type": "array",
+                "minItems": 2,
+                "maxItems": 2,
+                "uniqueItems": true,
+                "items": { "type": "string", "minLength": 1 }
+              },
+              "similarity": { "type": "number", "minimum": 0, "maximum": 1 }
+            },
+            "additionalProperties": false
+          }
+        }
+      },
+      "additionalProperties": false
+    }
+  }
+}

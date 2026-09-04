@@ -1,0 +1,81 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "https://github.com/rmems/operation-prometheus/schemas/source_repository.schema.json",
+  "title": "Operation Prometheus source repository record",
+  "type": "object",
+  "required": [
+    "schema_version",
+    "provider",
+    "repository_id",
+    "repository_database_id",
+    "name_with_owner",
+    "owner_login",
+    "owner_kind",
+    "name",
+    "url",
+    "visibility",
+    "archived",
+    "disabled",
+    "fork",
+    "default_branch",
+    "created_at",
+    "updated_at",
+    "pushed_at",
+    "license",
+    "pull_request_total_count",
+    "aliases",
+    "source_hash"
+  ],
+  "properties": {
+    "schema_version": { "const": "source_repository_v1" },
+    "provider": { "const": "github" },
+    "repository_id": { "type": "string", "minLength": 1 },
+    "repository_database_id": { "type": ["integer", "null"] },
+    "name_with_owner": { "type": "string", "minLength": 3 },
+    "owner_login": { "type": "string", "minLength": 1 },
+    "owner_kind": { "enum": ["user", "org"] },
+    "name": { "type": "string", "minLength": 1 },
+    "url": { "type": ["string", "null"], "format": "uri" },
+    "visibility": { "const": "public" },
+    "archived": { "type": "boolean" },
+    "disabled": { "type": "boolean" },
+    "fork": { "type": "boolean" },
+    "default_branch": { "type": ["string", "null"] },
+    "created_at": { "type": ["string", "null"], "format": "date-time" },
+    "updated_at": { "type": ["string", "null"], "format": "date-time" },
+    "pushed_at": { "type": ["string", "null"], "format": "date-time" },
+    "license": {
+      "type": "object",
+      "required": ["spdx_id", "name", "url"],
+      "properties": {
+        "spdx_id": { "type": ["string", "null"] },
+        "name": { "type": ["string", "null"] },
+        "url": { "type": ["string", "null"] }
+      },
+      "additionalProperties": false
+    },
+    "pull_request_total_count": { "type": "integer", "minimum": 0 },
+    "aliases": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["name_with_owner", "evidence_refs"],
+        "properties": {
+          "name_with_owner": { "type": "string", "minLength": 3 },
+          "evidence_refs": {
+            "type": "array",
+            "minItems": 1,
+            "uniqueItems": true,
+            "items": { "type": "string", "minLength": 1 }
+          }
+        },
+        "additionalProperties": false
+      }
+    },
+    "source_hash": { "$ref": "#/definitions/sha256" }
+  },
+  "additionalProperties": false,
+  "definitions": {
+    "sha256": { "type": "string", "pattern": "^[a-f0-9]{64}$" }
+  }
+}

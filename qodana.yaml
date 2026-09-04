@@ -6,6 +6,14 @@ version: "1.0"
 linter: qodana-python
 profile:
   name: qodana.recommended
+# The default analyzer interpreter predates PEP 604, which produced 70+
+# "invalid type hint" false positives on str | None annotations. The project
+# targets Python 3.12 (see .github/workflows/ci.yml), so give the analyzer a
+# matching interpreter.
+bootstrap: |
+  . ~/.bashrc
+  conda create -y -n qodana-env python=3.12
+  conda activate qodana-env
 include:
   - name: CheckDependencyLicenses
 exclude:

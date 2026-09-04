@@ -1,0 +1,169 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "https://github.com/rmems/operation-prometheus/schemas/eligibility_policy.schema.json",
+  "title": "Operation Prometheus eligibility policy",
+  "type": "object",
+  "required": [
+    "schema_version",
+    "policy_version",
+    "owners",
+    "baseline",
+    "dependency_authors",
+    "repository_aliases",
+    "near_duplicate_threshold",
+    "overrides"
+  ],
+  "properties": {
+    "schema_version": { "const": "eligibility_policy_v1" },
+    "policy_version": { "type": "string", "minLength": 1 },
+    "owners": {
+      "type": "array",
+      "minItems": 1,
+      "uniqueItems": true,
+      "items": {
+        "type": "object",
+        "required": ["kind", "login"],
+        "properties": {
+          "kind": { "enum": ["user", "org"] },
+          "login": { "type": "string", "minLength": 1 }
+        },
+        "additionalProperties": false
+      }
+    },
+    "baseline": {
+      "type": "object",
+      "required": ["queried_at", "expected_counts", "drift_explanations"],
+      "properties": {
+        "queried_at": { "type": "string", "format": "date-time" },
+        "expected_counts": {
+          "type": "object",
+          "required": [
+            "active_public_repository_count",
+            "merged_non_dependency_pr_count",
+            "formally_issue_linked_merged_pr_count",
+            "closed_unmerged_pr_count",
+            "existing_prometheus_row_count",
+            "existing_unique_pr_count",
+            "exact_current_duplicate_candidate_count"
+          ],
+          "properties": {
+            "active_public_repository_count": { "$ref": "#/definitions/count" },
+            "merged_non_dependency_pr_count": { "$ref": "#/definitions/count" },
+            "formally_issue_linked_merged_pr_count": { "$ref": "#/definitions/count" },
+            "closed_unmerged_pr_count": { "$ref": "#/definitions/count" },
+            "existing_prometheus_row_count": { "$ref": "#/definitions/count" },
+            "existing_unique_pr_count": { "$ref": "#/definitions/count" },
+            "exact_current_duplicate_candidate_count": { "$ref": "#/definitions/count" }
+          },
+          "additionalProperties": false
+        },
+        "drift_explanations": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "required": ["metric", "reason_code", "countervailing_delta", "evidence_refs"],
+            "properties": {
+              "metric": { "$ref": "#/definitions/baseline_metric" },
+              "reason_code": { "type": "string", "minLength": 1 },
+              "countervailing_delta": { "type": "integer" },
+              "evidence_refs": {
+                "type": "array",
+                "minItems": 1,
+                "uniqueItems": true,
+                "items": { "type": "string", "minLength": 1 }
+              }
+            },
+            "additionalProperties": false
+          }
+        }
+      },
+      "additionalProperties": false
+    },
+    "dependency_authors": {
+      "type": "array",
+      "minItems": 1,
+      "uniqueItems": true,
+      "items": { "type": "string", "minLength": 1 }
+    },
+    "repository_aliases": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": [
+          "alias",
+          "repository_id",
+          "canonical_name_with_owner",
+          "evidence_refs"
+        ],
+        "properties": {
+          "alias": { "type": "string", "minLength": 3 },
+          "repository_id": { "type": "string", "minLength": 1 },
+          "canonical_name_with_owner": { "type": "string", "minLength": 3 },
+          "evidence_refs": {
+            "type": "array",
+            "minItems": 1,
+            "uniqueItems": true,
+            "items": { "type": "string", "minLength": 1 }
+          }
+        },
+        "additionalProperties": false
+      }
+    },
+    "near_duplicate_threshold": {
+      "type": "number",
+      "exclusiveMinimum": 0,
+      "maximum": 1
+    },
+    "overrides": {
+      "type": "array",
+      "uniqueItems": true,
+      "items": {
+        "type": "object",
+        "required": ["candidate_id", "state", "reason_codes", "evidence_refs"],
+        "properties": {
+          "candidate_id": {
+            "type": "string",
+            "pattern": "^github:repository:.+:pull:.+$"
+          },
+          "state": {
+            "enum": [
+              "included_positive",
+              "included_negative",
+              "quarantined",
+              "excluded",
+              "watchlist_open"
+            ]
+          },
+          "reason_codes": {
+            "type": "array",
+            "minItems": 1,
+            "uniqueItems": true,
+            "items": { "type": "string", "minLength": 1 }
+          },
+          "evidence_refs": {
+            "type": "array",
+            "minItems": 1,
+            "uniqueItems": true,
+            "items": { "type": "string", "minLength": 1 }
+          }
+        },
+        "additionalProperties": false
+      }
+    }
+  },
+  "additionalProperties": false,
+  "definitions": {
+    "count": { "type": "integer", "minimum": 0 },
+    "baseline_metric": {
+      "enum": [
+        "active_public_repository_count",
+        "merged_non_dependency_pr_count",
+        "formally_issue_linked_merged_pr_count",
+        "closed_unmerged_pr_count",
+        "existing_prometheus_row_count",
+        "existing_unique_pr_count",
+        "exact_current_duplicate_candidate_count"
+      ]
+    }
+  }
+}

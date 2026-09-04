@@ -1,0 +1,91 @@
+{
+  "schema_version": "eligibility_policy_v1",
+  "policy_version": "v0.7-eligibility.1",
+  "owners": [
+    {
+      "kind": "user",
+      "login": "rmems"
+    },
+    {
+      "kind": "org",
+      "login": "Limen-Neural"
+    }
+  ],
+  "baseline": {
+    "queried_at": "2026-08-24T01:39:05Z",
+    "expected_counts": {
+      "active_public_repository_count": 47,
+      "closed_unmerged_pr_count": 58,
+      "exact_current_duplicate_candidate_count": 1,
+      "existing_prometheus_row_count": 72,
+      "existing_unique_pr_count": 71,
+      "formally_issue_linked_merged_pr_count": 421,
+      "merged_non_dependency_pr_count": 670
+    },
+    "drift_explanations": [
+      {
+        "metric": "active_public_repository_count",
+        "reason_code": "baseline_repository_unavailable_after_verified_rename",
+        "countervailing_delta": -1,
+        "evidence_refs": [
+          "github:repository-database-id:1148448263",
+          "github:status:404:rmems/agent-afk",
+          "https://github.com/rmems/Ship-of-Theseus-HPC",
+          "https://github.com/rmems/Ship-of-Theseus-Workstation",
+          "https://github.com/rmems/agent-afk"
+        ]
+      },
+      {
+        "metric": "closed_unmerged_pr_count",
+        "reason_code": "post_baseline_closures_and_versioned_dependency_filter",
+        "countervailing_delta": 1,
+        "evidence_refs": [
+          "policy:v0.7-eligibility.1:closed-unmerged-excludes-dependency",
+          "https://github.com/Limen-Neural/myelin-accelerator/pull/25",
+          "https://github.com/rmems/kinetic-signals/pull/40",
+          "https://github.com/rmems/operation-prometheus/issues/49",
+          "https://github.com/rmems/silicon-bridge/pull/25"
+        ]
+      },
+      {
+        "metric": "formally_issue_linked_merged_pr_count",
+        "reason_code": "post_baseline_merges_and_mutable_formal_linkage",
+        "countervailing_delta": 1,
+        "evidence_refs": [
+          "sha256:5542f6a1acb32a68afd4ed67da76c6e391e7372df311697ddf45ac6a2539a1af",
+          "https://github.com/rmems/operation-prometheus/issues/49"
+        ]
+      },
+      {
+        "metric": "merged_non_dependency_pr_count",
+        "reason_code": "post_baseline_merges_offset_by_source_unavailability",
+        "countervailing_delta": -5,
+        "evidence_refs": [
+          "github:status:404:rmems/agent-afk",
+          "sha256:5542f6a1acb32a68afd4ed67da76c6e391e7372df311697ddf45ac6a2539a1af",
+          "https://github.com/rmems/agent-afk",
+          "https://github.com/rmems/operation-prometheus/issues/49"
+        ]
+      }
+    ]
+  },
+  "dependency_authors": [
+    "dependabot[bot]",
+    "renovate[bot]",
+    "snyk-bot"
+  ],
+  "repository_aliases": [
+    {
+      "alias": "rmems/myelin-accelerator",
+      "repository_id": "R_kgDORytylg",
+      "canonical_name_with_owner": "Limen-Neural/myelin-accelerator",
+      "evidence_refs": [
+        "github:repository-database-id:1194029718",
+        "https://github.com/Limen-Neural/myelin-accelerator",
+        "https://github.com/rmems/myelin-accelerator"
+      ]
+    }
+  ],
+  "near_duplicate_threshold": 0.9,
+  "overrides": []
+}

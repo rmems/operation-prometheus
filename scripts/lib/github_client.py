@@ -5,11 +5,12 @@ from __future__ import annotations
 import json
 import logging
 import os
+import re
 import time
 import urllib.error
 import urllib.parse
 import urllib.request
-from collections.abc import Iterator
+from collections.abc import Callable, Iterator
 from typing import Any
 
 logger = logging.getLogger(__name__)
@@ -30,6 +31,29 @@ class GitHubError(RuntimeError):
         self.status = status
 
 
+class _SafeRedirectHandler(urllib.request.HTTPRedirectHandler):
+    """Allow redirects only within the original HTTPS API origin."""
+
+    def redirect_request(self, req, fp, code, msg, headers, newurl):
+        source = urllib.parse.urlsplit(req.full_url)
+        target = urllib.parse.urlsplit(newurl)
+        if target.scheme.casefold() != "https" or target.netloc.casefold() != source.netloc.casefold():
+            raise GitHubError(
+                f"Refusing GitHub API redirect from {source.netloc} to "
+                f"{target.scheme or '(missing)'}://{target.netloc or '(missing)'}"
+            )
+        return super().redirect_request(req, fp, code, msg, headers, newurl)
+
+
+def _graphql_error_detail(errors: list[Any]) -> str:
+    messages = [
+        str(error.get("message") or error)
+        for error in errors
+        if isinstance(error, dict)
+    ]
+    return "; ".join(messages)[:500] or "unknown GraphQL error"
+
+
 class GitHubClient:
     """Minimal GET-only GitHub REST client with rate-limit awareness."""
 
@@ -47,6 +71,7 @@ class GitHubClient:
         self.max_retries = max_retries
         self.min_remaining = min_remaining
         self._sleep = sleep_fn
+        self._opener = urllib.request.build_opener(_SafeRedirectHandler())
         if not self.token:
             logger.warning(
                 "No GitHub token configured; unauthenticated rate limit is ~60 req/hr"
@@ -71,7 +96,7 @@ class GitHubClient:
             headers["Authorization"] = f"Bearer {self.token}"
         return headers
 
-    def _resolve_url(self, path_or_url: str) -> str:
+    def resolve_url(self, path_or_url: str) -> str:
         if path_or_url.startswith("https://"):
             return path_or_url
         if path_or_url.startswith("http://"):
@@ -81,22 +106,17 @@ class GitHubClient:
             path_or_url = "/" + path_or_url
         return self.base_url + path_or_url
 
-    def _request(
+    def _open_with_retries(
         self,
-        path_or_url: str,
-        *,
-        accept: str = "application/vnd.github+json",
+        make_request: Callable[[], urllib.request.Request],
+        url: str,
+        label: str,
     ) -> tuple[bytes, dict[str, str]]:
-        url = self._resolve_url(path_or_url)
-        # Bandit/Codacy: only permit HTTPS (never file:/ or custom schemes).
-        if not url.startswith("https://"):
-            raise GitHubError(f"Refusing non-HTTPS URL: {url[:80]}")
+        """Open a request with shared retry/backoff handling for REST and GraphQL."""
         last_err: Exception | None = None
         for attempt in range(self.max_retries + 1):
-            req = urllib.request.Request(url, headers=self._headers(accept), method="GET")
             try:
-                # Scheme already restricted to https:// above (Bandit B310).
-                with urllib.request.urlopen(req, timeout=60) as resp:  # nosec B310
+                with self._opener.open(make_request(), timeout=60) as resp:  # nosec B310
                     body = resp.read()
                     headers = {k.lower(): v for k, v in resp.headers.items()}
                     self._maybe_throttle(headers)
@@ -105,24 +125,12 @@ class GitHubClient:
                 last_err = exc
                 status = exc.code
                 retry_after = exc.headers.get("Retry-After") if exc.headers else None
-                # HTTPError body can only be read once — cache for rate-limit + error detail.
-                try:
-                    err_body = exc.read()
-                except OSError:
-                    err_body = b""
-                err_text = err_body.decode("utf-8", errors="replace")
-
-                should_retry = False
-                if status == 403:
-                    is_rate_limit = self._is_rate_limit_403(exc, err_text)
-                    should_retry = is_rate_limit and attempt < self.max_retries
-                elif status in (429, 500, 502, 503, 504):
-                    should_retry = attempt < self.max_retries
-
-                if should_retry:
+                err_text = self._read_error_text(exc)
+                if self._should_retry(status, exc, err_text, attempt):
                     delay = self._backoff_seconds(attempt, retry_after, exc, err_text)
                     logger.warning(
-                        "GitHub %s on %s; retry %s/%s after %.1fs",
+                        "%s %s on %s; retry %s/%s after %.1fs",
+                        label,
                         status,
                         url,
                         attempt + 1,
@@ -131,20 +139,57 @@ class GitHubClient:
                     )
                     self._sleep(delay)
                     continue
-                detail = err_text[:500]
                 raise GitHubError(
-                    f"GET {url} failed with {status}: {detail}",
+                    f"{label} {url} failed with {status}: {err_text[:500]}",
                     status=status,
                 ) from exc
             except urllib.error.URLError as exc:
                 last_err = exc
                 if attempt < self.max_retries:
                     delay = min(60.0, 2.0**attempt)
-                    logger.warning("Network error on %s: %s; retry after %.1fs", url, exc, delay)
+                    logger.warning(
+                        "%s network error on %s: %s; retry after %.1fs", label, url, exc, delay
+                    )
                     self._sleep(delay)
                     continue
-                raise GitHubError(f"GET {url} network error: {exc}") from exc
-        raise GitHubError(f"GET {url} failed after retries: {last_err}")
+                raise GitHubError(f"{label} {url} network error: {exc}") from exc
+        raise GitHubError(f"{label} {url} failed after retries: {last_err}")
+
+    def _request(
+        self,
+        path_or_url: str,
+        *,
+        accept: str = "application/vnd.github+json",
+    ) -> tuple[bytes, dict[str, str]]:
+        url = self.resolve_url(path_or_url)
+        # Bandit/Codacy: only permit HTTPS (never file:/ or custom schemes).
+        if not url.startswith("https://"):
+            raise GitHubError(f"Refusing non-HTTPS URL: {url[:80]}")
+        return self._open_with_retries(
+            lambda: urllib.request.Request(url, headers=self._headers(accept), method="GET"),
+            url,
+            "GET",
+        )
+
+    @staticmethod
+    def _read_error_text(exc: urllib.error.HTTPError) -> str:
+        """Read and decode an HTTPError body once, tolerating read failures."""
+        try:
+            err_body = exc.read()
+        except OSError:
+            err_body = b""
+        return err_body.decode("utf-8", errors="replace")
+
+    def _should_retry(
+        self,
+        status: int,
+        exc: urllib.error.HTTPError,
+        err_text: str,
+        attempt: int,
+    ) -> bool:
+        if status == 403:
+            return self._is_rate_limit_403(exc, err_text) and attempt < self.max_retries
+        return status in (429, 500, 502, 503, 504) and attempt < self.max_retries
 
     @staticmethod
     def _is_rate_limit_403(exc: urllib.error.HTTPError, body_text: str = "") -> bool:
@@ -224,13 +269,79 @@ class GitHubClient:
         body, _ = self._request(path_or_url, accept=accept)
         return body.decode("utf-8", errors="replace")
 
+    @staticmethod
+    def _validate_graphql_document(document: str) -> None:
+        named_query = re.match(r"^query\s+[_A-Za-z][_0-9A-Za-z]*\s*(?:\(|\{)", document)
+        if not named_query or re.search(r"(?i)\bmutation\b", document):
+            raise GitHubError("Refusing non-query GraphQL document")
+
+    def _graphql_endpoint(self) -> str:
+        if self.base_url.endswith("/api/v3"):
+            graphql_url = self.base_url.removesuffix("/api/v3") + "/api/graphql"
+        else:
+            graphql_url = self.base_url + "/graphql"
+        if not graphql_url.startswith("https://"):
+            raise GitHubError(f"Refusing non-HTTPS GraphQL URL: {graphql_url[:80]}")
+        return graphql_url
+
+    @staticmethod
+    def _graphql_data(parsed: Any) -> dict[str, Any]:
+        if not isinstance(parsed, dict):
+            raise GitHubError("GitHub GraphQL response was not an object")
+        graphql_errors = parsed.get("errors") or []
+        if graphql_errors:
+            detail = _graphql_error_detail(graphql_errors)
+            raise GitHubError(f"GitHub GraphQL query failed: {detail}")
+        data = parsed.get("data")
+        if not isinstance(data, dict):
+            raise GitHubError("GitHub GraphQL response has no data object")
+        return data
+
+    def query_graphql(
+        self,
+        query: str,
+        variables: dict[str, Any] | None = None,
+    ) -> tuple[dict[str, Any], dict[str, str]]:
+        """Execute one explicitly read-only GitHub GraphQL query.
+
+        GitHub transports GraphQL queries over HTTP POST, but this collector must
+        never expose a mutation surface.  Callers therefore provide a complete,
+        named ``query`` document; anonymous documents and documents containing a
+        ``mutation`` operation are rejected before any network request occurs.
+        """
+        document = query.strip()
+        self._validate_graphql_document(document)
+        graphql_url = self._graphql_endpoint()
+
+        payload = json.dumps(
+            {"query": document, "variables": variables or {}},
+            ensure_ascii=False,
+            separators=(",", ":"),
+        ).encode("utf-8")
+
+        def make_request() -> urllib.request.Request:
+            headers = self._headers()
+            headers["Content-Type"] = "application/json"
+            return urllib.request.Request(
+                graphql_url,
+                data=payload,
+                headers=headers,
+                method="POST",
+            )
+
+        body, response_headers = self._open_with_retries(
+            make_request, graphql_url, "GitHub GraphQL request"
+        )
+        parsed = json.loads(body.decode("utf-8")) if body else {}
+        return self._graphql_data(parsed), response_headers
+
     def paginate(self, path: str, *, per_page: int = 100) -> Iterator[list[Any]]:
         """Yield pages of list results, following Link rel=next."""
         if "?" in path:
             url = f"{path}&per_page={per_page}"
         else:
             url = f"{path}?per_page={per_page}"
-        next_url: str | None = self._resolve_url(url)
+        next_url: str | None = self.resolve_url(url)
         while next_url:
             body, headers = self._request(next_url)
             data = json.loads(body.decode("utf-8")) if body else []
