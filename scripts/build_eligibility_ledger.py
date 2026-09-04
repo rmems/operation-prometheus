@@ -143,35 +143,54 @@ def _check_outputs(out_dir: Path, rendered: dict[str, bytes]) -> list[str]:
     return stale
 
 
+def _verify_snapshot_hash(snapshot: dict) -> None:
+    declared_snapshot_hash = snapshot.pop("snapshot_sha256", None)
+    actual_snapshot_hash = sha256_json(snapshot)
+    snapshot["snapshot_sha256"] = declared_snapshot_hash
+    if not declared_snapshot_hash or declared_snapshot_hash != actual_snapshot_hash:
+        raise ValueError(
+            "Snapshot sha256 does not match its canonical content "
+            f"(declared={declared_snapshot_hash}, actual={actual_snapshot_hash})"
+        )
+
+
+def _check_determinism(args: argparse.Namespace, snapshot: dict, policy: dict, rendered: dict[str, bytes]) -> None:
+    if not args.check_determinism:
+        return
+    second = render_artifacts(
+        build_eligibility_artifacts(snapshot, policy, args.repo_root.resolve())
+    )
+    if rendered != second:
+        raise ValueError("Second build from unchanged inputs was not byte-identical")
+
+
+def _enforce_strict_baseline(args: argparse.Namespace, artifacts: dict) -> None:
+    if not args.strict_baseline:
+        return
+    report = artifacts["baseline_report"]
+    if not report.get("complete"):
+        raise ValueError("Baseline report contains unexplained drift")
+    if report.get("orphan_existing_dataset_candidates"):
+        raise ValueError("Existing dataset rows are absent from the frozen source inventory")
+
+
+def _build_and_validate(args: argparse.Namespace) -> tuple[dict, dict[str, bytes]]:
+    snapshot = _load_json(args.snapshot.resolve())
+    _verify_snapshot_hash(snapshot)
+    policy = _load_json(args.policy.resolve())
+    _validate_inputs(snapshot, policy)
+    artifacts = build_eligibility_artifacts(snapshot, policy, args.repo_root.resolve())
+    rendered = render_artifacts(artifacts)
+    _validate_artifacts(artifacts, rendered)
+    _check_determinism(args, snapshot, policy, rendered)
+    _enforce_strict_baseline(args, artifacts)
+    return artifacts, rendered
+
+
 def main(argv: list[str] | None = None) -> int:
     args = build_parser().parse_args(argv)
     try:
-        snapshot = _load_json(args.snapshot.resolve())
-        declared_snapshot_hash = snapshot.pop("snapshot_sha256", None)
-        actual_snapshot_hash = sha256_json(snapshot)
-        snapshot["snapshot_sha256"] = declared_snapshot_hash
-        if not declared_snapshot_hash or declared_snapshot_hash != actual_snapshot_hash:
-            raise ValueError(
-                "Snapshot sha256 does not match its canonical content "
-                f"(declared={declared_snapshot_hash}, actual={actual_snapshot_hash})"
-            )
-        policy = _load_json(args.policy.resolve())
-        _validate_inputs(snapshot, policy)
-        artifacts = build_eligibility_artifacts(snapshot, policy, args.repo_root.resolve())
-        rendered = render_artifacts(artifacts)
-        _validate_artifacts(artifacts, rendered)
-        if args.check_determinism:
-            second = render_artifacts(
-                build_eligibility_artifacts(snapshot, policy, args.repo_root.resolve())
-            )
-            if rendered != second:
-                raise ValueError("Second build from unchanged inputs was not byte-identical")
-        if args.strict_baseline:
-            report = artifacts["baseline_report"]
-            if not report.get("complete"):
-                raise ValueError("Baseline report contains unexplained drift")
-            if report.get("orphan_existing_dataset_candidates"):
-                raise ValueError("Existing dataset rows are absent from the frozen source inventory")
+        artifacts, rendered = _build_and_validate(args)
     except (OSError, json.JSONDecodeError, RuntimeError, ValueError) as exc:
         logger.error("%s", exc)
         return 1

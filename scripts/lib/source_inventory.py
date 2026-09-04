@@ -10,7 +10,7 @@ from __future__ import annotations
 import hashlib
 import json
 from datetime import datetime, timezone
-from typing import Any
+from typing import Any, NamedTuple
 
 from . import __version__
 from .github_client import GitHubClient, GitHubError, _parse_next_link
@@ -323,6 +323,41 @@ def _accept_repository(
     return repo
 
 
+def _collect_repository_page(
+    client: GitHubClient,
+    owner: dict[str, str],
+    url: str,
+    page_index: int,
+    pages: list[dict[str, Any]],
+    seen_ids: set[str],
+) -> tuple[list[dict[str, Any]], int, str | None]:
+    """Collect one REST page of repositories; return (repos, ignored, next_url)."""
+    data, headers = client.get_json_with_headers(url)
+    if not isinstance(data, list):
+        raise GitHubError(f"Expected repository list for {owner['login']}")
+    next_link = _parse_next_link(headers.get("link", ""))
+    pages.append(
+        _page_evidence(
+            scope="repositories",
+            response=data,
+            item_count=len(data),
+            page_index=page_index,
+            has_next_page=bool(next_link),
+            headers=headers,
+            owner=owner["login"],
+        )
+    )
+    repositories: list[dict[str, Any]] = []
+    non_public_ignored = 0
+    for raw in data:
+        repo = _accept_repository(raw, owner, seen_ids)
+        if repo is None:
+            non_public_ignored += 1
+        else:
+            repositories.append(repo)
+    return repositories, non_public_ignored, next_link
+
+
 def _collect_repositories(
     client: GitHubClient,
     owners: list[dict[str, str]],
@@ -340,28 +375,11 @@ def _collect_repositories(
             if next_url in visited_urls:
                 raise GitHubError(f"Repository pagination URL repeated for {owner['login']}")
             visited_urls.add(next_url)
-            data, headers = client.get_json_with_headers(next_url)
-            if not isinstance(data, list):
-                raise GitHubError(f"Expected repository list for {owner['login']}")
-            next_link = _parse_next_link(headers.get("link", ""))
-            pages.append(
-                _page_evidence(
-                    scope="repositories",
-                    response=data,
-                    item_count=len(data),
-                    page_index=page_index,
-                    has_next_page=bool(next_link),
-                    headers=headers,
-                    owner=owner["login"],
-                )
+            page_repos, page_ignored, next_url = _collect_repository_page(
+                client, owner, next_url, page_index, pages, seen_ids
             )
-            for raw in data:
-                repo = _accept_repository(raw, owner, seen_ids)
-                if repo is None:
-                    non_public_ignored += 1
-                else:
-                    repositories.append(repo)
-            next_url = next_link
+            repositories.extend(page_repos)
+            non_public_ignored += page_ignored
             page_index += 1
     repositories.sort(key=lambda row: (str(row["id"]), str(row["name_with_owner"])))
     return repositories, pages, non_public_ignored
@@ -385,21 +403,27 @@ def _fetch_closing_issues_page(
     return node.get("closingIssuesReferences") or {}, data, headers
 
 
+class _ClosingIssuePagination(NamedTuple):
+    """Shared state for paginating one PR's closing-issues connection."""
+
+    client: GitHubClient
+    pr_id: str
+    repository_id: str
+    pages: list[dict[str, Any]]
+    collected: list[dict[str, Any]]
+
+
 def _process_closing_issues_page(
-    client: GitHubClient,
-    pr_id: str,
+    ctx: _ClosingIssuePagination,
     cursor: str | None,
     page_index: int,
-    repository_id: str,
-    pages: list[dict[str, Any]],
-    collected: list[dict[str, Any]],
 ) -> tuple[dict[str, Any], str | None]:
     """Fetch and record one closing-issues page; return (page_info, next_cursor)."""
-    connection, data, headers = _fetch_closing_issues_page(client, pr_id, cursor)
+    connection, data, headers = _fetch_closing_issues_page(ctx.client, ctx.pr_id, cursor)
     nodes = connection.get("nodes") or []
     page_info = connection.get("pageInfo") or {}
     next_cursor = page_info.get("endCursor")
-    pages.append(
+    ctx.pages.append(
         _page_evidence(
             scope="closing_issues",
             response=data,
@@ -407,15 +431,15 @@ def _process_closing_issues_page(
             page_index=page_index,
             has_next_page=bool(page_info.get("hasNextPage")),
             headers=headers,
-            repository_id=repository_id,
+            repository_id=ctx.repository_id,
             cursor=cursor,
             next_cursor=next_cursor,
             total_count=int(connection.get("totalCount") or 0),
         )
     )
-    collected.extend(_issue_record(item) for item in nodes if isinstance(item, dict))
+    ctx.collected.extend(_issue_record(item) for item in nodes if isinstance(item, dict))
     if next_cursor == cursor and page_info.get("hasNextPage"):
-        raise GitHubError(f"Closing-issue pagination cursor repeated for {pr_id}")
+        raise GitHubError(f"Closing-issue pagination cursor repeated for {ctx.pr_id}")
     return page_info, next_cursor
 
 
@@ -431,13 +455,12 @@ def _collect_additional_closing_issues(
         for node in (first_connection.get("nodes") or [])
         if isinstance(node, dict)
     ]
+    ctx = _ClosingIssuePagination(client, pr_id, repository_id, pages, collected)
     page_info = first_connection.get("pageInfo") or {}
     cursor = page_info.get("endCursor")
     page_index = 1
     while page_info.get("hasNextPage"):
-        page_info, cursor = _process_closing_issues_page(
-            client, pr_id, cursor, page_index, repository_id, pages, collected
-        )
+        page_info, cursor = _process_closing_issues_page(ctx, cursor, page_index)
         page_index += 1
     expected = int(first_connection.get("totalCount") or 0)
     if len(collected) != expected:
@@ -445,6 +468,16 @@ def _collect_additional_closing_issues(
             f"Closing-issue count mismatch for {pr_id}: expected {expected}, got {len(collected)}"
         )
     return collected
+
+
+def _pull_request_connection(data: dict[str, Any], repository: dict[str, Any]) -> dict[str, Any]:
+    """Return the pullRequests connection, guarding repository identity drift."""
+    repo_data = data.get("repository")
+    if not isinstance(repo_data, dict):
+        raise GitHubError(f"Repository {repository['name_with_owner']} disappeared during collection")
+    if str(repo_data.get("id") or "") != str(repository["id"]):
+        raise GitHubError(f"Repository identity changed for {repository['name_with_owner']}")
+    return repo_data.get("pullRequests") or {}
 
 
 def _fetch_pull_request_page(
@@ -459,12 +492,7 @@ def _fetch_pull_request_page(
         PULL_REQUESTS_QUERY,
         {"owner": owner, "name": name, "cursor": cursor},
     )
-    repo_data = data.get("repository")
-    if not isinstance(repo_data, dict):
-        raise GitHubError(f"Repository {repository['name_with_owner']} disappeared during collection")
-    if str(repo_data.get("id") or "") != str(repository["id"]):
-        raise GitHubError(f"Repository identity changed for {repository['name_with_owner']}")
-    connection = repo_data.get("pullRequests") or {}
+    connection = _pull_request_connection(data, repository)
     total_count = int(connection.get("totalCount") or 0)
     if expected_total is not None and expected_total != total_count:
         raise GitHubError(

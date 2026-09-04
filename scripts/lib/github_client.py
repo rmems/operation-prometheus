@@ -10,7 +10,7 @@ import time
 import urllib.error
 import urllib.parse
 import urllib.request
-from collections.abc import Iterator
+from collections.abc import Callable, Iterator
 from typing import Any
 
 logger = logging.getLogger(__name__)
@@ -97,6 +97,55 @@ class GitHubClient:
             path_or_url = "/" + path_or_url
         return self.base_url + path_or_url
 
+    def _open_with_retries(
+        self,
+        make_request: Callable[[], urllib.request.Request],
+        url: str,
+        label: str,
+    ) -> tuple[bytes, dict[str, str]]:
+        """Open a request with shared retry/backoff handling for REST and GraphQL."""
+        last_err: Exception | None = None
+        for attempt in range(self.max_retries + 1):
+            try:
+                with self._opener.open(make_request(), timeout=60) as resp:  # nosec B310
+                    body = resp.read()
+                    headers = {k.lower(): v for k, v in resp.headers.items()}
+                    self._maybe_throttle(headers)
+                    return body, headers
+            except urllib.error.HTTPError as exc:
+                last_err = exc
+                status = exc.code
+                retry_after = exc.headers.get("Retry-After") if exc.headers else None
+                err_text = self._read_error_text(exc)
+                if self._should_retry(status, exc, err_text, attempt):
+                    delay = self._backoff_seconds(attempt, retry_after, exc, err_text)
+                    logger.warning(
+                        "%s %s on %s; retry %s/%s after %.1fs",
+                        label,
+                        status,
+                        url,
+                        attempt + 1,
+                        self.max_retries,
+                        delay,
+                    )
+                    self._sleep(delay)
+                    continue
+                raise GitHubError(
+                    f"{label} {url} failed with {status}: {err_text[:500]}",
+                    status=status,
+                ) from exc
+            except urllib.error.URLError as exc:
+                last_err = exc
+                if attempt < self.max_retries:
+                    delay = min(60.0, 2.0**attempt)
+                    logger.warning(
+                        "%s network error on %s: %s; retry after %.1fs", label, url, exc, delay
+                    )
+                    self._sleep(delay)
+                    continue
+                raise GitHubError(f"{label} {url} network error: {exc}") from exc
+        raise GitHubError(f"{label} {url} failed after retries: {last_err}")
+
     def _request(
         self,
         path_or_url: str,
@@ -107,48 +156,11 @@ class GitHubClient:
         # Bandit/Codacy: only permit HTTPS (never file:/ or custom schemes).
         if not url.startswith("https://"):
             raise GitHubError(f"Refusing non-HTTPS URL: {url[:80]}")
-        last_err: Exception | None = None
-        for attempt in range(self.max_retries + 1):
-            req = urllib.request.Request(url, headers=self._headers(accept), method="GET")
-            try:
-                # Scheme already restricted to https:// above (Bandit B310).
-                with self._opener.open(req, timeout=60) as resp:  # nosec B310
-                    body = resp.read()
-                    headers = {k.lower(): v for k, v in resp.headers.items()}
-                    self._maybe_throttle(headers)
-                    return body, headers
-            except urllib.error.HTTPError as exc:
-                last_err = exc
-                status = exc.code
-                retry_after = exc.headers.get("Retry-After") if exc.headers else None
-                err_text = self._read_error_text(exc)
-
-                if self._should_retry(status, exc, err_text, attempt):
-                    delay = self._backoff_seconds(attempt, retry_after, exc, err_text)
-                    logger.warning(
-                        "GitHub %s on %s; retry %s/%s after %.1fs",
-                        status,
-                        url,
-                        attempt + 1,
-                        self.max_retries,
-                        delay,
-                    )
-                    self._sleep(delay)
-                    continue
-                detail = err_text[:500]
-                raise GitHubError(
-                    f"GET {url} failed with {status}: {detail}",
-                    status=status,
-                ) from exc
-            except urllib.error.URLError as exc:
-                last_err = exc
-                if attempt < self.max_retries:
-                    delay = min(60.0, 2.0**attempt)
-                    logger.warning("Network error on %s: %s; retry after %.1fs", url, exc, delay)
-                    self._sleep(delay)
-                    continue
-                raise GitHubError(f"GET {url} network error: {exc}") from exc
-        raise GitHubError(f"GET {url} failed after retries: {last_err}")
+        return self._open_with_retries(
+            lambda: urllib.request.Request(url, headers=self._headers(accept), method="GET"),
+            url,
+            "GET",
+        )
 
     @staticmethod
     def _read_error_text(exc: urllib.error.HTTPError) -> str:
@@ -302,56 +314,22 @@ class GitHubClient:
             ensure_ascii=False,
             separators=(",", ":"),
         ).encode("utf-8")
-        headers = self._headers()
-        headers["Content-Type"] = "application/json"
-        last_err: Exception | None = None
-        for attempt in range(self.max_retries + 1):
-            req = urllib.request.Request(
+
+        def make_request() -> urllib.request.Request:
+            headers = self._headers()
+            headers["Content-Type"] = "application/json"
+            return urllib.request.Request(
                 graphql_url,
                 data=payload,
                 headers=headers,
                 method="POST",
             )
-            try:
-                with self._opener.open(req, timeout=60) as resp:  # nosec B310
-                    body = resp.read()
-                    response_headers = {k.lower(): v for k, v in resp.headers.items()}
-                    self._maybe_throttle(response_headers)
-                    parsed = json.loads(body.decode("utf-8")) if body else {}
-                    return self._graphql_data(parsed), response_headers
-            except urllib.error.HTTPError as exc:
-                last_err = exc
-                status = exc.code
-                retry_after = exc.headers.get("Retry-After") if exc.headers else None
-                err_text = self._read_error_text(exc)
-                if self._should_retry(status, exc, err_text, attempt):
-                    delay = self._backoff_seconds(attempt, retry_after, exc, err_text)
-                    logger.warning(
-                        "GitHub GraphQL %s; retry %s/%s after %.1fs",
-                        status,
-                        attempt + 1,
-                        self.max_retries,
-                        delay,
-                    )
-                    self._sleep(delay)
-                    continue
-                raise GitHubError(
-                    f"GitHub GraphQL request failed with {status}: {err_text[:500]}",
-                    status=status,
-                ) from exc
-            except urllib.error.URLError as exc:
-                last_err = exc
-                if attempt < self.max_retries:
-                    delay = min(60.0, 2.0**attempt)
-                    logger.warning(
-                        "GraphQL network error: %s; retry after %.1fs",
-                        exc,
-                        delay,
-                    )
-                    self._sleep(delay)
-                    continue
-                raise GitHubError(f"GitHub GraphQL network error: {exc}") from exc
-        raise GitHubError(f"GitHub GraphQL query failed after retries: {last_err}")
+
+        body, response_headers = self._open_with_retries(
+            make_request, graphql_url, "GitHub GraphQL request"
+        )
+        parsed = json.loads(body.decode("utf-8")) if body else {}
+        return self._graphql_data(parsed), response_headers
 
     def paginate(self, path: str, *, per_page: int = 100) -> Iterator[list[Any]]:
         """Yield pages of list results, following Link rel=next."""
