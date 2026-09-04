@@ -1,0 +1,27 @@
+scripts/lib/source_inventory.py
+  s_8d43daab2c823d::t_c714f359d3497f 223-247,259,263
+  s_8d43daab2c823d::t_a92bc53e791fe6 84,86-97,102,114
+  s_8d43daab2c823d::t_ee334cdcb6d3e5 128-136,148
+scripts/lib/source_inventory_pull_requests.py
+  s_8d43daab2c823d::t_c220c18bf87db8 104-117,123,127-131,134,140,144-149,154
+  s_8d43daab2c823d::t_a25043860281a2 186-189,207
+  s_8d43daab2c823d::t_6646006439658c 449-451
+  s_8d43daab2c823d::t_0ef25ee18c5560 365-368,372,380-384
+  s_8d43daab2c823d::t_812f7a6c21ad43 257-275,283,296,301,306-313,318
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.5.2",
+  "base_commit_sha": "c72ffc8fa2781ecc37fbd0e54666ade52b926bc0",
+  "prompts": {},
+  "sessions": {
+    "s_8d43daab2c823d": {
+      "agent_id": {
+        "tool": "cursor",
+        "id": "7a3125d7-4082-4be7-a1dc-5b378e27976f",
+        "model": "kimi-k3"
+      },
+      "human_author": "Raul Montoya Cardenas <montoyaraul34@gmail.com>"
+    }
+  }
+}
