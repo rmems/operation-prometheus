@@ -1,0 +1,28 @@
+scripts/lib/source_inventory.py
+  s_8d43daab2c823d::t_1439e776b910b2 473-482,495
+  s_8d43daab2c823d::t_8cf75b5401311c 326-360,378-379,381-382
+  s_8d43daab2c823d::t_4d0f89a517aab1 13
+  s_8d43daab2c823d::t_317c7aaa19299d 406-415,417,422,426,434,440,442,458,463
+scripts/lib/github_client.py
+  s_8d43daab2c823d::t_f0e0085afb32fa 100,102-104,106,110,123-124,134,141-143,146-163
+  s_8d43daab2c823d::t_c040f168586bed 13
+  s_8d43daab2c823d::t_97a7aae242ff44 317-321,327-332
+scripts/build_eligibility_ledger.py
+  s_8d43daab2c823d::t_9efeb21cb5f052 146-189,193
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.5.2",
+  "base_commit_sha": "0b080328b8af0cf32bcccdde3d2de6e34a8ef1a6",
+  "prompts": {},
+  "sessions": {
+    "s_8d43daab2c823d": {
+      "agent_id": {
+        "tool": "cursor",
+        "id": "7a3125d7-4082-4be7-a1dc-5b378e27976f",
+        "model": "kimi-k3"
+      },
+      "human_author": "Raul Montoya Cardenas <montoyaraul34@gmail.com>"
+    }
+  }
+}
