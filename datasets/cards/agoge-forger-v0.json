@@ -1,0 +1,47 @@
+{
+  "name": "agoge-forger-v0",
+  "source_repo": "rmems/agoge-forger",
+  "source_repo_url": "https://github.com/rmems/agoge-forger",
+  "source_repo_description": "Local fine-tuning forge: QLoRA/LoRA train paths, JSONL dataset contracts, adapter merge/export",
+  "schema_version": "pr_trajectory_v0",
+  "schema_url": "https://github.com/rmems/operation-prometheus/blob/main/schemas/pr_trajectory.schema.json",
+  "language": "Python",
+  "domains": ["ml-infra", "training"],
+  "domain_by_pr": {
+    "120": "ml-infra",
+    "67": "training",
+    "85": "ml-infra",
+    "86": "training"
+  },
+  "task_type_by_pr": {
+    "120": "feature",
+    "67": "bugfix",
+    "85": "bugfix",
+    "86": "bugfix"
+  },
+  "linked_issues_by_pr": {
+    "120": [119],
+    "67": [63, 66],
+    "85": [65],
+    "86": [68]
+  },
+  "pr_count": 4,
+  "pr_numbers": [120, 67, 85, 86],
+  "training_use_buckets": {
+    "feature": [120],
+    "repair": [67, 85, 86]
+  },
+  "extracted_at": "2026-09-04",
+  "status": "extracted-v0",
+  "created_at": "2026-09-04",
+  "created_by": "Cursor agent",
+  "jsonl_path": "datasets/jsonl/agoge-forger-v0.jsonl",
+  "manifest_path": "datasets/manifests/agoge-forger-v0.manifest.json",
+  "markdown_card": "datasets/cards/agoge-forger-trajectories-v0.md",
+  "notes": "Wave D (operation-prometheus #66). Live yield after is_bot_user + extract_review_signals: #120 7 kept, #67 9 kept / 8 emitted (TRL 1.x SFTConfig), #85 5 kept (JSONL message-content harden), #86 2 kept (safe_serialization drop). Dropped 0-yield domain PRs #91/#84/#74/#73 and dep/docs/CI. New PR labels live only on this card.",
+  "source_doc": "docs/source-repos/agoge-forger.md",
+  "related_issues": {
+    "operation_prometheus": [66, 29],
+    "agoge_forger": [119, 63, 66, 65, 68]
+  }
+}

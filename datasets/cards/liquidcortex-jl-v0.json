@@ -1,0 +1,44 @@
+{
+  "name": "liquidcortex-jl-v0",
+  "source_repo": "rmems/LiquidCortex.jl",
+  "source_repo_url": "https://github.com/rmems/LiquidCortex.jl",
+  "source_repo_description": "Julia liquid-state machine: experimental step plasticity, GPU step options, generic LSM core",
+  "schema_version": "pr_trajectory_v0",
+  "schema_url": "https://github.com/rmems/operation-prometheus/blob/main/schemas/pr_trajectory.schema.json",
+  "language": "Julia",
+  "domains": ["snn", "gpu-compute"],
+  "domain_by_pr": {
+    "45": "gpu-compute",
+    "12": "snn",
+    "33": "snn"
+  },
+  "task_type_by_pr": {
+    "45": "feature",
+    "12": "refactor",
+    "33": "test"
+  },
+  "linked_issues_by_pr": {
+    "12": [7, 8, 9],
+    "33": [22]
+  },
+  "pr_count": 3,
+  "pr_numbers": [45, 12, 33],
+  "training_use_buckets": {
+    "feature": [45],
+    "repair": [12],
+    "validation": [33]
+  },
+  "extracted_at": "2026-09-04",
+  "status": "extracted-v0",
+  "created_at": "2026-09-04",
+  "created_by": "Cursor agent",
+  "jsonl_path": "datasets/jsonl/liquidcortex-jl-v0.jsonl",
+  "manifest_path": "datasets/manifests/liquidcortex-jl-v0.manifest.json",
+  "markdown_card": "datasets/cards/liquidcortex-jl-trajectories-v0.md",
+  "notes": "Wave D (operation-prometheus #66 / Wave C leftover). Live yield: #45 56 kept (step plasticity + GPU kwargs), #12 32 (market-telemetry purge), #33 4 (reference LSM tests). Dropped action bumps, ImgBot, docs, and #4 (CI/Codecov/Sentry rename). #33 body Closes #22 was not in linked_issues; linked_issues_by_pr restores it. Wave A-style 3-PR shortlist: only three domain PRs survived the skip list.",
+  "source_doc": "docs/source-repos/liquidcortex-jl.md",
+  "related_issues": {
+    "operation_prometheus": [66, 29],
+    "liquidcortex_jl": [7, 8, 9, 22]
+  }
+}

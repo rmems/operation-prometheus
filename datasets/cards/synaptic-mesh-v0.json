@@ -1,0 +1,46 @@
+{
+  "name": "synaptic-mesh-v0",
+  "source_repo": "Limen-Neural/synaptic-mesh",
+  "source_repo_url": "https://github.com/Limen-Neural/synaptic-mesh",
+  "source_repo_description": "SNN topology library: CSR sparse maps, ChannelRouter, neuromodulatory adaptation",
+  "schema_version": "pr_trajectory_v0",
+  "schema_url": "https://github.com/rmems/operation-prometheus/blob/main/schemas/pr_trajectory.schema.json",
+  "language": "Rust",
+  "domains": ["snn", "api"],
+  "domain_by_pr": {
+    "8": "snn",
+    "7": "api",
+    "30": "snn",
+    "2": "snn",
+    "1": "snn"
+  },
+  "task_type_by_pr": {
+    "8": "feature",
+    "7": "refactor",
+    "30": "refactor",
+    "2": "feature",
+    "1": "feature"
+  },
+  "linked_issues_by_pr": {
+    "7": [6]
+  },
+  "pr_count": 5,
+  "pr_numbers": [8, 7, 30, 2, 1],
+  "training_use_buckets": {
+    "feature": [8, 2, 1],
+    "repair": [7, 30]
+  },
+  "extracted_at": "2026-09-04",
+  "status": "extracted-v0",
+  "created_at": "2026-09-04",
+  "created_by": "Cursor agent",
+  "jsonl_path": "datasets/jsonl/synaptic-mesh-v0.jsonl",
+  "manifest_path": "datasets/manifests/synaptic-mesh-v0.manifest.json",
+  "markdown_card": "datasets/cards/synaptic-mesh-trajectories-v0.md",
+  "notes": "Wave D (operation-prometheus #66 / Wave B leftover). Live yield: #8 53 kept (neuromodulatory ChannelRouter), #7 28, #30 4, #2 4, #1 1 (CSR map; kept as the domain origin). #7 carries a documentation label — task_type_by_pr forces refactor. Dropped Qodana/docs/license PRs.",
+  "source_doc": "docs/source-repos/synaptic-mesh.md",
+  "related_issues": {
+    "operation_prometheus": [66, 28],
+    "synaptic_mesh": [6]
+  }
+}

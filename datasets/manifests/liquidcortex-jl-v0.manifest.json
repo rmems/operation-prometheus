@@ -1,0 +1,61 @@
+{
+  "name": "liquidcortex-jl-v0",
+  "schema_version": "pr_trajectory_v0",
+  "created_at": "2026-09-04",
+  "created_by": "Cursor agent",
+  "source_repo": "rmems/LiquidCortex.jl",
+  "jsonl_path": "datasets/jsonl/liquidcortex-jl-v0.jsonl",
+  "record_count": 3,
+  "sha256": "8cc1eed31bd7f40417b36c6ea96d7121f16038051df3dd34e61cd517565362ff",
+  "bytes": 173650,
+  "records": [
+    {
+      "id": "rmems-LiquidCortex.jl-12",
+      "pr_number": 12,
+      "training_use": "repair",
+      "task_type": "refactor",
+      "domain": "snn",
+      "language": "Julia",
+      "quality_score": 0.95,
+      "outcome": "merged",
+      "has_issue_context": true,
+      "review_signal_count": 8,
+      "unique_review_signal_count": 8,
+      "patch_chars": 94404,
+      "validation_count": 3,
+      "source_url_count": 4
+    },
+    {
+      "id": "rmems-LiquidCortex.jl-33",
+      "pr_number": 33,
+      "training_use": "validation",
+      "task_type": "test",
+      "domain": "snn",
+      "language": "Julia",
+      "quality_score": 0.9,
+      "outcome": "merged",
+      "has_issue_context": true,
+      "review_signal_count": 4,
+      "unique_review_signal_count": 4,
+      "patch_chars": 5035,
+      "validation_count": 3,
+      "source_url_count": 2
+    },
+    {
+      "id": "rmems-LiquidCortex.jl-45",
+      "pr_number": 45,
+      "training_use": "feature",
+      "task_type": "feature",
+      "domain": "gpu-compute",
+      "language": "Julia",
+      "quality_score": 0.95,
+      "outcome": "merged",
+      "has_issue_context": true,
+      "review_signal_count": 8,
+      "unique_review_signal_count": 8,
+      "patch_chars": 43769,
+      "validation_count": 4,
+      "source_url_count": 1
+    }
+  ]
+}
