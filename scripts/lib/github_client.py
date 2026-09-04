@@ -45,6 +45,15 @@ class _SafeRedirectHandler(urllib.request.HTTPRedirectHandler):
         return super().redirect_request(req, fp, code, msg, headers, newurl)
 
 
+def _graphql_error_detail(errors: list[Any]) -> str:
+    messages = [
+        str(error.get("message") or error)
+        for error in errors
+        if isinstance(error, dict)
+    ]
+    return "; ".join(messages)[:500] or "unknown GraphQL error"
+
+
 class GitHubClient:
     """Minimal GET-only GitHub REST client with rate-limit awareness."""
 
@@ -281,12 +290,7 @@ class GitHubClient:
             raise GitHubError("GitHub GraphQL response was not an object")
         graphql_errors = parsed.get("errors") or []
         if graphql_errors:
-            messages = [
-                str(error.get("message") or error)
-                for error in graphql_errors
-                if isinstance(error, dict)
-            ]
-            detail = "; ".join(messages)[:500] or "unknown GraphQL error"
+            detail = _graphql_error_detail(graphql_errors)
             raise GitHubError(f"GitHub GraphQL query failed: {detail}")
         data = parsed.get("data")
         if not isinstance(data, dict):

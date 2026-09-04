@@ -317,6 +317,10 @@ def _page_evidence(page: _Page) -> dict[str, Any]:
     }
 
 
+def _is_non_public(raw: dict[str, Any]) -> bool:
+    return raw.get("private") is True or raw.get("visibility") != "public"
+
+
 def _accept_repository(
     raw: Any,
     owner: dict[str, str],
@@ -325,7 +329,7 @@ def _accept_repository(
     """Validate one raw repository; return None when it is not public."""
     if not isinstance(raw, dict):
         raise GitHubError(f"Non-object repository for {owner['login']}")
-    if raw.get("private") is True or raw.get("visibility") != "public":
+    if _is_non_public(raw):
         return None
     repo = _safe_repository(raw, owner)
     repo_id = str(repo.get("id") or "")
@@ -548,12 +552,16 @@ def _claim_pr_id(crawl: _PullRequestCrawl, raw: Any) -> str:
     return pr_id
 
 
+def _has_more_closing_issues(closing: dict[str, Any]) -> bool:
+    return bool((closing.get("pageInfo") or {}).get("hasNextPage"))
+
+
 def _build_pull_request(crawl: _PullRequestCrawl, raw: Any) -> dict[str, Any]:
     """Validate one raw PR node and build its inventory record."""
     pr_id = _claim_pr_id(crawl, raw)
     closing = raw.get("closingIssuesReferences") or {}
     record = _pull_request_record(raw, crawl.repository)
-    if (closing.get("pageInfo") or {}).get("hasNextPage"):
+    if _has_more_closing_issues(closing):
         ctx = _ClosingIssuePagination(
             crawl.client, pr_id, str(crawl.repository["id"]), crawl.pages, []
         )
@@ -561,6 +569,61 @@ def _build_pull_request(crawl: _PullRequestCrawl, raw: Any) -> dict[str, Any]:
         record["source_hash"] = _pull_request_source_hash(raw, record)
     _check_linked_issues_complete(record)
     return record
+
+
+def _record_pr_page(
+    crawl: _PullRequestCrawl,
+    page: tuple[list[Any], dict[str, Any], int, dict[str, Any], dict[str, str]],
+    cursor: str | None,
+    page_index: int,
+) -> tuple[bool, str | None]:
+    """Append page evidence; return (has_next, next_cursor)."""
+    nodes, page_info, total_count, data, headers = page
+    has_next = bool(page_info.get("hasNextPage"))
+    next_cursor = page_info.get("endCursor")
+    crawl.pages.append(
+        _page_evidence(
+            _Page(
+                scope="pull_requests",
+                response=data,
+                item_count=len(nodes),
+                page_index=page_index,
+                has_next_page=has_next,
+                headers=headers,
+                repository_id=str(crawl.repository["id"]),
+                cursor=cursor,
+                next_cursor=next_cursor,
+                total_count=total_count,
+            )
+        )
+    )
+    return has_next, next_cursor
+
+
+def _advance_pr_cursor(
+    repository: dict[str, Any],
+    cursor: str | None,
+    next_cursor: str | None,
+    has_next: bool,
+) -> str | None:
+    """Return the cursor for the next page, or None when pagination is done."""
+    if not has_next:
+        return None
+    if not next_cursor or next_cursor == cursor:
+        raise GitHubError(f"Pull-request pagination cursor stalled for {repository['name_with_owner']}")
+    return next_cursor
+
+
+def _check_pull_request_count(
+    repository: dict[str, Any],
+    pull_requests: list[dict[str, Any]],
+    expected_total: int | None,
+) -> None:
+    if len(pull_requests) != int(expected_total or 0):
+        raise GitHubError(
+            f"Pull-request count mismatch for {repository['name_with_owner']}: "
+            f"expected {expected_total or 0}, got {len(pull_requests)}"
+        )
 
 
 def _collect_pull_requests(
@@ -574,42 +637,17 @@ def _collect_pull_requests(
     expected_total: int | None = None
     pull_requests: list[dict[str, Any]] = []
     while True:
-        nodes, page_info, total_count, data, headers = _fetch_pull_request_page(
-            crawl, cursor, expected_total
-        )
+        page = _fetch_pull_request_page(crawl, cursor, expected_total)
         if expected_total is None:
-            expected_total = total_count
-        has_next = bool(page_info.get("hasNextPage"))
-        next_cursor = page_info.get("endCursor")
-        pages.append(
-            _page_evidence(
-                _Page(
-                    scope="pull_requests",
-                    response=data,
-                    item_count=len(nodes),
-                    page_index=page_index,
-                    has_next_page=has_next,
-                    headers=headers,
-                    repository_id=str(repository["id"]),
-                    cursor=cursor,
-                    next_cursor=next_cursor,
-                    total_count=total_count,
-                )
-            )
-        )
-        for raw in nodes:
+            expected_total = page[2]
+        has_next, next_cursor = _record_pr_page(crawl, page, cursor, page_index)
+        for raw in page[0]:
             pull_requests.append(_build_pull_request(crawl, raw))
-        if not has_next:
+        cursor = _advance_pr_cursor(repository, cursor, next_cursor, has_next)
+        if cursor is None:
             break
-        if not next_cursor or next_cursor == cursor:
-            raise GitHubError(f"Pull-request pagination cursor stalled for {repository['name_with_owner']}")
-        cursor = next_cursor
         page_index += 1
-    if len(pull_requests) != int(expected_total or 0):
-        raise GitHubError(
-            f"Pull-request count mismatch for {repository['name_with_owner']}: "
-            f"expected {expected_total or 0}, got {len(pull_requests)}"
-        )
+    _check_pull_request_count(repository, pull_requests, expected_total)
     pull_requests.sort(key=lambda row: (str(row["id"]), int(row["number"])))
     return pull_requests
 
