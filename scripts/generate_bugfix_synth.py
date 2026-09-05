@@ -17,6 +17,7 @@ import json
 import logging
 import os
 import sys
+from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
@@ -66,6 +67,16 @@ logger = logging.getLogger("generate_bugfix_synth")
 
 class LiveGatedError(HarnessError):
     """--live was requested without a usable credential or lock."""
+
+
+@dataclass
+class RunContext:
+    dry_run: bool
+    model: str
+    out_dir: Path
+    client: OpenRouterClient | None
+    seen: set[str]
+    ledger_path: Path
 
 
 def build_parser() -> argparse.ArgumentParser:
@@ -151,115 +162,148 @@ def _variants_for(count: int) -> tuple[str, ...]:
     return VARIANT_KNOBS[:count]
 
 
-def run(args: argparse.Namespace) -> int:
+def _require_model(model: str) -> None:
+    try:
+        assert_locked_model(model)
+    except OpenRouterError as exc:
+        raise HarnessError(str(exc)) from exc
+
+
+def _open_live_client() -> OpenRouterClient:
+    key = (os.environ.get(API_KEY_ENV) or "").strip()
+    if not key:
+        raise LiveGatedError(
+            f"--live requires {API_KEY_ENV} in the environment; "
+            "default --dry-run makes no network calls"
+        )
+    return OpenRouterClient(api_key=key)
+
+
+def _load_seeds(manifest_path: Path, jsonl_dir: Path) -> list[dict[str, Any]]:
+    manifest = load_seed_manifest(manifest_path)
+    return select_core_seeds(load_jsonl_records(jsonl_dir), core_seed_ids(manifest))
+
+
+def _prepare(args: argparse.Namespace) -> tuple[RunContext, list[dict[str, Any]], tuple[str, ...]]:
     assert_exp_id(args.exp)
     if args.live and args.dry_run_flag:
         raise HarnessError("Pass either --dry-run or --live, not both")
     dry_run = not args.live
-    try:
-        assert_locked_model(args.model)
-    except OpenRouterError as exc:
-        raise HarnessError(str(exc)) from exc
-
+    _require_model(args.model)
+    client = None if dry_run else _open_live_client()
     manifest_path, jsonl_dir, out_dir = resolve_paths(args)
-    manifest = load_seed_manifest(manifest_path)
-    seed_ids = core_seed_ids(manifest)
-    records = load_jsonl_records(jsonl_dir)
-    seeds = select_core_seeds(records, seed_ids)
-    variants = _variants_for(args.variants_per_seed)
-
-    client: OpenRouterClient | None = None
-    if not dry_run:
-        key = (os.environ.get(API_KEY_ENV) or "").strip()
-        if not key:
-            raise LiveGatedError(
-                f"--live requires {API_KEY_ENV} in the environment; "
-                "default --dry-run makes no network calls"
-            )
-        client = OpenRouterClient(api_key=key)
-
     ledger_path = out_dir / "yield-ledger.jsonl"
-    if ledger_path.exists():
-        ledger_path.unlink()
+    ledger_path.parent.mkdir(parents=True, exist_ok=True)
+    ledger_path.write_text("", encoding="utf-8")
+    ctx = RunContext(
+        dry_run=dry_run,
+        model=args.model,
+        out_dir=out_dir,
+        client=client,
+        seen=set(),
+        ledger_path=ledger_path,
+    )
+    return ctx, _load_seeds(manifest_path, jsonl_dir), _variants_for(args.variants_per_seed)
 
-    seen: set[str] = set()
-    kept = 0
-    rejected = 0
-    for seed in seeds:
-        seed_id = str(seed["id"])
-        gold = gold_patch(seed)
-        for variant in variants:
-            started = utc_now()
-            messages = build_teacher_messages(seed, variant)
-            blob = messages_blob(messages)
-            if gold and gold in blob:
-                raise HarnessError(
-                    f"Refusing to send gold patch for seed {seed_id} (prompt leak)"
-                )
-            planned = build_chat_request(messages, model=args.model)
-            planned_dump = _redact_obj(redact_planned_request(planned))
-            write_json(out_dir / "planned_requests" / f"{attempt_id(seed_id, variant)}.json", planned_dump)
 
-            if dry_run:
-                response = fixture_chat_response(seed, variant)
-                write_json(
-                    out_dir / "fixture_responses" / f"{attempt_id(seed_id, variant)}.json",
-                    response,
-                )
-            else:
-                assert client is not None
-                response = client.complete(messages, model=args.model)
+def _seed_id(seed: dict[str, Any]) -> str:
+    seed_id = str(seed.get("id") or "").strip()
+    if not seed_id:
+        raise HarnessError("Seed record missing required 'id' field")
+    return seed_id
 
-            try:
-                candidate = parse_teacher_json(extract_message_content(response))
-            except HarnessError:
-                candidate = {}
-            evaluation = evaluate_synth(candidate, seed, seen)
-            if evaluation.keep:
-                seen.add(patch_fingerprint(str(candidate.get("patch") or "")))
-                kept += 1
-            else:
-                rejected += 1
-            finished = utc_now()
-            row = ledger_row(
-                attempt_id=attempt_id(seed_id, variant),
-                seed_id=seed_id,
-                variant=variant,
-                evaluation=evaluation,
-                started_at=started,
-                finished_at=finished,
-                dry_run=dry_run,
-            )
-            append_jsonl(ledger_path, row)
-            logger.info(
-                "%s %s %s codes=%s soft=%s",
-                row["decision"],
-                seed_id,
-                variant,
-                row["reject_codes"],
-                row["soft_codes"],
-            )
 
+def _teacher_response(ctx: RunContext, seed: dict[str, Any], variant: str) -> dict[str, Any]:
+    seed_id = _seed_id(seed)
+    messages = build_teacher_messages(seed, variant)
+    gold = gold_patch(seed)
+    if gold and gold in messages_blob(messages):
+        raise HarnessError(f"Refusing to send gold patch for seed {seed_id} (prompt leak)")
+    planned = build_chat_request(messages, model=ctx.model)
+    write_json(
+        ctx.out_dir / "planned_requests" / f"{attempt_id(seed_id, variant)}.json",
+        _redact_obj(redact_planned_request(planned)),
+    )
+    if ctx.dry_run:
+        response = fixture_chat_response(seed, variant)
+        write_json(
+            ctx.out_dir / "fixture_responses" / f"{attempt_id(seed_id, variant)}.json",
+            response,
+        )
+        return response
+    if ctx.client is None:
+        raise LiveGatedError("live client was not constructed")
+    return ctx.client.complete(messages, model=ctx.model)
+
+
+def _parse_candidate(response: dict[str, Any]) -> dict[str, Any]:
+    try:
+        return parse_teacher_json(extract_message_content(response))
+    except HarnessError:
+        return {}
+
+
+def _record_attempt(ctx: RunContext, seed: dict[str, Any], variant: str) -> bool:
+    started = utc_now()
+    seed_id = _seed_id(seed)
+    candidate = _parse_candidate(_teacher_response(ctx, seed, variant))
+    evaluation = evaluate_synth(candidate, seed, ctx.seen)
+    if evaluation.keep:
+        ctx.seen.add(patch_fingerprint(str(candidate.get("patch") or "")))
+    row = ledger_row(
+        {
+            "attempt_id": attempt_id(seed_id, variant),
+            "seed_id": seed_id,
+            "variant": variant,
+            "started_at": started,
+            "finished_at": utc_now(),
+            "dry_run": ctx.dry_run,
+        },
+        evaluation,
+    )
+    append_jsonl(ctx.ledger_path, row)
+    logger.info(
+        "%s %s %s codes=%s soft=%s",
+        row["decision"],
+        seed_id,
+        variant,
+        row["reject_codes"],
+        row["soft_codes"],
+    )
+    return evaluation.keep
+
+
+def _write_summary(ctx: RunContext, counts: dict[str, int]) -> None:
+    attempts = counts["seed_count"] * counts["variant_count"]
     summary = {
         "exp_id": EXP_ID,
-        "teacher_model": args.model,
-        "dry_run": dry_run,
-        "seed_count": len(seeds),
-        "variants_per_seed": len(variants),
-        "attempts": len(seeds) * len(variants),
-        "kept": kept,
-        "rejected": rejected,
-        "out_dir": str(out_dir),
-        "network": False if dry_run else True,
+        "teacher_model": ctx.model,
+        "dry_run": ctx.dry_run,
+        "seed_count": counts["seed_count"],
+        "variants_per_seed": counts["variant_count"],
+        "attempts": attempts,
+        "kept": counts["kept"],
+        "rejected": attempts - counts["kept"],
+        "out_dir": str(ctx.out_dir),
+        "network": not ctx.dry_run,
     }
-    write_json(out_dir / "run-summary.json", summary)
+    write_json(ctx.out_dir / "run-summary.json", summary)
     logger.info(
         "Finished %s attempts (%s keep / %s reject) dry_run=%s out=%s",
-        summary["attempts"],
-        kept,
-        rejected,
-        dry_run,
-        out_dir,
+        attempts,
+        counts["kept"],
+        attempts - counts["kept"],
+        ctx.dry_run,
+        ctx.out_dir,
+    )
+
+
+def run(args: argparse.Namespace) -> int:
+    ctx, seeds, variants = _prepare(args)
+    kept = sum(_record_attempt(ctx, seed, variant) for seed in seeds for variant in variants)
+    _write_summary(
+        ctx,
+        {"seed_count": len(seeds), "variant_count": len(variants), "kept": kept},
     )
     return 0
 

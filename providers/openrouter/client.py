@@ -32,16 +32,18 @@ class OpenRouterError(RuntimeError):
         self.status = status
 
 
+def _https_openrouter_url(url: str) -> bool:
+    parsed = urllib.parse.urlsplit(url)
+    return parsed.scheme.casefold() == "https" and parsed.netloc.casefold() == _ALLOWED_NETLOC
+
+
 class _SafeRedirectHandler(urllib.request.HTTPRedirectHandler):
-    """Allow redirects only within the original HTTPS OpenRouter origin."""
+    """Allow redirects only to https://openrouter.ai."""
 
     def redirect_request(self, req, fp, code, msg, headers, newurl):
         source = urllib.parse.urlsplit(req.full_url)
-        target = urllib.parse.urlsplit(newurl)
-        if (
-            target.scheme.casefold() != "https"
-            or target.netloc.casefold() != source.netloc.casefold()
-        ):
+        if not _https_openrouter_url(newurl):
+            target = urllib.parse.urlsplit(newurl)
             raise OpenRouterError(
                 f"Refusing OpenRouter redirect from {source.netloc} to "
                 f"{target.scheme or '(missing)'}://{target.netloc or '(missing)'}"
@@ -141,33 +143,27 @@ class OpenRouterClient:
     ) -> dict[str, Any]:
         """POST chat completions. Callers must not use this from dry-run."""
         if not self.api_key:
-            raise OpenRouterError(
-                f"{API_KEY_ENV} is required for live OpenRouter calls"
-            )
+            raise OpenRouterError(f"{API_KEY_ENV} is required for live OpenRouter calls")
         planned = build_chat_request(
             messages, model=model, api_key=self.api_key, temperature=temperature
         )
-        if planned.url != self.endpoint:
-            raise OpenRouterError(
-                f"Refusing endpoint mismatch: {planned.url} vs {self.endpoint}"
-            )
-        if not planned.url.startswith("https://"):
-            raise OpenRouterError(f"Refusing non-HTTPS URL: {planned.url[:80]}")
-        parsed = urllib.parse.urlsplit(planned.url)
-        if parsed.netloc.casefold() != _ALLOWED_NETLOC:
-            raise OpenRouterError(
-                f"Refusing unexpected OpenRouter host: {parsed.netloc}"
-            )
-        payload = json.dumps(planned.body).encode("utf-8")
+        self._assert_endpoint(planned.url)
+        return _decode_object(self._post(planned))
+
+    def _assert_endpoint(self, url: str) -> None:
+        if url != self.endpoint or not _https_openrouter_url(url):
+            raise OpenRouterError(f"Refusing unexpected OpenRouter URL: {url[:80]}")
+
+    def _post(self, planned: PlannedRequest) -> bytes:
         request = urllib.request.Request(
             planned.url,
-            data=payload,
+            data=json.dumps(planned.body).encode("utf-8"),
             headers=planned.headers,
             method="POST",
         )
         try:
             with self._opener.open(request, timeout=self.timeout) as resp:  # nosec B310
-                raw = resp.read()
+                return resp.read()
         except urllib.error.HTTPError as exc:
             err = exc.read().decode("utf-8", errors="replace")[:500]
             raise OpenRouterError(
@@ -176,10 +172,13 @@ class OpenRouterClient:
             ) from exc
         except urllib.error.URLError as exc:
             raise OpenRouterError(f"OpenRouter network error: {exc}") from exc
-        try:
-            decoded = json.loads(raw.decode("utf-8"))
-        except json.JSONDecodeError as exc:
-            raise OpenRouterError("OpenRouter returned non-JSON body") from exc
-        if not isinstance(decoded, dict):
-            raise OpenRouterError("OpenRouter JSON root must be an object")
-        return decoded
+
+
+def _decode_object(raw: bytes) -> dict[str, Any]:
+    try:
+        decoded = json.loads(raw.decode("utf-8"))
+    except json.JSONDecodeError as exc:
+        raise OpenRouterError("OpenRouter returned non-JSON body") from exc
+    if not isinstance(decoded, dict):
+        raise OpenRouterError("OpenRouter JSON root must be an object")
+    return decoded

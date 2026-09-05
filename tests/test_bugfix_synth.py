@@ -184,6 +184,11 @@ def test_parse_teacher_json_fenced():
     assert parsed["id"] == "x"
 
 
+def test_parse_teacher_json_invalid_raises_harness_error():
+    with pytest.raises(HarnessError, match="not valid JSON|not JSON"):
+        parse_teacher_json("prefix {oops not json")
+
+
 def test_fixture_response_roundtrip():
     seed = _seed()
     response = fixture_chat_response(seed, "broader+tests")

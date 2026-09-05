@@ -72,20 +72,27 @@ def core_seed_ids(manifest: dict[str, Any]) -> list[str]:
     return ids
 
 
+def _parse_jsonl_line(path: Path, line_no: int, line: str) -> dict[str, Any] | None:
+    if not line.strip():
+        return None
+    try:
+        rec = json.loads(line)
+    except json.JSONDecodeError as exc:
+        raise HarnessError(f"Invalid JSON in {path}:{line_no}") from exc
+    if isinstance(rec, dict) and rec.get("id"):
+        return rec
+    return None
+
+
 def load_jsonl_records(jsonl_dir: Path) -> list[dict[str, Any]]:
-    records: list[dict[str, Any]] = []
     paths = sorted(jsonl_dir.glob("*.jsonl"))
     if not paths:
         raise HarnessError(f"No JSONL files under {jsonl_dir}")
+    records: list[dict[str, Any]] = []
     for path in paths:
         for line_no, line in enumerate(path.read_text(encoding="utf-8").splitlines(), 1):
-            if not line.strip():
-                continue
-            try:
-                rec = json.loads(line)
-            except json.JSONDecodeError as exc:
-                raise HarnessError(f"Invalid JSON in {path}:{line_no}") from exc
-            if isinstance(rec, dict) and rec.get("id"):
+            rec = _parse_jsonl_line(path, line_no, line)
+            if rec is not None:
                 records.append(rec)
     return records
 
@@ -110,28 +117,32 @@ def is_holdout(rec: dict[str, Any]) -> bool:
     return rec.get("training_use") == "repair" and rec.get("task_type") != "bugfix"
 
 
+def _index_wanted(records: list[dict[str, Any]], seed_ids: list[str]) -> dict[str, dict[str, Any]]:
+    wanted = set(seed_ids)
+    by_id: dict[str, dict[str, Any]] = {}
+    for rec in records:
+        rid = rec.get("id")
+        if rid in wanted and rid not in by_id:
+            by_id[str(rid)] = rec
+    return by_id
+
+
+def _eligible_core(rec: dict[str, Any], min_quality: float) -> bool:
+    return (not is_holdout(rec)) and meets_core_filters(rec, min_quality=min_quality)
+
+
 def select_core_seeds(
     records: list[dict[str, Any]],
     seed_ids: list[str],
     *,
     min_quality: float = 0.90,
 ) -> list[dict[str, Any]]:
-    by_id: dict[str, dict[str, Any]] = {}
-    for rec in records:
-        rid = rec.get("id")
-        if rid in seed_ids and rid not in by_id:
-            by_id[str(rid)] = rec
+    by_id = _index_wanted(records, seed_ids)
     missing = [sid for sid in seed_ids if sid not in by_id]
     if missing:
         raise HarnessError(f"Core seed ids not found in JSONL: {missing}")
-    selected: list[dict[str, Any]] = []
-    rejected: list[str] = []
-    for sid in seed_ids:
-        rec = by_id[sid]
-        if is_holdout(rec) or not meets_core_filters(rec, min_quality=min_quality):
-            rejected.append(sid)
-            continue
-        selected.append(rec)
+    selected = [by_id[sid] for sid in seed_ids if _eligible_core(by_id[sid], min_quality)]
+    rejected = [sid for sid in seed_ids if not _eligible_core(by_id[sid], min_quality)]
     if rejected:
         raise HarnessError(
             "Core seeds failed task_type=bugfix / quality_score>=0.90 / "
@@ -146,20 +157,24 @@ def truncate_before_context(text: str, max_chars: int = BEFORE_CONTEXT_MAX) -> s
     return text[: max_chars - 1].rstrip() + "…"
 
 
+def _theme_from_signal(item: Any) -> str | None:
+    if not isinstance(item, dict):
+        return None
+    raw = str(item.get("comment") or item.get("suggestion") or "").strip()
+    if not raw:
+        return None
+    first = raw.splitlines()[0].strip()
+    if _DIFF_LINE.match(first) or first.startswith(("+", "-")):
+        return None
+    return first[:160] or None
+
+
 def summarize_review_themes(review_signals: Any, *, limit: int = 8) -> list[str]:
-    themes: list[str] = []
     if not isinstance(review_signals, list):
-        return themes
+        return []
+    themes: list[str] = []
     for item in review_signals:
-        if not isinstance(item, dict):
-            continue
-        raw = str(item.get("comment") or item.get("suggestion") or "").strip()
-        if not raw:
-            continue
-        first = raw.splitlines()[0].strip()
-        if _DIFF_LINE.match(first) or first.startswith(("+", "-")):
-            continue
-        theme = first[:160]
+        theme = _theme_from_signal(item)
         if theme and theme not in themes:
             themes.append(theme)
         if len(themes) >= limit:
@@ -167,15 +182,22 @@ def summarize_review_themes(review_signals: Any, *, limit: int = 8) -> list[str]
     return themes
 
 
+def _validation_kind(item: Any) -> str | None:
+    if not isinstance(item, dict):
+        return None
+    kind = item.get("type")
+    if isinstance(kind, str) and kind:
+        return kind
+    return None
+
+
 def validation_kinds(validation: Any) -> list[str]:
-    kinds: list[str] = []
     if not isinstance(validation, list):
-        return kinds
+        return []
+    kinds: list[str] = []
     for item in validation:
-        if not isinstance(item, dict):
-            continue
-        kind = item.get("type")
-        if isinstance(kind, str) and kind and kind not in kinds:
+        kind = _validation_kind(item)
+        if kind and kind not in kinds:
             kinds.append(kind)
     return kinds
 
@@ -267,27 +289,31 @@ def parse_teacher_json(content: str) -> dict[str, Any]:
     try:
         obj = json.loads(text)
     except json.JSONDecodeError:
-        start = text.find("{")
-        end = text.rfind("}")
-        if start < 0 or end <= start:
-            raise HarnessError("Teacher content is not JSON") from None
-        obj = json.loads(text[start : end + 1])
+        obj = _loads_object_slice(text)
     if not isinstance(obj, dict):
         raise HarnessError("Teacher JSON root must be an object")
     return obj
 
 
+def _loads_object_slice(text: str) -> dict[str, Any]:
+    start = text.find("{")
+    end = text.rfind("}")
+    if start < 0 or end <= start:
+        raise HarnessError("Teacher content is not JSON")
+    try:
+        return json.loads(text[start : end + 1])
+    except json.JSONDecodeError as exc:
+        raise HarnessError("Teacher content is not valid JSON") from exc
+
+
 def extract_message_content(response: dict[str, Any]) -> str:
-    choices = response.get("choices")
-    if not isinstance(choices, list) or not choices:
-        raise HarnessError("Teacher response missing choices")
-    message = choices[0].get("message") if isinstance(choices[0], dict) else None
-    if not isinstance(message, dict):
-        raise HarnessError("Teacher response missing message")
-    content = message.get("content")
-    if not isinstance(content, str) or not content.strip():
-        raise HarnessError("Teacher message content is empty")
-    return content
+    choices = response.get("choices") if isinstance(response, dict) else None
+    first = choices[0] if isinstance(choices, list) and choices else None
+    message = first.get("message") if isinstance(first, dict) else None
+    content = message.get("content") if isinstance(message, dict) else None
+    if isinstance(content, str) and content.strip():
+        return content
+    raise HarnessError("Teacher response missing message content")
 
 
 def _nonempty_str(value: Any) -> bool:
@@ -393,30 +419,34 @@ class Evaluation:
         return self.decision == "keep"
 
 
+def _failed_codes(
+    checks: list[tuple[str, bool]],
+) -> list[str]:
+    return [code for code, ok in checks if not ok]
+
+
 def evaluate_synth(
     candidate: dict[str, Any],
     seed: dict[str, Any],
     seen_fingerprints: set[str] | None = None,
 ) -> Evaluation:
     seen = seen_fingerprints if seen_fingerprints is not None else set()
-    failed: list[str] = []
-    if not check_schema_ok(candidate):
-        failed.append("schema_ok")
-    if not check_task_type_bugfix(candidate):
-        failed.append("task_type_bugfix")
-    if not check_patch_nonempty(candidate):
-        failed.append("patch_nonempty")
-    if not check_no_gold_leak(candidate, seed):
-        failed.append("no_gold_leak")
-    if not check_non_template(candidate, seen):
-        failed.append("non_template")
-    if not check_provenance_complete(candidate, seed):
-        failed.append("provenance_complete")
-    soft: list[str] = []
-    if not check_lang_match(candidate, seed):
-        soft.append("lang_match")
-    if not check_validation_present(candidate):
-        soft.append("validation_present")
+    failed = _failed_codes(
+        [
+            ("schema_ok", check_schema_ok(candidate)),
+            ("task_type_bugfix", check_task_type_bugfix(candidate)),
+            ("patch_nonempty", check_patch_nonempty(candidate)),
+            ("no_gold_leak", check_no_gold_leak(candidate, seed)),
+            ("non_template", check_non_template(candidate, seen)),
+            ("provenance_complete", check_provenance_complete(candidate, seed)),
+        ]
+    )
+    soft = _failed_codes(
+        [
+            ("lang_match", check_lang_match(candidate, seed)),
+            ("validation_present", check_validation_present(candidate)),
+        ]
+    )
     decision = "keep" if not failed else "reject"
     return Evaluation(decision=decision, reject_codes=failed, soft_codes=soft)
 
@@ -485,28 +515,14 @@ def fixture_chat_response(seed: dict[str, Any], variant: str) -> dict[str, Any]:
     }
 
 
-def ledger_row(
-    *,
-    attempt_id: str,
-    seed_id: str,
-    variant: str,
-    evaluation: Evaluation,
-    started_at: str,
-    finished_at: str,
-    dry_run: bool,
-) -> dict[str, Any]:
+def ledger_row(meta: dict[str, Any], evaluation: Evaluation) -> dict[str, Any]:
     return {
-        "attempt_id": attempt_id,
-        "seed_id": seed_id,
-        "variant": variant,
+        **meta,
         "decision": evaluation.decision,
         "reject_codes": list(evaluation.reject_codes),
         "soft_codes": list(evaluation.soft_codes),
         "teacher_model": LOCKED_MODEL,
         "exp_id": EXP_ID,
-        "started_at": started_at,
-        "finished_at": finished_at,
-        "dry_run": dry_run,
     }
 
 
