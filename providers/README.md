@@ -21,6 +21,13 @@ See:
 
 ## Current status
 
-This directory is populated with this README. Provider-specific subdirectories (e.g. `xai/`, `openai/`, `anthropic/`, `local/`) will be added as extraction agents and eval harnesses are built.
+- [`openrouter/`](openrouter/README.md) — thin stdlib HTTPS client for
+  `https://openrouter.ai/api/v1/chat/completions`, used by
+  `scripts/generate_bugfix_synth.py` for **EXP-PROM-BUGFIX-SWE-001**.
+  Dry-run is the default (no network, no API key). The teacher is locked to
+  `nvidia/nemotron-3-ultra-550b-a55b:free` with no fallback models.
+
+Other provider-specific subdirectories (e.g. `xai/`, `openai/`, `anthropic/`,
+`local/`) can be added as extraction agents and eval harnesses are built.
 
 Keep this directory small and focused on integration, not assets.

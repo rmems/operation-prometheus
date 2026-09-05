@@ -85,3 +85,7 @@ Thumbs.db
 # Local agent scratch state (already filtered out of curated patches by
 # _NOISE_PATCH_DIRS in scripts/lib/normalize.py).
 .kilo/
+
+# EXP teacher generations (never commit completions or live payloads)
+experiments/**/generations/
+*.openrouter.jsonl
