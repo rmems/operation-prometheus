@@ -1,0 +1,65 @@
+{
+  "exp_id": "EXP-PROM-BUGFIX-SWE-001",
+  "teacher_model": "nvidia/nemotron-3-ultra-550b-a55b:free",
+  "source_glob": "datasets/jsonl/*.jsonl",
+  "selection": {
+    "task_type": "bugfix",
+    "quality_score_min": 0.90,
+    "outcome": "merged"
+  },
+  "core_seeds": [
+    {
+      "id": "Limen-Neural-axon-encoder-41",
+      "repo": "Limen-Neural/axon-encoder",
+      "pr_number": 41
+    },
+    {
+      "id": "Limen-Neural-brainstem-daemon-25",
+      "repo": "Limen-Neural/brainstem-daemon",
+      "pr_number": 25
+    },
+    {
+      "id": "rmems-spike-viz-23",
+      "repo": "rmems/spike-viz",
+      "pr_number": 23
+    },
+    {
+      "id": "rmems-thalamic-relay-23",
+      "repo": "rmems/thalamic-relay",
+      "pr_number": 23
+    },
+    {
+      "id": "rmems-Theseus-Quarry-12",
+      "repo": "rmems/Theseus-Quarry",
+      "pr_number": 12
+    },
+    {
+      "id": "rmems-corinth-canal-142",
+      "repo": "rmems/corinth-canal",
+      "pr_number": 142
+    },
+    {
+      "id": "rmems-myelin-accelerator-22",
+      "repo": "rmems/myelin-accelerator",
+      "pr_number": 22
+    },
+    {
+      "id": "rmems-worktrees-hives-79",
+      "repo": "rmems/worktrees-hives",
+      "pr_number": 79
+    }
+  ],
+  "holdout": {
+    "generate": false,
+    "description": "Secondary holdout for later EXPs. Do not generate here.",
+    "filter": {
+      "training_use": "repair",
+      "task_type_not": "bugfix"
+    }
+  },
+  "variants": [
+    "same-root-different-surface",
+    "narrower",
+    "broader+tests"
+  ]
+}
