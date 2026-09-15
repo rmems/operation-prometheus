@@ -38,7 +38,8 @@ including a frozen `custom_license` object when the inventory row carried
 one, and an explicit reason code. Quarantined evidence always includes
 `custom_license` (`null` when there is no custom object). Duplicate
 released IDs that are converted to quarantined rows keep their
-`inventory_license` object and the released row's `snapshot_sha256` /
+`inventory_license` object, the record / card / manifest license declarations,
+and the released row's `snapshot_sha256` /
 `repository_source_hash`. A record whose `id` and `trajectory_id` are
 absent, blank, or non-string is quarantined as `declarations_disagree`
 instead of closing under a synthetic `repo#pr` identifier. A present `id` or
@@ -181,10 +182,12 @@ evaluated. Accepted snapshot digests are stored as lowercase hex.
 The dataset manifest must declare a valid `sha256` of `--records`; a missing
 or malformed digest fails closed. Duplicate inventory aliases that point at
 different repositories are rejected. Inventory `aliases` must be an array of
-names or `{name_with_owner}` objects; a JSON object such as
+names or `{name_with_owner, evidence_refs}` objects; a JSON object such as
 `{"rmems/other": {}}` cannot be indexed as a legitimate alias. Each alias
-entry must be a non-empty name string or `{name_with_owner}` object;
-`{}` or `7` cannot be skipped. Duplicate immutable `repository_id`
+entry must be a non-empty name string or an object with both `name_with_owner`
+and a non-empty `evidence_refs` array of unique strings;
+`{"name_with_owner":"rmems/other"}` without provenance cannot resolve another
+repository's license. `{}` or `7` cannot be skipped. Duplicate immutable `repository_id`
 values that point at different names are rejected. Every supplied repository
 inventory row must be an object with a non-empty canonical `name_with_owner`;
 a valid matching row plus a malformed `{}` entry is rejected instead of
@@ -226,13 +229,17 @@ reference definitions, so a URL that only contains `MIT`, including a
 destination with balanced parentheses such as
 `https://example.test/foo(bar)/MIT`, a nested link label such as
 `[details [nested]](https://example.test/MIT)`, a nested image destination
-such as `[![details](https://example.test/MIT)](https://outer.test)`, a
+such as `[![details](https://example.test/MIT)](https://outer.test)`, an
+angle-bracket destination with an escaped closer such as
+`[details](<https://example.test/\> foo MIT>)`, a
 destination on the line after
 `[source]:`, or a fenced `## License / provenance` heading, is not
 disclosure. A CommonMark reference-definition title on the following line is
 stripped with the definition. Labels parse backslash escapes, so
 `[license\]]: https://example.test/MIT` is stripped as a definition rather
-than leaving `MIT` in visible text. HTML comments and
+than leaving `MIT` in visible text. Inline Markdown links are stripped before
+raw HTML is parsed, so an escaped `>` inside an angle-bracket destination
+cannot leak `MIT` into visible text. HTML comments and
 non-rendered HTML are stripped before the license heading is located, so a
 commented-out `## License / provenance` block cannot disclose a later
 visible identifier. A void tag such as `<br/>` inside a hidden block
