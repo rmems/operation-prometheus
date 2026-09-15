@@ -81,6 +81,12 @@ def _parse_json(raw: bytes, path: Path) -> Any:
         raise ValueError(f"{path}: {exc}") from exc
 
 
+def _require_object(value: Any, path: Path) -> dict[str, Any]:
+    if not isinstance(value, dict):
+        raise ValueError(f"{path} must be a JSON object")
+    return value
+
+
 def _parse_jsonl(raw: bytes, path: Path) -> list[dict[str, Any]]:
     rows: list[dict[str, Any]] = []
     for line in _decode_utf8(raw, path).splitlines():
@@ -350,8 +356,10 @@ def main(argv: list[str] | None = None) -> int:
         )
         markdown_raw = args.markdown_card.read_bytes() if args.markdown_card else None
         records = _parse_jsonl(records_raw, args.records)
-        card = _parse_json(card_raw, args.card)
-        manifest = _parse_json(manifest_raw, args.manifest)
+        card = _require_object(_parse_json(card_raw, args.card), args.card)
+        manifest = _require_object(
+            _parse_json(manifest_raw, args.manifest), args.manifest
+        )
         inventory = _parse_jsonl(inventory_raw, args.inventory)
         inventory_manifest = (
             _parse_json(inventory_manifest_raw, args.inventory_manifest)
