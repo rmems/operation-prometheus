@@ -257,8 +257,12 @@ def index_repositories(repositories: list[dict[str, Any]]) -> dict[str, dict[str
                 alias_name = _text(alias.get("name_with_owner")).casefold()
             else:
                 alias_name = _text(alias).casefold()
-            if alias_name:
-                index.setdefault(alias_name, row)
+            if not alias_name:
+                continue
+            existing = index.get(alias_name)
+            if existing is not None and existing is not row:
+                raise ValueError(f"Duplicate inventory alias {alias_name}")
+            index[alias_name] = row
     return index
 
 
