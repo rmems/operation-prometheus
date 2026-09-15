@@ -271,10 +271,11 @@ def _released_evidence_bound(row: dict[str, Any], report_snapshot: str | None) -
     }
     has_custom = inventory_has_custom_evidence(reconstructed)
     family = row.get("license_family")
+    custom_present = isinstance(row.get("custom_license"), dict)
     if family == "custom":
         if not has_custom:
             return False
-    elif has_custom:
+    elif has_custom or custom_present:
         return False
     digest = _sha256_or_none(row.get("evidence_digest"))
     if digest != evidence_digest(license_evidence_payload(reconstructed)):
@@ -374,7 +375,8 @@ def assert_released_positives_are_closed(report: dict[str, Any]) -> None:
     declared_families = report.get("license_families")
     if not isinstance(declared_families, list) or declared_families != families:
         raise AssertionError("license_families do not match released rows")
-    if list(report.get("evidence_digests") or []) != evidence:
+    declared_evidence = report.get("evidence_digests")
+    if not isinstance(declared_evidence, list) or declared_evidence != evidence:
         raise AssertionError("evidence_digests do not match released rows")
     report_snapshot = _sha256_or_none(report.get("snapshot_sha256"))
     if any(
