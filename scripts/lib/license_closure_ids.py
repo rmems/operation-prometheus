@@ -12,7 +12,7 @@ GIT_OID_RE = re.compile(r"^(?:[0-9a-fA-F]{40}|[0-9a-fA-F]{64})$")
 LICENSE_REF_RE = re.compile(r"^LicenseRef-[A-Za-z0-9.-]+$")
 EXPRESSION_SPLIT_RE = re.compile(r"\s+(AND|OR|WITH)\s+", re.IGNORECASE)
 MARKDOWN_LICENSE_SECTION_RE = re.compile(
-    r"^ {0,3}##\s+License\s*/\s*provenance\s*$",
+    r"^ {0,3}##\s+License\s*/\s*provenance(?:[ \t]+#+)?[ \t]*$",
     re.IGNORECASE | re.MULTILINE,
 )
 MARKDOWN_SECTION_BOUNDARY_RE = re.compile(
