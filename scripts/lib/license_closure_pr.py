@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import re
+from html.parser import HTMLParser
 from typing import Any
 
 from .license_closure_ids import (
@@ -15,6 +16,25 @@ from .source_inventory_common import sha256_json
 
 HTML_COMMENT_RE = re.compile(r"<!--.*?-->", re.DOTALL)
 HTML_TAG_RE = re.compile(r"</?[^>]+>")
+_NON_RENDERED_HTML_TAGS = frozenset({"noscript", "script", "style", "template"})
+_VOID_HTML_TAGS = frozenset(
+    {
+        "area",
+        "base",
+        "br",
+        "col",
+        "embed",
+        "hr",
+        "img",
+        "input",
+        "link",
+        "meta",
+        "param",
+        "source",
+        "track",
+        "wbr",
+    }
+)
 MARKDOWN_REFERENCE_DEFINITION_RE = re.compile(
     r"^\s*\[[^\]\n]+\]:\s+\S.*$",
     re.MULTILINE,
@@ -209,11 +229,49 @@ def _markdown_license_section(markdown: str) -> str | None:
     return rest[: next_heading.start()]
 
 
+class _VisibleHtmlText(HTMLParser):
+    """Collect text that would render, skipping hidden and non-rendered HTML."""
+
+    def __init__(self) -> None:
+        super().__init__(convert_charrefs=True)
+        self._skip_depth = 0
+        self.parts: list[str] = []
+
+    def _hides(self, tag: str, attrs: list[tuple[str, str | None]]) -> bool:
+        if tag in _NON_RENDERED_HTML_TAGS:
+            return True
+        return any(name.casefold() == "hidden" for name, _value in attrs)
+
+    def handle_starttag(self, tag: str, attrs: list[tuple[str, str | None]]) -> None:
+        if self._skip_depth:
+            if tag not in _VOID_HTML_TAGS:
+                self._skip_depth += 1
+            return
+        if self._hides(tag, attrs) and tag not in _VOID_HTML_TAGS:
+            self._skip_depth = 1
+
+    def handle_endtag(self, tag: str) -> None:
+        if self._skip_depth:
+            self._skip_depth -= 1
+
+    def handle_data(self, data: str) -> None:
+        if not self._skip_depth:
+            self.parts.append(data)
+
+
+def _strip_non_rendered_html(markdown: str) -> str:
+    parser = _VisibleHtmlText()
+    parser.feed(markdown)
+    parser.close()
+    return "".join(parser.parts)
+
+
 def _visible_markdown_text(markdown: str) -> str:
     visible = HTML_COMMENT_RE.sub("", markdown)
     visible = MARKDOWN_REFERENCE_DEFINITION_RE.sub("", visible)
     visible = MARKDOWN_INLINE_LINK_RE.sub(r"\1", visible)
     visible = MARKDOWN_REFERENCE_LINK_RE.sub(r"\1", visible)
+    visible = _strip_non_rendered_html(visible)
     return HTML_TAG_RE.sub("", visible)
 
 
