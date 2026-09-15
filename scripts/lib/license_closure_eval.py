@@ -20,6 +20,7 @@ from .license_closure_inventory import (
     _declaration_map_conflicts,
     _inventory_for_repo,
     _prior_repository,
+    _repository_names,
     card_license_for_repo,
     declared_digest_for_repo,
     evidence_digest,
@@ -129,8 +130,15 @@ def _evaluate_record(
     if prior_index is not None:
         prior_repo = _prior_repository(prior_index, repository, repo)
         if isinstance(prior_repo, dict):
-            prior_id = normalize_license_id(inventory_license_object(prior_repo))
-            prior_digest = evidence_digest(license_evidence_payload(prior_repo))
+            declared_prior = _sha256_or_none(prior_repo.get("source_hash"))
+            if (
+                declared_prior is None
+                or declared_prior != inventory_row_source_hash(prior_repo)
+            ):
+                reasons.append("source_license_changed")
+            else:
+                prior_id = normalize_license_id(inventory_license_object(prior_repo))
+                prior_digest = evidence_digest(license_evidence_payload(prior_repo))
 
     card_repos = _declared_repos(card)
     manifest_repos = _declared_repos(manifest)
@@ -142,7 +150,10 @@ def _evaluate_record(
         reasons.append("snapshot_provenance_missing")
     if not _sha256_or_none(snapshot_sha256) or source_hash is None:
         reasons.append("snapshot_provenance_missing")
-    reasons.extend(_pr_inventory_reasons(record, repo, pr_number, pull_requests))
+    pr_names = [repo]
+    if isinstance(repository, dict):
+        pr_names.extend(_repository_names(repository))
+    reasons.extend(_pr_inventory_reasons(record, pr_names, pr_number, pull_requests))
 
     if declared_card is None:
         reasons.append("card_disclosure_missing")
@@ -209,7 +220,7 @@ def _evaluate_record(
     )
     closed = not reasons and family in CLOSED_FAMILIES and digest is not None
     if closed:
-        return {
+        released: dict[str, Any] = {
             "evidence_digest": digest,
             "license_family": family,
             "pr_number": pr_number,
@@ -218,6 +229,11 @@ def _evaluate_record(
             "spdx_id": inventory_id or declared_record or declared_card,
             "state": "released_positive",
         }
+        if has_custom and isinstance(repository, dict):
+            custom = repository.get("custom_license")
+            if isinstance(custom, dict):
+                released["custom_license"] = custom
+        return released
     return {
         "evidence": evidence,
         "license_family": family if family in LICENSE_FAMILIES else "unknown",
