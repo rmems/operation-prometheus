@@ -68,6 +68,12 @@ def evidence_digest(payload: dict[str, Any]) -> str:
     return sha256_json(payload)
 
 
+def inventory_row_source_hash(repository: dict[str, Any]) -> str:
+    return sha256_json(
+        {key: value for key, value in repository.items() if key != "source_hash"}
+    )
+
+
 def _nested_record_repo(record: dict[str, Any]) -> str:
     repository = record.get("repository")
     if isinstance(repository, dict):
