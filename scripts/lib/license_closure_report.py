@@ -10,6 +10,7 @@ from .license_closure_ids import SCHEMA_VERSION, _sha256_or_none, _text
 from .license_closure_inventory import index_repositories
 from .license_closure_pr import _index_pull_requests
 
+
 def _bundle_declaration_errors(
     report: dict[str, Any], manifest: dict[str, Any]
 ) -> list[str]:
@@ -195,6 +196,10 @@ def assert_released_positives_are_closed(report: dict[str, Any]) -> None:
         raise AssertionError("Quarantined count drifted from quarantined rows")
     if counts.get("released_positive_count") != len(released):
         raise AssertionError("Released positive count does not match released rows")
+    if counts.get("record_count") != len(released) + len(quarantined):
+        raise AssertionError(
+            "Record count does not match released and quarantined rows"
+        )
     if any(row.get("state") != "released_positive" for row in released):
         raise AssertionError("Non-positive row listed as released")
     if bool(report.get("closed")) != _derived_closed(report, quarantined):
