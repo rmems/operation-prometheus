@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import hashlib
+import ipaddress
 import json
 import re
 from pathlib import Path
@@ -70,28 +71,27 @@ def record_identity(record: dict[str, Any]) -> str | None:
     return None
 
 
-def iter_uri_fields(record: dict[str, Any]) -> list[str]:
-    """Yield sourced URI strings, excluding patch bodies and review prose."""
+def _string_fields(record: dict[str, Any], keys: tuple[str, ...]) -> list[str]:
     values: list[str] = []
-    for key in ("source_urls", "evidence_references"):
+    for key in keys:
         field = record.get(key)
         if isinstance(field, list):
             values.extend(item for item in field if isinstance(item, str))
         elif isinstance(field, str):
             values.append(field)
-    for key in ("url", "uri", "html_url"):
-        field = record.get(key)
-        if isinstance(field, str):
-            values.append(field)
+    return values
+
+
+def iter_uri_fields(record: dict[str, Any]) -> list[str]:
+    """Yield sourced URI strings, excluding patch bodies and review prose."""
+    values = _string_fields(record, ("source_urls", "evidence_references", "url", "uri", "html_url"))
     for artifact in record.get("artifacts") or []:
         if isinstance(artifact, dict) and isinstance(artifact.get("uri"), str):
             values.append(artifact["uri"])
     for event in record.get("events") or []:
         if not isinstance(event, dict):
             continue
-        refs = event.get("evidence_references")
-        if isinstance(refs, list):
-            values.extend(item for item in refs if isinstance(item, str))
+        values.extend(_string_fields(event, ("evidence_references",)))
     return values
 
 
@@ -114,17 +114,24 @@ def private_reference_errors(text: str) -> list[str]:
             errors.append("private or ssh git URI")
             continue
         host = (parsed.hostname or "").casefold()
-        if host and PRIVATE_HOST_RE.fullmatch(host):
+        if host and _is_private_host(host):
             errors.append(f"private host {host}")
     if re.search(r"(?i)\bgit@[^\s:]+:", text):
         errors.append("ssh git@ remote")
     return errors
 
 
+def _is_private_host(host: str) -> bool:
+    try:
+        return not ipaddress.ip_address(host).is_global
+    except ValueError:
+        return bool(PRIVATE_HOST_RE.fullmatch(host))
+
+
 def unique_event_errors(record: dict[str, Any]) -> list[str]:
     events = record.get("events")
     if not isinstance(events, list):
-        return []
+        return unique_artifact_errors(record)
     seen: set[str] = set()
     errors: list[str] = []
     for event in events:
@@ -142,22 +149,29 @@ def unique_event_errors(record: dict[str, Any]) -> list[str]:
             actor_id = actor.get("id")
             if not isinstance(actor_id, str) or not actor_id.strip():
                 errors.append("actor attribution is missing a sourced id")
+    errors.extend(unique_artifact_errors(record))
+    return errors
+
+
+def unique_artifact_errors(record: dict[str, Any]) -> list[str]:
     artifacts = record.get("artifacts")
-    if isinstance(artifacts, list):
-        artifact_ids: set[str] = set()
-        for artifact in artifacts:
-            if not isinstance(artifact, dict):
-                continue
-            artifact_id = artifact.get("id")
-            if isinstance(artifact_id, str) and artifact_id:
-                if artifact_id in artifact_ids:
-                    errors.append(f"duplicate artifact id {artifact_id}")
-                artifact_ids.add(artifact_id)
-            digest = artifact.get("sha256")
-            if digest is not None and not (
-                isinstance(digest, str) and SHA256_RE.fullmatch(digest)
-            ):
-                errors.append("artifact sha256 is not a 64-char hex digest")
+    if not isinstance(artifacts, list):
+        return []
+    artifact_ids: set[str] = set()
+    errors: list[str] = []
+    for artifact in artifacts:
+        if not isinstance(artifact, dict):
+            continue
+        artifact_id = artifact.get("id")
+        if isinstance(artifact_id, str) and artifact_id:
+            if artifact_id in artifact_ids:
+                errors.append(f"duplicate artifact id {artifact_id}")
+            artifact_ids.add(artifact_id)
+        digest = artifact.get("sha256")
+        if digest is not None and not (
+            isinstance(digest, str) and SHA256_RE.fullmatch(digest)
+        ):
+            errors.append("artifact sha256 is not a 64-char hex digest")
     return errors
 
 

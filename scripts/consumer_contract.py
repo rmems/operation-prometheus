@@ -65,9 +65,9 @@ def _parse_timestamp(value: str) -> datetime:
     return parsed.astimezone(timezone.utc)
 
 
-def future_event_errors(record: dict[str, Any]) -> list[str]:
-    meta = record.get("_prometheus")
+def _event_timestamps(record: dict[str, Any]) -> list[str]:
     timestamps: list[str] = []
+    meta = record.get("_prometheus")
     if isinstance(meta, dict):
         raw = meta.get("event_timestamps") or []
         if isinstance(raw, list):
@@ -77,9 +77,13 @@ def future_event_errors(record: dict[str, Any]) -> list[str]:
         for event in events:
             if isinstance(event, dict) and isinstance(event.get("timestamp"), str):
                 timestamps.append(event["timestamp"])
+    return timestamps
+
+
+def future_event_errors(record: dict[str, Any]) -> list[str]:
     errors: list[str] = []
     last: datetime | None = None
-    for stamp in timestamps:
+    for stamp in _event_timestamps(record):
         try:
             current = _parse_timestamp(stamp)
         except (ValueError, TypeError, OverflowError):
@@ -96,7 +100,7 @@ def load_derivative_rows(path: Path) -> list[tuple[int, dict[str, Any]]]:
     with path.open(encoding="utf-8") as handle:
         for line_number, line in enumerate(handle, start=1):
             if not line.strip():
-                continue
+            continue
             record = json.loads(line)
             if isinstance(record, dict):
                 rows.append((line_number, record))
@@ -118,7 +122,7 @@ def consume(path: Path, normalize: Callable[..., dict[str, Any]]) -> dict[str, A
         except ValueError as exc:
             errors.append(f"{path.name}:{line_number} {exc}")
             continue
-        if not isinstance(normalized, dict) or "text" not in normalized:
+        if not isinstance(normalized, dict) or not isinstance(normalized.get("text"), str):
             errors.append(f"{path.name}:{line_number} parser did not return a text row")
             continue
         consumed.append(
@@ -126,13 +130,13 @@ def consume(path: Path, normalize: Callable[..., dict[str, Any]]) -> dict[str, A
                 "line": line_number,
                 "format": _format_name(payload),
                 "text_sha256": hashlib.sha256(
-                    str(normalized["text"]).encode("utf-8")
+                    normalized["text"].encode("utf-8")
                 ).hexdigest(),
             }
         )
     sidecar = {
         "schema_version": SIDECAR_SCHEMA,
-        "source_path": path.name,
+        "source_path": str(path.resolve()),
         "source_sha256": sha256_file(path),
         "parser": "agoge_forger.datasets.normalize_row",
         "row_count": len(consumed),
@@ -174,7 +178,8 @@ def main(argv: list[str] | None = None) -> int:
     failed = False
     for path in files:
         sidecar = consume(path, normalize)
-        out_path = args.out_dir / f"{path.stem}.sidecar.json"
+        digest = hashlib.sha256(str(path.resolve()).encode("utf-8")).hexdigest()[:12]
+        out_path = args.out_dir / f"{path.stem}-{digest}.sidecar.json"
         out_path.write_text(
             json.dumps(sidecar, indent=2, ensure_ascii=False) + "\n", encoding="utf-8"
         )
