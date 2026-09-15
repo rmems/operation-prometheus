@@ -290,3 +290,4 @@ def test_card_declaration_follows_inventory_aliases():
     report = _report(bundle)
     _assert_schema(report)
     assert report["closed"] is True
+
