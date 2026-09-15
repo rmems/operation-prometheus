@@ -12,6 +12,7 @@ from license_closure_fixtures import (
     SOURCE_HASH,
     WRONG_HEAD_OID,
     bind_source_hash,
+    inventory_alias,
     inventory_pr,
     report_kwargs,
     repository,
@@ -69,7 +70,7 @@ def test_forward_rename_still_sees_prior_license_change():
     bundle = spdx_known_bundle()
     current = dict(bundle["repositories"][0])
     current["name_with_owner"] = "rmems/widget-renamed"
-    current["aliases"] = [{"name_with_owner": "rmems/widget"}]
+    current["aliases"] = [inventory_alias("rmems/widget")]
     bundle["repositories"] = [bind_source_hash(current)]
     bundle["records"][0]["repo"] = "rmems/widget-renamed"
     bundle["card"]["source_repo"] = "rmems/widget-renamed"
@@ -105,7 +106,7 @@ def test_inventory_alias_claimed_by_two_rows_is_rejected():
         license_name="MIT License",
         url="https://api.github.com/licenses/mit",
     )
-    other["aliases"] = [{"name_with_owner": "rmems/widget"}]
+    other["aliases"] = [inventory_alias("rmems/widget")]
     bundle["repositories"].append(other)
     with pytest.raises(ValueError, match="Duplicate inventory alias"):
         _report(bundle)
@@ -114,7 +115,7 @@ def test_inventory_alias_claimed_by_two_rows_is_rejected():
 def test_inventory_row_may_repeat_its_own_name_as_alias():
     bundle = spdx_known_bundle()
     row = dict(bundle["repositories"][0])
-    row["aliases"] = [{"name_with_owner": "rmems/widget"}]
+    row["aliases"] = [inventory_alias("rmems/widget")]
     bundle["repositories"] = [bind_source_hash(row)]
     report = _report(bundle)
     _assert_schema(report)
