@@ -5,7 +5,25 @@ from __future__ import annotations
 import re
 from typing import Any
 
-from .license_closure_ids import GIT_OID_RE, MARKDOWN_LICENSE_SECTION_RE, _text
+from .license_closure_ids import (
+    GIT_OID_RE,
+    MARKDOWN_LICENSE_SECTION_RE,
+    _sha256_or_none,
+    _text,
+)
+from .source_inventory_common import sha256_json
+
+
+def pr_inventory_row_source_hash(row: dict[str, Any]) -> str:
+    """Hash the supplied PR inventory row, excluding ``source_hash``.
+
+    Eligibility producer hashes bind unsanitized GraphQL title/body, which
+    published PR rows do not keep. Authenticate the published object used
+    for code-state matching instead so a stale digest cannot cover edited
+    base/head/merge OIDs.
+    """
+    payload = {key: value for key, value in row.items() if key != "source_hash"}
+    return sha256_json(payload)
 
 
 def _valid_oid(value: Any) -> str | None:
@@ -80,6 +98,11 @@ def _index_pull_requests(
         repo = _text(row.get("repository_name_with_owner")).casefold()
         number = row.get("number")
         if repo and type(number) is int and number >= 1:
+            declared = _sha256_or_none(row.get("source_hash"))
+            if declared is None or declared != pr_inventory_row_source_hash(row):
+                raise ValueError(
+                    "pull-request inventory source_hash does not match the published row"
+                )
             key = (repo, number)
             if key in index:
                 raise ValueError(f"Duplicate inventory pull request {repo}#{number}")
