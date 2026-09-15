@@ -79,6 +79,13 @@ def _record_role_oids(record: dict[str, Any], key: str) -> set[str]:
     return {oid} if oid is not None else set()
 
 
+def _present_role_oid_invalid(record: dict[str, Any], key: str) -> bool:
+    container = record.get("repository")
+    if not isinstance(container, dict) or key not in container:
+        return False
+    return _valid_oid(container[key]) is None
+
+
 def _code_state_matches_inventory_pr(
     record: dict[str, Any],
     inventory_pr: dict[str, Any],
@@ -93,6 +100,8 @@ def _code_state_matches_inventory_pr(
     saw_record_oid = False
     saw_merge = False
     for record_key, pr_key in _RECORD_TO_PR_ROLE:
+        if _present_role_oid_invalid(record, record_key):
+            return False
         record_oids = _record_role_oids(record, record_key)
         if not record_oids:
             continue
@@ -131,7 +140,7 @@ def _pr_inventory_reasons(
             continue
         pr_id = _text(inventory_pr.get("repository_id"))
         if inventory_id and pr_id and inventory_id != pr_id:
-            continue
+            return ["snapshot_provenance_missing"]
         evidence = sha256_json(
             {
                 "base_oid": inventory_pr.get("base_oid"),
@@ -275,10 +284,16 @@ def _visible_markdown_text(markdown: str) -> str:
     return HTML_TAG_RE.sub("", visible)
 
 
+def _strip_hidden_markup(markdown: str) -> str:
+    return _strip_non_rendered_html(HTML_COMMENT_RE.sub("", markdown))
+
+
 def _markdown_discloses(markdown: str | None, identifier: str | None) -> bool:
     if markdown is None:
         return True
-    section = _markdown_license_section(_strip_fenced_code(markdown))
+    section = _markdown_license_section(
+        _strip_hidden_markup(_strip_fenced_code(markdown))
+    )
     if section is None or not identifier:
         return False
     visible = _visible_markdown_text(section)
