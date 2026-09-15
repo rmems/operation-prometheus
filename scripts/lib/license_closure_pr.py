@@ -431,6 +431,27 @@ def _inline_link_close(markdown: str, start: int) -> int | None:
     return None
 
 
+def _markdown_label_close(markdown: str, text_start: int) -> int | None:
+    depth = 1
+    index = text_start
+    length = len(markdown)
+    while index < length:
+        char = markdown[index]
+        if char == "\\":
+            index += 2
+            continue
+        if char == "\n":
+            return None
+        if char == "[":
+            depth += 1
+        elif char == "]":
+            depth -= 1
+            if depth == 0:
+                return index
+        index += 1
+    return None
+
+
 def _strip_inline_links(markdown: str) -> str:
     result: list[str] = []
     index = 0
@@ -441,13 +462,8 @@ def _strip_inline_links(markdown: str) -> str:
         )
         if markdown[index] == "[" or image:
             text_start = index + (2 if image else 1)
-            close = markdown.find("]", text_start)
-            if (
-                close != -1
-                and "\n" not in markdown[text_start:close]
-                and close + 1 < length
-                and markdown[close + 1] == "("
-            ):
+            close = _markdown_label_close(markdown, text_start)
+            if close is not None and close + 1 < length and markdown[close + 1] == "(":
                 dest_close = _inline_link_close(markdown, close + 2)
                 if dest_close is not None:
                     result.append(markdown[text_start:close])
