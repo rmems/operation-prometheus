@@ -144,10 +144,12 @@ def source_provenance_digest(
     *,
     record_id: str = "",
     pr_number: int | None = None,
+    evidence_digest: str = "",
 ) -> str:
-    """Bind a released row to its trajectory, repository, and snapshot."""
+    """Bind a released row to its trajectory, license evidence, repository, and snapshot."""
     return sha256_json(
         {
+            "evidence_digest": evidence_digest,
             "pr_number": pr_number,
             "record_id": record_id,
             "repo": repo,
