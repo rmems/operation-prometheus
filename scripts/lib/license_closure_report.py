@@ -204,6 +204,42 @@ def released_positive_ids(report: dict[str, Any]) -> list[str]:
     return [row["record_id"] for row in report.get("released_positives") or []]
 
 
+def _nonempty_str(value: Any) -> bool:
+    return isinstance(value, str) and bool(value.strip())
+
+
+def _released_row_types_valid(row: dict[str, Any]) -> bool:
+    pr_number = row.get("pr_number")
+    if pr_number is not None and type(pr_number) is not int:
+        return False
+    if any(
+        not _nonempty_str(row.get(key))
+        for key in (
+            "record_id",
+            "repo",
+            "license_family",
+            "evidence_digest",
+            "repository_source_hash",
+            "snapshot_sha256",
+            "source_provenance_digest",
+        )
+    ):
+        return False
+    spdx_id = row.get("spdx_id")
+    if spdx_id is not None and not isinstance(spdx_id, str):
+        return False
+    state = row.get("state")
+    if state is not None and not isinstance(state, str):
+        return False
+    inventory = row.get("inventory_license")
+    if inventory is not None and not isinstance(inventory, dict):
+        return False
+    custom = row.get("custom_license")
+    if custom is not None and not isinstance(custom, dict):
+        return False
+    return True
+
+
 def _released_evidence_bound(row: dict[str, Any], report_snapshot: str | None) -> bool:
     snapshot = _sha256_or_none(row.get("snapshot_sha256"))
     source_hash = _sha256_or_none(row.get("repository_source_hash"))
@@ -282,6 +318,8 @@ def _derived_closed(report: dict[str, Any], quarantined: list[dict[str, Any]]) -
 
 def assert_released_positives_are_closed(report: dict[str, Any]) -> None:
     released, quarantined = _report_rows(report)
+    if any(not _released_row_types_valid(row) for row in released):
+        raise AssertionError("released row value types are invalid")
     leaked = sorted(
         {row["record_id"] for row in released}
         & {row["record_id"] for row in quarantined}
