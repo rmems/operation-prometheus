@@ -123,6 +123,7 @@ _FROZEN_INPUT_ATTRS = (
     "inventory",
     "inventory_manifest",
     "prior_inventory",
+    "prior_inventory_manifest",
     "markdown_card",
 )
 
@@ -165,6 +166,38 @@ def _require_matching_digest(
     return None
 
 
+def _inventory_file_binding_errors(
+    *,
+    inventory_path: Path,
+    inventory_digest: str,
+    inventory_manifest: Any | None,
+    inventory_manifest_path: Path | None,
+) -> list[str]:
+    if inventory_manifest_path is None or inventory_manifest is None:
+        return [f"{inventory_path} requires an inventory-manifest file binding"]
+    files = (
+        inventory_manifest.get("files")
+        if isinstance(inventory_manifest, dict)
+        else None
+    )
+    listed = (
+        files.get(inventory_path.name) or files.get("repositories.jsonl")
+        if isinstance(files, dict)
+        else None
+    )
+    if not isinstance(listed, dict):
+        return [
+            f"{inventory_manifest_path} is missing a repositories.jsonl file binding"
+        ]
+    mismatch = _require_matching_digest(
+        listed.get("sha256"),
+        inventory_digest,
+        inventory_path,
+        f"{inventory_manifest_path} repositories",
+    )
+    return [mismatch] if mismatch else []
+
+
 def _publication_binding_errors(
     *,
     records_path: Path,
@@ -176,6 +209,10 @@ def _publication_binding_errors(
     inventory_digest: str,
     inventory_manifest: Any | None,
     inventory_manifest_path: Path | None,
+    prior_inventory_path: Path | None = None,
+    prior_inventory_digest: str | None = None,
+    prior_inventory_manifest: Any | None = None,
+    prior_inventory_manifest_path: Path | None = None,
 ) -> list[str]:
     errors: list[str] = []
     mismatch = _require_matching_digest(
@@ -196,32 +233,23 @@ def _publication_binding_errors(
             errors.append(
                 f"{dataset_manifest_path} record_count does not match {records_path}"
             )
-    if inventory_manifest_path is None or inventory_manifest is None:
-        errors.append(f"{inventory_path} requires an inventory-manifest file binding")
-        return errors
-    files = (
-        inventory_manifest.get("files")
-        if isinstance(inventory_manifest, dict)
-        else None
-    )
-    listed = (
-        files.get(inventory_path.name) or files.get("repositories.jsonl")
-        if isinstance(files, dict)
-        else None
-    )
-    if not isinstance(listed, dict):
-        errors.append(
-            f"{inventory_manifest_path} is missing a repositories.jsonl file binding"
+    errors.extend(
+        _inventory_file_binding_errors(
+            inventory_path=inventory_path,
+            inventory_digest=inventory_digest,
+            inventory_manifest=inventory_manifest,
+            inventory_manifest_path=inventory_manifest_path,
         )
-        return errors
-    mismatch = _require_matching_digest(
-        listed.get("sha256"),
-        inventory_digest,
-        inventory_path,
-        f"{inventory_manifest_path} repositories",
     )
-    if mismatch:
-        errors.append(mismatch)
+    if prior_inventory_path is not None:
+        errors.extend(
+            _inventory_file_binding_errors(
+                inventory_path=prior_inventory_path,
+                inventory_digest=prior_inventory_digest or "",
+                inventory_manifest=prior_inventory_manifest,
+                inventory_manifest_path=prior_inventory_manifest_path,
+            )
+        )
     return errors
 
 
@@ -252,6 +280,11 @@ def build_parser() -> argparse.ArgumentParser:
         "--prior-inventory",
         type=Path,
         help="Previous frozen repositories JSONL used to detect license changes",
+    )
+    parser.add_argument(
+        "--prior-inventory-manifest",
+        type=Path,
+        help="Frozen manifest that binds --prior-inventory file bytes",
     )
     parser.add_argument(
         "--markdown-card",
@@ -294,6 +327,11 @@ def main(argv: list[str] | None = None) -> int:
             else None
         )
         prior_raw = args.prior_inventory.read_bytes() if args.prior_inventory else None
+        prior_inventory_manifest_raw = (
+            args.prior_inventory_manifest.read_bytes()
+            if args.prior_inventory_manifest is not None
+            else None
+        )
         markdown_raw = args.markdown_card.read_bytes() if args.markdown_card else None
         records = _parse_jsonl(records_raw, args.records)
         card = _parse_json(card_raw, args.card)
@@ -302,6 +340,11 @@ def main(argv: list[str] | None = None) -> int:
         inventory_manifest = (
             _parse_json(inventory_manifest_raw, args.inventory_manifest)
             if inventory_manifest_raw is not None
+            else None
+        )
+        prior_inventory_manifest = (
+            _parse_json(prior_inventory_manifest_raw, args.prior_inventory_manifest)
+            if prior_inventory_manifest_raw is not None
             else None
         )
         snapshot_sha256 = _snapshot_sha256(
@@ -340,6 +383,12 @@ def main(argv: list[str] | None = None) -> int:
         inventory_digest=_sha256_bytes(inventory_raw),
         inventory_manifest=inventory_manifest,
         inventory_manifest_path=args.inventory_manifest,
+        prior_inventory_path=args.prior_inventory,
+        prior_inventory_digest=(
+            _sha256_bytes(prior_raw) if prior_raw is not None else None
+        ),
+        prior_inventory_manifest=prior_inventory_manifest,
+        prior_inventory_manifest_path=args.prior_inventory_manifest,
     )
     if binding_errors:
         report["bundle_errors"] = (
