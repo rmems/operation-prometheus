@@ -104,7 +104,10 @@
         "state",
         "license_family",
         "spdx_id",
-        "evidence_digest"
+        "evidence_digest",
+        "repository_source_hash",
+        "snapshot_sha256",
+        "source_provenance_digest"
       ],
       "properties": {
         "record_id": { "type": "string", "minLength": 1 },
@@ -115,7 +118,10 @@
         "spdx_id": { "type": "string", "minLength": 1 },
         "evidence_digest": { "$ref": "#/definitions/sha256" },
         "custom_license": { "type": "object" },
-        "inventory_license": { "$ref": "#/definitions/inventory_license" }
+        "inventory_license": { "$ref": "#/definitions/inventory_license" },
+        "repository_source_hash": { "$ref": "#/definitions/sha256" },
+        "snapshot_sha256": { "$ref": "#/definitions/sha256" },
+        "source_provenance_digest": { "$ref": "#/definitions/sha256" }
       },
       "additionalProperties": false
     },
