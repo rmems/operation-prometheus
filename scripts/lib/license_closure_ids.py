@@ -124,10 +124,24 @@ def normalize_license_id(value: Any) -> str | None:
     return text or None
 
 
-def _expression_tokens(identifier: str) -> list[str]:
+def _parentheses_balanced(identifier: str) -> bool:
+    depth = 0
+    for char in identifier:
+        if char == "(":
+            depth += 1
+        elif char == ")":
+            if depth == 0:
+                return False
+            depth -= 1
+    return depth == 0
+
+
+def _expression_tokens(identifier: str) -> list[str] | None:
     stripped = identifier.strip()
     if not stripped:
         return []
+    if not _parentheses_balanced(stripped):
+        return None
     tokens = [
         token.strip("() ")
         for token in EXPRESSION_SPLIT_RE.split(stripped)
@@ -143,12 +157,12 @@ def classify_license_family(
     if identifier is None:
         return "missing"
     tokens = _expression_tokens(identifier)
+    if tokens is None:
+        return "unknown"
     if not tokens:
         return "missing"
     upper_tokens = [token.upper() for token in tokens]
     if any(token in UNKNOWN_LICENSE_IDS for token in upper_tokens):
-        if has_custom_evidence:
-            return "custom"
         return "unknown"
     if any(LICENSE_REF_RE.fullmatch(token) for token in tokens):
         if has_custom_evidence and all(
@@ -159,8 +173,6 @@ def classify_license_family(
         return "unknown"
     if all(token in SPDX_LICENSE_IDS for token in tokens):
         return "spdx"
-    if has_custom_evidence:
-        return "custom"
     return "unknown"
 
 

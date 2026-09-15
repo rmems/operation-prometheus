@@ -23,9 +23,10 @@ array lengths, and `bundle_errors` is empty.
 
 This check does **not** decide license compatibility, relicense source-derived
 material under Operation Prometheus's Apache-2.0 terms, or guess a license
-when GitHub reports `NOASSERTION` / `OTHER`. A source repository that is
-itself Apache-2.0 can still close; using this forge's Apache-2.0 license to
-fill a missing source license cannot.
+when GitHub reports `NOASSERTION` / `OTHER`. Unbalanced SPDX parentheses and
+non-`LicenseRef-*` identifiers stay unknown even if custom text evidence is
+present. A source repository that is itself Apache-2.0 can still close; using
+this forge's Apache-2.0 license to fill a missing source license cannot.
 
 Validation is deterministic and uses only frozen local files. It does not
 contact GitHub.
