@@ -228,7 +228,12 @@ def detect_revert_state(
     commits: list[dict[str, Any]],
     timeline: list[dict[str, Any]],
 ) -> dict[str, Any]:
-    """Recover merge/close/revert disposition from collected evidence."""
+    """Recover merge/close/revert disposition from collected evidence.
+
+    Title/commit ``Revert`` prefixes mean this PR *is* a revert of other work.
+    ``reverted`` is reserved for this PR's own work being undone later, which a
+    single-PR collect cannot observe, so it stays false here.
+    """
     title = str(pull.get("title") or "")
     merged = bool(pull.get("merged"))
     state = pull.get("state")
@@ -239,7 +244,7 @@ def detect_revert_state(
         "merged_at": pull.get("merged_at"),
         "closed": bool(closed or pull.get("closed_at")),
         "closed_at": pull.get("closed_at"),
-        "reverted": bool(revert_markers),
+        "reverted": False,
         "revert_evidence": revert_markers,
         "state": state,
     }

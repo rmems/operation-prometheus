@@ -200,6 +200,7 @@ def _normalize_one(raw: dict[str, Any], path: Path, job: EmitJob) -> dict[str, A
                 artifact_store=job.store,
                 max_patch_bytes=job.max_patch_bytes,
                 source_license=source_license,
+                raw_path=path,
             ),
         )
     return normalize_record(

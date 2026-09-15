@@ -5,6 +5,7 @@ from __future__ import annotations
 import hashlib
 from dataclasses import dataclass
 from datetime import datetime, timezone
+from pathlib import Path
 from typing import Any
 
 from . import __version__
@@ -22,6 +23,7 @@ class V1NormalizeOptions:
     artifact_store: ContentAddressedStore | None = None
     max_patch_bytes: int = 96 * 1024
     source_license: str | None = None
+    raw_path: Path | None = None
 
 
 @dataclass
@@ -199,8 +201,12 @@ def _inline_patch_artifact(patch: str) -> tuple[str, dict[str, Any] | None]:
     }
 
 
-def _patch_artifact(raw: dict[str, Any], max_patch_bytes: int) -> tuple[str, dict[str, Any] | None]:
-    patch = extract_patch(raw, max_bytes=max_patch_bytes)
+def _patch_artifact(
+    raw: dict[str, Any],
+    max_patch_bytes: int,
+    raw_path: Path | None = None,
+) -> tuple[str, dict[str, Any] | None]:
+    patch = extract_patch(raw, raw_path=raw_path, max_bytes=max_patch_bytes)
     diff = raw.get("diff") or {}
     artifact_meta = diff.get("artifact") if isinstance(diff, dict) else None
     if isinstance(artifact_meta, dict) and artifact_meta.get("sha256"):
@@ -636,10 +642,10 @@ def _ensure_min_event(ctx: EventContext) -> None:
 
 
 def _pack_store_artifact(pack: dict[str, Any], store: ContentAddressedStore | None) -> dict[str, Any] | None:
-    if store is None or not pack.get("pack_sha256"):
+    if store is None:
         return None
-    digest = pack["pack_sha256"]
-    if not store.exists(digest):
+    digest = pack.get("store_sha256") or pack.get("pack_sha256")
+    if not digest or not store.exists(digest):
         return None
     return {
         "id": "object-pack",
@@ -691,16 +697,12 @@ def _typed_payloads(raw: dict[str, Any], patch_text: str, task_family: str) -> d
     return {"software_payload": _software_payload(raw, patch_text)}
 
 
-def _lineage(raw: dict[str, Any], source_id: str) -> dict[str, list[str]]:
-    lineage: dict[str, list[str]] = {
+def _lineage(_raw: dict[str, Any], _source_id: str) -> dict[str, list[str]]:
+    return {
         "supersedes": [],
         "reverts": [],
         "multi_pr_links": [],
     }
-    merge = raw.get("merge_state") or {}
-    if merge.get("reverted"):
-        lineage["reverts"] = [source_id]
-    return lineage
 
 
 def normalize_record_v1(
@@ -720,7 +722,7 @@ def normalize_record_v1(
     pull = raw.get("pull") or {}
     license_id = opts.source_license or resolve_source_license(source, card)
 
-    patch_text, patch_art = _patch_artifact(raw, opts.max_patch_bytes)
+    patch_text, patch_art = _patch_artifact(raw, opts.max_patch_bytes, opts.raw_path)
     events = build_v1_events(raw, source_id)
     if not events:
         ctx = _event_context(raw, source_id)

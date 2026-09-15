@@ -80,11 +80,6 @@ def required_oids(
     add(pull.get("merge_commit_sha") or pull.get("merge_commit_oid"))
     for commit in commits:
         add(commit.get("sha"))
-        add(commit.get("tree_oid"))
-        nested = commit.get("commit") if isinstance(commit.get("commit"), dict) else {}
-        tree = nested.get("tree") if isinstance(nested, dict) else None
-        if isinstance(tree, dict):
-            add(tree.get("sha"))
     for comment in review_comments or []:
         add(comment.get("commit_id"))
         add(comment.get("original_commit_id"))

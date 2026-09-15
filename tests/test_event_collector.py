@@ -14,6 +14,7 @@ ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "scripts"))
 
 from lib.cas import ArtifactSpec, ContentAddressedStore, sha256_bytes  # noqa: E402
+from lib.collect_events import detect_revert_state  # noqa: E402
 from lib.github_client import GitHubError  # noqa: E402
 from lib.inventory_targets import load_inventory_targets  # noqa: E402
 from lib.normalize_v1 import V1NormalizeOptions, normalize_record_v1  # noqa: E402
@@ -374,4 +375,133 @@ def test_v1_missing_snapshot_not_silently_complete():
     traj = normalize_record_v1(raw, {}, V1NormalizeOptions(source_license="MIT"))
     assert traj["evidence_quality"]["completeness"] < 1.0
     assert traj["terminal_disposition"] == "successful"
+    jsonschema.Draft7Validator(json.loads(V1_SCHEMA.read_text())).validate(traj)
+
+
+def test_snapshots_do_not_fetch_tree_oids_as_commits(tmp_path: Path):
+    tree_oid = "aa" * 20
+    commit_sha = "bb" * 20
+
+    class TreeIsNotACommit(FakeClient):
+        def get_json(self, path_or_url: str) -> Any:
+            if f"/git/commits/{tree_oid}" in path_or_url:
+                raise GitHubError("not a commit", status=422)
+            return super().get_json(path_or_url)
+
+    store = ContentAddressedStore(tmp_path / "cas")
+    pack = collect_snapshots(
+        GitFetch(TreeIsNotACommit(), store, "rmems/corinth-canal"),
+        SnapshotScope(
+            pull={"base_sha": "abc", "head_sha": "def"},
+            commits=[
+                {
+                    "sha": commit_sha,
+                    "tree_oid": tree_oid,
+                    "commit": {"tree": {"sha": tree_oid}},
+                }
+            ],
+            files=[],
+        ),
+    )
+    assert tree_oid not in pack["required_oids"]
+    assert pack["complete"] is True
+    assert not pack["quarantine"]
+    assert not any(o.get("git_oid") == tree_oid for o in pack["objects"])
+
+
+def test_v1_attaches_object_pack_using_store_digest(tmp_path: Path):
+    store = ContentAddressedStore(tmp_path / "cas")
+    record = collect_pr(
+        FakeClient(),
+        "rmems/corinth-canal",
+        89,
+        CollectOptions(include_snapshots=True, artifact_store=store),
+    )
+    path = write_raw_record(record, tmp_path / "raw", artifact_store=store)
+    written = json.loads(path.read_text())
+    pack = written["snapshots"]
+    assert pack["store_sha256"]
+    assert store.exists(pack["store_sha256"])
+    traj = normalize_record_v1(
+        written, {}, V1NormalizeOptions(artifact_store=store, source_license="MIT")
+    )
+    pack_arts = [a for a in traj["artifacts"] if a.get("id") == "object-pack"]
+    assert len(pack_arts) == 1
+    assert pack_arts[0]["sha256"] == pack["store_sha256"]
+    assert store.exists(pack_arts[0]["sha256"])
+
+
+def test_v1_emit_reads_sidecar_diff(tmp_path: Path):
+    raw = collect_pr(FakeClient(), "rmems/corinth-canal", 89)
+    sidecar_text = "diff --git a/x b/x\n--- a/x\n+++ b/x\n@@ -1 +1 @@\n-old\n+new\n"
+    raw["diff"] = {
+        "inline": sidecar_text * 2000,
+        "sidecar_path": None,
+        "bytes": 0,
+        "truncated": False,
+    }
+    path = write_raw_record(raw, tmp_path / "raw", max_inline_diff_bytes=64)
+    written = json.loads(path.read_text())
+    assert written["diff"]["inline"] is None
+    assert written["diff"]["sidecar_path"] == "pr-89.diff"
+    traj = normalize_record_v1(
+        written,
+        {},
+        V1NormalizeOptions(source_license="MIT", raw_path=path, max_patch_bytes=10_000_000),
+    )
+    patch = traj["software_payload"]["implementation_patch"]
+    assert patch != "patch not collected"
+    assert "+new" in patch
+    inline_arts = [a for a in traj["artifacts"] if a.get("id") == "inline-patch"]
+    assert inline_arts
+
+
+def test_merged_revert_pr_is_not_self_reverted():
+    source_id = "https://github.com/rmems/corinth-canal/pull/90"
+    merge = detect_revert_state(
+        {
+            "title": 'Revert "feat: foo"',
+            "merged": True,
+            "merged_at": "2026-05-27T06:13:36Z",
+            "state": "closed",
+        },
+        [{"sha": "def", "message": 'Revert "feat: foo"'}],
+        [{"id": 2, "event": "committed", "body": 'Revert "feat: foo"'}],
+    )
+    assert merge["reverted"] is False
+    assert merge["revert_evidence"]
+    raw = {
+        "source": {
+            "repo": "rmems/corinth-canal",
+            "pr_number": 90,
+            "html_url": source_id,
+        },
+        "pull": {
+            "title": 'Revert "feat: foo"',
+            "body": "Reverts rmems/corinth-canal#89",
+            "merged": True,
+            "merged_at": "2026-05-27T06:13:36Z",
+            "created_at": "2026-05-27T00:00:00Z",
+            "user_login": "rmems",
+            "user_type": "User",
+            "base_sha": "abc",
+            "head_sha": "def",
+        },
+        "commits": [
+            {
+                "sha": "def",
+                "message": 'Revert "feat: foo"',
+                "date": "2026-05-27T01:00:00Z",
+                "author_login": "rmems",
+            }
+        ],
+        "files": [],
+        "diff": {"inline": "@@\n-a\n+b\n"},
+        "checks": {},
+        "merge_state": merge,
+        "collection_meta": {"warnings": [], "evidence_complete": True},
+    }
+    traj = normalize_record_v1(raw, {}, V1NormalizeOptions(source_license="MIT"))
+    assert traj["terminal_disposition"] == "successful"
+    assert traj["lineage"]["reverts"] == []
     jsonschema.Draft7Validator(json.loads(V1_SCHEMA.read_text())).validate(traj)
