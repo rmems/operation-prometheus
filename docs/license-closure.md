@@ -27,6 +27,8 @@ only when the quarantined array is empty, counts match those array lengths
 is empty, and every released row's repository, digest, family, and identifier
 appear in `evidence_digests` / `license_families`, released record IDs are
 unique, and each released identifier still classifies as a closed family.
+`released_positives` and `quarantined` must be arrays of objects; a
+non-object quarantined entry cannot be dropped to fake a closed report.
 Manifest count fields must be actual integers; fractional values such as
 `0.5` fail closed. A present `records` array, including `[]`, must enumerate
 every evaluated row.
@@ -87,7 +89,9 @@ A present non-array `source_repos` value such as `{}`, or a list that
 contains a non-string or blank element, cannot be ignored in favor of a
 valid singular `source_repo`. A present non-string or blank singular
 `source_repo` (for example `{}`) cannot be ignored in favor of a valid
-`source_repos` list.
+`source_repos` list. A declared repository that is absent from the
+inventory cannot close, even when card and manifest name the same unknown
+repository.
 Card and manifest `license_families` / `unresolved_license_count` must agree
 with closed evidence when they are declared. Non-string family elements such
 as `["spdx", 1]` or `[{}]` fail closed as a bundle error instead of raising. When both
@@ -98,9 +102,11 @@ authenticate `source_hash` before their license is trusted. When the current
 row carries `repository_id`, prior lookup matches that immutable id and does
 not fall back to a reused GitHub name. Card and manifest declaration maps are
 resolved through inventory aliases. Markdown disclosure ignores HTML comments,
-fenced code blocks, link destinations, and reference definitions, so a URL
-that only contains `MIT`, or a fenced `## License / provenance` heading, is
-not disclosure. Disclosure stops the license section at the next
+fenced code blocks, hidden raw HTML (`<span hidden>MIT</span>`), non-rendered
+`script` / `style` / `template` content, link destinations, and reference
+definitions, so a URL that only contains `MIT`, or a fenced
+`## License / provenance` heading, is not disclosure. Visible markup such as
+`<p>MIT</p>` still counts. Disclosure stops the license section at the next
 H1 or H2 heading.
 Released rows persist the inventory `license` object so publication can
 recompute the evidence digest; swapping a custom `text_sha256` or an SPDX
