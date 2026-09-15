@@ -46,6 +46,11 @@ Released rows persist `snapshot_sha256`, `repository_source_hash`, and a
 `source_provenance_digest` bound to the record id, pull-request number,
 repository name, and those hashes; swapping the published `repo`, `record_id`,
 `pr_number`, or the report snapshot without that binding fails closed.
+Released identity, family, and digest fields must be non-empty strings;
+`pr_number` must be an `int` or `null` (`type is int`, so `true` cannot stand
+in for `1`). An integer `repo` such as `7` cannot close by rebuilding
+`source_provenance_digest` and `evidence_digests`. Unhashable values such as
+`[]` fail closed instead of raising `TypeError`.
 `closed` must be an actual boolean (`type is bool`); a string such as
 `"false"` cannot stand in for the derived closure state.
 Report count fields must be actual integers (`type is int`);
@@ -101,9 +106,16 @@ digest. A supplied inventory manifest must bind `--inventory` through a
 `files` entry (`repositories.jsonl` or the inventory basename) whose `sha256`
 matches the file bytes. Every publication run requires that inventory-manifest
 file binding; `--snapshot-sha256` without `--inventory-manifest` cannot close,
-including inventories that declare no aliases. A fabricated repository row
+including inventories that declare no aliases. The checker reads each
+publication artifact once and hashes those captured bytes, so a rewrite
+between report construction and binding comparison cannot authenticate a
+different file than the report describes. A fabricated repository row
 with a newly computed `source_hash` is not authenticated by the snapshot
-digest alone. Accepted snapshot digests are stored as lowercase hex.
+digest alone. Inventory rows must declare `visibility` as the exact string
+`public` before `source_hash` is trusted; `private`, `internal`, or a missing
+visibility cannot close even when the digest matches. Prior-inventory rows
+use the same public-visibility authentication before a license change is
+evaluated. Accepted snapshot digests are stored as lowercase hex.
 The dataset manifest must declare a valid `sha256` of `--records`; a missing
 or malformed digest fails closed. Duplicate inventory aliases that point at
 different repositories are rejected. Duplicate immutable `repository_id`
