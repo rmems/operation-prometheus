@@ -39,7 +39,6 @@ MARKDOWN_REFERENCE_DEFINITION_RE = re.compile(r"^\s*\[[^\]\n]+\]:\s+\S")
 MARKDOWN_REFERENCE_TITLE_RE = re.compile(
     r"""^[ \t]+(?:"(?:\\.|[^"\\])*"|'(?:\\.|[^'\\])*'|\((?:\\.|[^)\\])*\))\s*$"""
 )
-MARKDOWN_INLINE_LINK_RE = re.compile(r"!?\[([^\]\n]*)\]\((?:[^)\\]|\\.)*\)")
 MARKDOWN_REFERENCE_LINK_RE = re.compile(r"!?\[([^\]\n]*)\]\[[^\]\n]*\]")
 FENCE_OPEN_RE = re.compile(r"^( {0,3})(`{3,}|~{3,})")
 
@@ -165,18 +164,23 @@ def _index_pull_requests(
 ) -> dict[tuple[str, int], dict[str, Any]]:
     index: dict[tuple[str, int], dict[str, Any]] = {}
     for row in pull_requests or []:
+        if not isinstance(row, dict):
+            raise ValueError("pull-request inventory rows must be objects")
         repo = _text(row.get("repository_name_with_owner")).casefold()
         number = row.get("number")
-        if repo and type(number) is int and number >= 1:
-            declared = _sha256_or_none(row.get("source_hash"))
-            if declared is None or declared != pr_inventory_row_source_hash(row):
-                raise ValueError(
-                    "pull-request inventory source_hash does not match the published row"
-                )
-            key = (repo, number)
-            if key in index:
-                raise ValueError(f"Duplicate inventory pull request {repo}#{number}")
-            index[key] = row
+        if not repo or type(number) is not int or number < 1:
+            raise ValueError(
+                "pull-request inventory row is missing a repository name or PR number"
+            )
+        declared = _sha256_or_none(row.get("source_hash"))
+        if declared is None or declared != pr_inventory_row_source_hash(row):
+            raise ValueError(
+                "pull-request inventory source_hash does not match the published row"
+            )
+        key = (repo, number)
+        if key in index:
+            raise ValueError(f"Duplicate inventory pull request {repo}#{number}")
+        index[key] = row
     return index
 
 
@@ -293,10 +297,103 @@ def _strip_reference_definitions(markdown: str) -> str:
     return "\n".join(kept)
 
 
+def _skip_markdown_link_title(markdown: str, index: int) -> int | None:
+    if index >= len(markdown):
+        return index
+    opener = markdown[index]
+    if opener not in "\"'(":
+        return index
+    closer = ")" if opener == "(" else opener
+    index += 1
+    while index < len(markdown):
+        char = markdown[index]
+        if char == "\\":
+            index += 2
+            continue
+        if char == "\n":
+            return None
+        if char == closer:
+            return index + 1
+        index += 1
+    return None
+
+
+def _inline_link_close(markdown: str, start: int) -> int | None:
+    index = start
+    length = len(markdown)
+    while index < length and markdown[index] in " \t":
+        index += 1
+    if index >= length:
+        return None
+    if markdown[index] == "<":
+        gt = markdown.find(">", index + 1)
+        if gt == -1 or "\n" in markdown[index:gt]:
+            return None
+        index = gt + 1
+    else:
+        depth = 0
+        while index < length:
+            char = markdown[index]
+            if char == "\\":
+                index += 2
+                continue
+            if char == "\n":
+                return None
+            if char in " \t" and depth == 0:
+                break
+            if char == "(":
+                depth += 1
+            elif char == ")":
+                if depth == 0:
+                    return index
+                depth -= 1
+            index += 1
+        else:
+            return None
+    while index < length and markdown[index] in " \t":
+        index += 1
+    titled = _skip_markdown_link_title(markdown, index)
+    if titled is None:
+        return None
+    index = titled
+    while index < length and markdown[index] in " \t":
+        index += 1
+    if index < length and markdown[index] == ")":
+        return index
+    return None
+
+
+def _strip_inline_links(markdown: str) -> str:
+    result: list[str] = []
+    index = 0
+    length = len(markdown)
+    while index < length:
+        image = (
+            markdown[index] == "!" and index + 1 < length and markdown[index + 1] == "["
+        )
+        if markdown[index] == "[" or image:
+            text_start = index + (2 if image else 1)
+            close = markdown.find("]", text_start)
+            if (
+                close != -1
+                and "\n" not in markdown[text_start:close]
+                and close + 1 < length
+                and markdown[close + 1] == "("
+            ):
+                dest_close = _inline_link_close(markdown, close + 2)
+                if dest_close is not None:
+                    result.append(markdown[text_start:close])
+                    index = dest_close + 1
+                    continue
+        result.append(markdown[index])
+        index += 1
+    return "".join(result)
+
+
 def _visible_markdown_text(markdown: str) -> str:
     visible = HTML_COMMENT_RE.sub("", markdown)
     visible = _strip_reference_definitions(visible)
-    visible = MARKDOWN_INLINE_LINK_RE.sub(r"\1", visible)
+    visible = _strip_inline_links(visible)
     visible = MARKDOWN_REFERENCE_LINK_RE.sub(r"\1", visible)
     visible = _strip_non_rendered_html(visible)
     return HTML_TAG_RE.sub("", visible)
