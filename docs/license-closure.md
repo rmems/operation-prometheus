@@ -12,7 +12,9 @@ Every released positive trajectory must resolve through all three of:
 3. Dataset-card disclosure (`source_license` / `source_licenses`, and a
    `License / provenance` section when a markdown card is supplied). Markdown
    disclosure must name the complete identifier; a prefix such as `MIT` does
-   not satisfy `MIT-0`. `LicenseRef-*` custom evidence must use the same
+   not satisfy `MIT-0`. CommonMark ATX closing hashes on the license heading
+   (`## License / provenance ##`) still locate the section. `LicenseRef-*`
+   custom evidence must use the same
    identifier as the inventory license. If `custom_license` declares both
    `identifier` and `spdx_id`, those fields must agree. If it declares both
    `text_sha256` and `evidence_sha256`, those digests must be valid and equal;
@@ -38,6 +40,8 @@ instead of closing under a synthetic `repo#pr` identifier. If both
 identifiers are present as non-empty strings, they must be identical;
 conflicting `id` / `trajectory_id` values quarantine as
 `declarations_disagree` instead of silently preferring `id`.
+A trajectory `license` must be a non-empty string; an object such as
+`{"spdx_id": "MIT"}` cannot close by unwrapping `spdx_id`.
 Publication consumers must treat a report as closed
 only when the quarantined array is empty, counts match those array lengths
 (including `record_count` equal to released plus quarantined), `counts` is a
@@ -140,7 +144,9 @@ path as `--records`, `--card`, `--manifest`, `--inventory`,
 `--inventory-manifest`, `--prior-inventory`, `--prior-inventory-manifest`, or
 `--markdown-card`, including
 through symlinks; a colliding `--out` is rejected before `--check` or write
-so frozen inputs cannot be overwritten. JSON parsers reject the non-finite
+so frozen inputs cannot be overwritten. `--card` and `--manifest` must be JSON
+objects; an array or scalar root fails closed instead of raising
+`AttributeError`. JSON parsers reject the non-finite
 constants `NaN`, `Infinity`, and `-Infinity`; `render_json` writes with
 `allow_nan=False`. Duplicate object keys in frozen JSON or JSONL (for
 example `"license": "GPL-3.0-only"` later overwritten by `"license": "MIT"`)
@@ -155,7 +161,9 @@ The dataset manifest must declare a valid `sha256` of `--records`; a missing
 or malformed digest fails closed. Duplicate inventory aliases that point at
 different repositories are rejected. Inventory `aliases` must be an array of
 names or `{name_with_owner}` objects; a JSON object such as
-`{"rmems/other": {}}` cannot be indexed as a legitimate alias. Duplicate immutable `repository_id`
+`{"rmems/other": {}}` cannot be indexed as a legitimate alias. Each alias
+entry must be a non-empty name string or `{name_with_owner}` object;
+`{}` or `7` cannot be skipped. Duplicate immutable `repository_id`
 values that point at different names are rejected. Every supplied repository
 inventory row must be an object with a non-empty canonical `name_with_owner`;
 a valid matching row plus a malformed `{}` entry is rejected instead of
