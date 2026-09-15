@@ -95,6 +95,14 @@ def _hex_digest(value: Any) -> str | None:
     return None
 
 
+def _inventory_declares_aliases(path: Path) -> bool:
+    for row in _load_jsonl(path):
+        aliases = row.get("aliases")
+        if isinstance(aliases, list) and aliases:
+            return True
+    return False
+
+
 def _require_matching_digest(declared: Any, path: Path, label: str) -> str | None:
     digest = _hex_digest(declared)
     if digest is None:
@@ -125,6 +133,10 @@ def _publication_binding_errors(
         ):
             errors.append(f"{args.manifest} record_count does not match {args.records}")
     if not args.inventory_manifest:
+        if _inventory_declares_aliases(args.inventory):
+            errors.append(
+                f"{args.inventory} aliases require an inventory-manifest file binding"
+            )
         return errors
     inventory_manifest = _load_json(args.inventory_manifest)
     files = inventory_manifest.get("files")
