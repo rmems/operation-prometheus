@@ -87,8 +87,8 @@ def manifest(
     return payload
 
 
-def digest_for(repo_row: dict[str, Any], snapshot_sha256: str = SNAPSHOT_SHA256) -> str:
-    return evidence_digest(license_evidence_payload(repo_row, snapshot_sha256=snapshot_sha256))
+def digest_for(repo_row: dict[str, Any]) -> str:
+    return evidence_digest(license_evidence_payload(repo_row))
 
 
 def spdx_known_bundle() -> dict[str, Any]:
@@ -114,6 +114,24 @@ def spdx_known_bundle() -> dict[str, Any]:
         ),
         "prior_repositories": None,
         "records": [record("rmems/widget", 1, "MIT")],
+        "repositories": [repo],
+        "snapshot_sha256": SNAPSHOT_SHA256,
+    }
+
+
+def license_ref_without_digest_bundle() -> dict[str, Any]:
+    identifier = "LicenseRef-TemporalFocus"
+    repo = repository(
+        "rmems/TemporalFocus.jl",
+        spdx_id=identifier,
+        license_name="TemporalFocus custom license",
+    )
+    return {
+        "card": card("rmems/TemporalFocus.jl", identifier),
+        "manifest": manifest("rmems/TemporalFocus.jl", identifier),
+        "markdown": None,
+        "prior_repositories": None,
+        "records": [record("rmems/TemporalFocus.jl", 7, identifier)],
         "repositories": [repo],
         "snapshot_sha256": SNAPSHOT_SHA256,
     }
