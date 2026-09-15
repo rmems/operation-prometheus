@@ -13,6 +13,10 @@ Examples:
     export PROMETHEUS_DATA_ROOT=~/rmems/prometheus-data
     python scripts/collect_pr_records.py \\
       --repo Limen-Neural/neuromod --pr 5,8,9 --skip-existing
+
+    python scripts/collect_pr_records.py \\
+      --repo rmems/corinth-canal --pr 89 \\
+      --record-pages tests/fixtures/github/pages/pr89.json
 """
 
 from __future__ import annotations
@@ -28,6 +32,7 @@ if str(_SCRIPTS) not in sys.path:
     sys.path.insert(0, str(_SCRIPTS))
 
 from lib.github_client import GitHubClient, GitHubError, parse_repo  # noqa: E402
+from lib.github_page_fixtures import attach_page_recorder, write_cassette  # noqa: E402
 from lib.paths import DATA_ROOT_ENV, resolve_raw_out_dir  # noqa: E402
 from lib.raw_record import collect_pr, write_raw_record  # noqa: E402
 
@@ -105,6 +110,16 @@ def build_parser() -> argparse.ArgumentParser:
         action="store_true",
         help="Print planned work without calling GitHub",
     )
+    p.add_argument(
+        "--record-pages",
+        type=Path,
+        default=None,
+        metavar="PATH",
+        help=(
+            "Write a sanitized GitHub page cassette for offline replay. "
+            "Credentials, cookies, and unstable headers are never stored."
+        ),
+    )
     return p
 
 
@@ -127,37 +142,43 @@ def main(argv: list[str] | None = None) -> int:
         return 0
 
     client = GitHubClient.from_env(args.token_env)
+    recorder = attach_page_recorder(client) if args.record_pages is not None else None
     failures = 0
     collected = 0
     skipped = 0
-    for pr in prs:
-        target = out_dir / f"pr-{pr}.json"
-        if args.skip_existing and target.exists():
-            logger.info("Skipping %s#%s (exists: %s)", full, pr, target)
-            skipped += 1
-            continue
-        logger.info("Collecting %s#%s …", full, pr)
-        try:
-            record = collect_pr(
-                client,
-                full,
-                pr,
-                include_checks=not args.skip_checks,
-                include_diff=not args.skip_diff,
-                cross_repo_allowlist=tuple(args.allow_cross_repo or ()),
-            )
-            path = write_raw_record(
-                record,
-                out_dir,
-                max_inline_diff_bytes=args.max_inline_diff_bytes,
-            )
-            logger.info("Wrote %s", path)
-            collected += 1
-        except (GitHubError, OSError, ValueError) as exc:
-            failures += 1
-            logger.error("Failed %s#%s: %s", full, pr, exc)
-            if not args.continue_on_error:
-                return 1
+    try:
+        for pr in prs:
+            target = out_dir / f"pr-{pr}.json"
+            if args.skip_existing and target.exists():
+                logger.info("Skipping %s#%s (exists: %s)", full, pr, target)
+                skipped += 1
+                continue
+            logger.info("Collecting %s#%s …", full, pr)
+            try:
+                record = collect_pr(
+                    client,
+                    full,
+                    pr,
+                    include_checks=not args.skip_checks,
+                    include_diff=not args.skip_diff,
+                    cross_repo_allowlist=tuple(args.allow_cross_repo or ()),
+                )
+                path = write_raw_record(
+                    record,
+                    out_dir,
+                    max_inline_diff_bytes=args.max_inline_diff_bytes,
+                )
+                logger.info("Wrote %s", path)
+                collected += 1
+            except (GitHubError, OSError, ValueError) as exc:
+                failures += 1
+                logger.error("Failed %s#%s: %s", full, pr, exc)
+                if not args.continue_on_error:
+                    return 1
+    finally:
+        if recorder is not None and args.record_pages is not None:
+            write_cassette(args.record_pages, recorder.pages)
+            logger.info("Wrote page cassette %s (%s pages)", args.record_pages, len(recorder.pages))
 
     if failures:
         logger.error(
