@@ -15,6 +15,10 @@ MARKDOWN_LICENSE_SECTION_RE = re.compile(
     r"^ {0,3}##\s+License\s*/\s*provenance\s*$",
     re.IGNORECASE | re.MULTILINE,
 )
+MARKDOWN_SECTION_BOUNDARY_RE = re.compile(
+    r"^ {0,3}#{1,2}(?:\s|$)|^ {0,3}\S[^\n]*\n {0,3}(?:=+|-+)[ \t]*$",
+    re.MULTILINE,
+)
 
 CLOSED_FAMILIES = frozenset({"spdx", "custom"})
 LICENSE_FAMILIES = frozenset({"spdx", "custom", "missing", "unknown"})
