@@ -35,6 +35,8 @@ unique, and each released identifier still classifies as a closed family.
 non-object quarantined entry cannot be dropped to fake a closed report.
 Rows missing `record_id`, or quarantined rows missing `primary_reason` /
 `reason_codes`, fail closed instead of raising `KeyError`.
+Released rows missing `repo`, `license_family`, or `evidence_digest` fail
+closed instead of raising `KeyError` while building the evidence summary.
 Released rows persist `snapshot_sha256`, `repository_source_hash`, and a
 `source_provenance_digest` bound to the repository name plus those hashes;
 swapping the published `repo` or the report snapshot without that binding
@@ -106,6 +108,9 @@ valid singular `source_repo`. A present non-string or blank singular
 `source_repos` list. A declared repository that is absent from the
 inventory cannot close, even when card and manifest name the same unknown
 repository.
+Card and manifest must each name at least one source repository through
+`source_repo` or a non-empty `source_repos` list. Omitting both keys, or
+supplying only `source_repos: []`, quarantines as `declarations_disagree`.
 Card and manifest `license_families` / `unresolved_license_count` must agree
 with closed evidence when they are declared. Non-string family elements such
 as `["spdx", 1]` or `[{}]` fail closed as a bundle error instead of raising. When both
