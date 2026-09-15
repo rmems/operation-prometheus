@@ -334,9 +334,47 @@ class _VisibleHtmlText(HTMLParser):
             self.parts.append(data)
 
 
+def _protect_inline_code_spans(markdown: str) -> str:
+    """Keep inline-code angle brackets from being parsed as HTML tags."""
+    result: list[str] = []
+    index = 0
+    length = len(markdown)
+    while index < length:
+        if markdown[index] != "`":
+            result.append(markdown[index])
+            index += 1
+            continue
+        tick_len = 1
+        while index + tick_len < length and markdown[index + tick_len] == "`":
+            tick_len += 1
+        scan = index + tick_len
+        found: int | None = None
+        while scan < length:
+            if markdown[scan] != "`":
+                scan += 1
+                continue
+            run = 1
+            while scan + run < length and markdown[scan + run] == "`":
+                run += 1
+            if run == tick_len:
+                found = scan
+                break
+            scan += run
+        if found is None:
+            result.append(markdown[index : index + tick_len])
+            index += tick_len
+            continue
+        inner = markdown[index + tick_len : found]
+        result.append(
+            "`" * tick_len + inner.replace("<", " ").replace(">", " ") + "`" * tick_len
+        )
+        index = found + tick_len
+    return "".join(result)
+
+
 def _strip_non_rendered_html(markdown: str) -> str:
     parser = _VisibleHtmlText()
-    parser.feed(markdown)
+    parser.feed(_protect_inline_code_spans(markdown))
     parser.close()
     return "".join(parser.parts)
 
@@ -482,7 +520,7 @@ def _strip_inline_links(markdown: str) -> str:
             if close is not None and close + 1 < length and markdown[close + 1] == "(":
                 dest_close = _inline_link_close(markdown, close + 2)
                 if dest_close is not None:
-                    result.append(markdown[text_start:close])
+                    result.append(_strip_inline_links(markdown[text_start:close]))
                     index = dest_close + 1
                     continue
         result.append(markdown[index])
