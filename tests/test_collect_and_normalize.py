@@ -25,6 +25,108 @@ SCHEMA = ROOT / "schemas" / "pr_trajectory.schema.json"
 CARD = ROOT / "datasets" / "cards" / "corinth-canal-v0.json"
 
 
+def _load_fixture(name: str) -> Any:
+    return json.loads((FIXTURES / name).read_text())
+
+
+def _is_pull_payload_path(path: str) -> bool:
+    if not path.startswith("/repos/rmems/corinth-canal/pulls/89"):
+        return False
+    extras = ("comments", "reviews", "commits", "files")
+    return not any(part in path for part in extras)
+
+
+def _check_suites_payload(_path: str) -> dict[str, Any]:
+    return {
+        "total_count": 1,
+        "check_suites": [
+            {
+                "id": 1,
+                "head_sha": "def",
+                "status": "completed",
+                "conclusion": "success",
+                "created_at": "2026-05-27T03:00:00Z",
+                "app": {"slug": "github-actions"},
+            }
+        ],
+    }
+
+
+def _git_commit_payload(path: str) -> dict[str, Any]:
+    oid = path.rsplit("/", 1)[-1]
+    return {
+        "sha": oid,
+        "tree": {"sha": "tree-" + oid},
+        "parents": [],
+        "message": "commit " + oid,
+        "author": {"date": "2026-05-27T00:00:00Z", "name": "rmems"},
+    }
+
+
+def _git_blob_payload(path: str) -> dict[str, Any]:
+    oid = path.rsplit("/", 1)[-1]
+    return {
+        "sha": oid,
+        "encoding": "base64",
+        "content": "cGF0Y2gK",
+        "size": 6,
+    }
+
+
+def _contents_payload(_path: str) -> dict[str, Any]:
+    return {"sha": "aa" * 20, "encoding": "base64", "content": "b2xkCg=="}
+
+
+def _timeline_payload(_path: str) -> list[dict[str, Any]]:
+    timeline = FIXTURES / "timeline_89.json"
+    if timeline.exists():
+        return json.loads(timeline.read_text())
+    return [
+        {
+            "id": 1,
+            "event": "merged",
+            "created_at": "2026-05-27T06:13:36Z",
+            "actor": {"login": "rmems", "type": "User"},
+            "commit_id": "ghi",
+        }
+    ]
+
+
+def _json_handler(path: str) -> Any | None:
+    routes: list[tuple[bool, Any]] = [
+        (_is_pull_payload_path(path), lambda: _load_fixture("pull_89.json")),
+        ("check-suites" in path, lambda: _check_suites_payload(path)),
+        ("check-runs" in path, lambda: _load_fixture("check_runs_89.json")),
+        (path.endswith("/statuses") or "/statuses?" in path, lambda: []),
+        (path.endswith("/status") or "/status?" in path, lambda: _load_fixture("status_89.json")),
+        ("/git/commits/" in path, lambda: _git_commit_payload(path)),
+        ("/git/blobs/" in path, lambda: _git_blob_payload(path)),
+        ("/contents/" in path, lambda: _contents_payload(path)),
+        (path.endswith("/issues/74"), lambda: _load_fixture("issue_74.json")),
+    ]
+    for matched, loader in routes:
+        if matched:
+            return loader()
+    return None
+
+
+def _all_handler(path: str) -> list | None:
+    routes: list[tuple[bool, Any]] = [
+        (path.endswith("/issues/89/comments"), lambda: _load_fixture("issue_comments_89.json")),
+        (path.endswith("/issues/74/comments"), lambda: []),
+        (path.endswith("/issues/89/timeline"), lambda: _timeline_payload(path)),
+        (path.endswith("/pulls/89/comments"), lambda: _load_fixture("review_comments_89.json")),
+        (path.endswith("/pulls/89/reviews"), lambda: _load_fixture("reviews_89.json")),
+        (path.endswith("/pulls/89/commits"), lambda: _load_fixture("commits_89.json")),
+        (path.endswith("/pulls/89/files"), lambda: _load_fixture("files_89.json")),
+        (path.endswith("/statuses"), lambda: []),
+    ]
+    for matched, loader in routes:
+        if matched:
+            return loader()
+    return None
+
+
 class FakeClient:
     """Map GitHub REST paths to fixture payloads."""
 
@@ -33,15 +135,10 @@ class FakeClient:
 
     def get_json(self, path_or_url: str) -> Any:
         path = path_or_url.replace(self.base_url, "")
-        if path.startswith("/repos/rmems/corinth-canal/pulls/89") and "comments" not in path and "reviews" not in path and "commits" not in path and "files" not in path:
-            return json.loads((FIXTURES / "pull_89.json").read_text())
-        if "check-runs" in path:
-            return json.loads((FIXTURES / "check_runs_89.json").read_text())
-        if path.endswith("/status") or "/status" in path:
-            return json.loads((FIXTURES / "status_89.json").read_text())
-        if path.endswith("/issues/74"):
-            return json.loads((FIXTURES / "issue_74.json").read_text())
-        raise AssertionError(f"unexpected get_json path: {path_or_url}")
+        payload = _json_handler(path)
+        if payload is None:
+            raise AssertionError(f"unexpected get_json path: {path_or_url}")
+        return payload
 
     def get_json_with_headers(self, path_or_url: str) -> tuple[Any, dict[str, str]]:
         return self.get_json(path_or_url), {}
@@ -50,17 +147,10 @@ class FakeClient:
         return (FIXTURES / "diff_89.diff").read_text()
 
     def get_all(self, path: str, *, per_page: int = 100) -> list:
-        if path.endswith("/issues/89/comments"):
-            return json.loads((FIXTURES / "issue_comments_89.json").read_text())
-        if path.endswith("/pulls/89/comments"):
-            return json.loads((FIXTURES / "review_comments_89.json").read_text())
-        if path.endswith("/pulls/89/reviews"):
-            return json.loads((FIXTURES / "reviews_89.json").read_text())
-        if path.endswith("/pulls/89/commits"):
-            return json.loads((FIXTURES / "commits_89.json").read_text())
-        if path.endswith("/pulls/89/files"):
-            return json.loads((FIXTURES / "files_89.json").read_text())
-        raise AssertionError(f"unexpected get_all path: {path}")
+        payload = _all_handler(path)
+        if payload is None:
+            raise AssertionError(f"unexpected get_all path: {path}")
+        return payload
 
 
 def test_collect_pr_fixture(tmp_path: Path):

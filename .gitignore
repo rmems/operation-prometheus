@@ -43,6 +43,9 @@ env/
 # Keep the .gitkeep files tracked, ignore actual data
 datasets/raw/*
 !datasets/raw/.gitkeep
+datasets/artifacts/*
+!datasets/artifacts/.gitkeep
+datasets/collector-state.json
 
 # datasets/jsonl/ is for small cleaned example JSONL and cards.
 # Small curated JSONL files are allowed (see datasets/README.md).
