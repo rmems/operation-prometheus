@@ -40,6 +40,22 @@ def _repo_name(row: dict[str, Any]) -> str:
     )
 
 
+def _id_only_row(
+    repo_id: str,
+    row: dict[str, Any],
+    other_by_id: dict[str, dict[str, Any]],
+    other_by_name: dict[str, dict[str, Any]],
+) -> dict[str, str] | None:
+    if repo_id in other_by_id:
+        return None
+    peer = other_by_name.get(_repo_name(row).casefold())
+    if peer is None:
+        return {"repository_id": repo_id, "name_with_owner": _repo_name(row)}
+    if _repo_key(peer) == repo_id:
+        return None
+    return {"repository_id": repo_id, "name_with_owner": _repo_name(row)}
+
+
 def _id_only_in(
     primary_by_id: dict[str, dict[str, Any]],
     other_by_id: dict[str, dict[str, Any]],
@@ -47,13 +63,26 @@ def _id_only_in(
 ) -> list[dict[str, str]]:
     rows: list[dict[str, str]] = []
     for repo_id, row in primary_by_id.items():
-        if repo_id in other_by_id:
-            continue
-        peer = other_by_name.get(_repo_name(row).casefold())
-        if peer is not None and _repo_key(peer) == repo_id:
-            continue
-        rows.append({"repository_id": repo_id, "name_with_owner": _repo_name(row)})
+        item = _id_only_row(repo_id, row, other_by_id, other_by_name)
+        if item is not None:
+            rows.append(item)
     return rows
+
+
+def _one_rename(
+    repo_id: str, frozen_row: dict[str, Any], live_row: dict[str, Any] | None
+) -> dict[str, str] | None:
+    if live_row is None:
+        return None
+    frozen_name = _repo_name(frozen_row)
+    live_name = _repo_name(live_row)
+    if not frozen_name:
+        return None
+    if not live_name:
+        return None
+    if frozen_name.casefold() == live_name.casefold():
+        return None
+    return {"repository_id": repo_id, "from": frozen_name, "to": live_name}
 
 
 def _renamed_repositories(
@@ -62,15 +91,9 @@ def _renamed_repositories(
 ) -> list[dict[str, str]]:
     renamed: list[dict[str, str]] = []
     for repo_id, frozen_row in frozen_by_id.items():
-        live_row = live_by_id.get(repo_id)
-        if live_row is None:
-            continue
-        frozen_name = _repo_name(frozen_row)
-        live_name = _repo_name(live_row)
-        if frozen_name and live_name and frozen_name.casefold() != live_name.casefold():
-            renamed.append(
-                {"repository_id": repo_id, "from": frozen_name, "to": live_name}
-            )
+        item = _one_rename(repo_id, frozen_row, live_by_id.get(repo_id))
+        if item is not None:
+            renamed.append(item)
     return renamed
 
 
@@ -150,6 +173,48 @@ def _new_terminal(candidate_id: str, live: dict[str, Any]) -> dict[str, Any] | N
     }
 
 
+def _one_frozen_change(
+    candidate_id: str, frozen_row: dict[str, Any], live: dict[str, Any] | None
+) -> dict[str, Any] | None:
+    if live is None:
+        return _missing_terminal(candidate_id, frozen_row)
+    return _state_change(candidate_id, frozen_row, live)
+
+
+def _frozen_changes(
+    frozen_by_id: dict[str, dict[str, Any]], live_by_id: dict[str, dict[str, Any]]
+) -> list[dict[str, Any]]:
+    changed: list[dict[str, Any]] = []
+    for candidate_id, frozen_row in frozen_by_id.items():
+        item = _one_frozen_change(
+            candidate_id, frozen_row, live_by_id.get(candidate_id)
+        )
+        if item is not None:
+            changed.append(item)
+    return changed
+
+
+def _maybe_new_terminal(
+    candidate_id: str,
+    frozen_by_id: dict[str, dict[str, Any]],
+    live: dict[str, Any],
+) -> dict[str, Any] | None:
+    if candidate_id in frozen_by_id:
+        return None
+    return _new_terminal(candidate_id, live)
+
+
+def _new_live_terminals(
+    frozen_by_id: dict[str, dict[str, Any]], live_by_id: dict[str, dict[str, Any]]
+) -> list[dict[str, Any]]:
+    changed: list[dict[str, Any]] = []
+    for candidate_id, live in live_by_id.items():
+        added = _maybe_new_terminal(candidate_id, frozen_by_id, live)
+        if added is not None:
+            changed.append(added)
+    return changed
+
+
 def diff_terminal_candidates(
     frozen: list[dict[str, Any]],
     live_prs: list[dict[str, Any]],
@@ -158,23 +223,8 @@ def diff_terminal_candidates(
     live_by_id = {
         _live_candidate_id(pr): pr for pr in live_prs if _live_candidate_id(pr)
     }
-    changed: list[dict[str, Any]] = []
-    for candidate_id, frozen_row in frozen_by_id.items():
-        live = live_by_id.get(candidate_id)
-        if live is None:
-            missing = _missing_terminal(candidate_id, frozen_row)
-            if missing is not None:
-                changed.append(missing)
-            continue
-        change = _state_change(candidate_id, frozen_row, live)
-        if change is not None:
-            changed.append(change)
-    for candidate_id, live in live_by_id.items():
-        if candidate_id in frozen_by_id:
-            continue
-        added = _new_terminal(candidate_id, live)
-        if added is not None:
-            changed.append(added)
+    changed = _frozen_changes(frozen_by_id, live_by_id)
+    changed.extend(_new_live_terminals(frozen_by_id, live_by_id))
     changed.sort(key=lambda row: str(row.get("candidate_id")))
     return changed
 
