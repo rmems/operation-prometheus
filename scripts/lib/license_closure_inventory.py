@@ -101,6 +101,21 @@ def inventory_row_source_hash(repository: dict[str, Any]) -> str:
     )
 
 
+def source_provenance_digest(
+    repo: str,
+    repository_source_hash: str,
+    snapshot_sha256: str,
+) -> str:
+    """Bind a released row to its repository identity and snapshot digest."""
+    return sha256_json(
+        {
+            "repo": repo,
+            "repository_source_hash": repository_source_hash,
+            "snapshot_sha256": snapshot_sha256,
+        }
+    )
+
+
 def _nested_record_repo(record: dict[str, Any]) -> str:
     repository = record.get("repository")
     if isinstance(repository, dict):
