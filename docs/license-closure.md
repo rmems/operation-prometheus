@@ -35,9 +35,15 @@ unique, and each released identifier still classifies as a closed family.
 non-object quarantined entry cannot be dropped to fake a closed report.
 Rows missing `record_id`, or quarantined rows missing `primary_reason` /
 `reason_codes`, fail closed instead of raising `KeyError`.
+Released rows persist `snapshot_sha256`, `repository_source_hash`, and a
+`source_provenance_digest` bound to the repository name plus those hashes;
+swapping the published `repo` or the report snapshot without that binding
+fails closed. Report count fields must be actual integers (`type is int`);
+booleans such as `true`/`false` cannot stand in for `1`/`0`.
 Manifest count fields must be actual integers; fractional values such as
 `0.5` fail closed. A present `records` array, including `[]`, must enumerate
-every evaluated row.
+every evaluated row. Every listed entry must be an object with a non-empty
+string `id`; extra `{}` or non-object values cannot be dropped.
 
 This check does **not** decide license compatibility, relicense source-derived
 material under Operation Prometheus's Apache-2.0 terms, or guess a license
@@ -83,7 +89,9 @@ still sees a license change on the previous name. If both `--snapshot-sha256`
 and `--inventory-manifest` are supplied, they must name the same snapshot
 digest. A supplied inventory manifest must bind `--inventory` through a
 `files` entry (`repositories.jsonl` or the inventory basename) whose `sha256`
-matches the file bytes. Accepted snapshot digests are stored as lowercase hex.
+matches the file bytes. `--snapshot-sha256` without `--inventory-manifest`
+cannot close an inventory that declares aliases, because aliases are not
+part of `source_hash`. Accepted snapshot digests are stored as lowercase hex.
 The dataset manifest must declare a valid `sha256` of `--records`; a missing
 or malformed digest fails closed. Duplicate inventory aliases that point at
 different repositories are rejected. Duplicate immutable `repository_id`
@@ -111,13 +119,16 @@ resolved through inventory aliases. Markdown disclosure ignores HTML comments,
 fenced code blocks, hidden raw HTML (`<span hidden>MIT</span>`), non-rendered
 `script` / `style` / `template` content, link destinations, and reference
 definitions, so a URL that only contains `MIT`, or a fenced
-`## License / provenance` heading, is not disclosure. HTML comments and
+`## License / provenance` heading, is not disclosure. A CommonMark
+reference-definition title on the following line is stripped with the
+definition. HTML comments and
 non-rendered HTML are stripped before the license heading is located, so a
 commented-out `## License / provenance` block cannot disclose a later
 visible identifier. A void tag such as `<br/>` inside a hidden block
 cannot close that hidden scope. Visible markup such as
 `<p>MIT</p>` still counts. Disclosure stops the license section at the next
-H1 or H2 heading.
+H1 or H2 heading, including CommonMark headings indented by up to three
+spaces.
 Released rows persist the inventory `license` object so publication can
 recompute the evidence digest; swapping a custom `text_sha256` or an SPDX
 `spdx_id` / `evidence_digest` while keeping the other bound fields fails
