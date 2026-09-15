@@ -15,7 +15,12 @@ from license_closure_fixtures import (
     spdx_known_bundle,
     with_code_state,
 )
-from license_closure_helpers import _assert_schema, _report, _write_cli_bundle
+from license_closure_helpers import (
+    _assert_schema,
+    _cli_argv,
+    _report,
+    _write_cli_bundle,
+)
 from lib.license_closure import validate_positive_release
 from validate_license_closure import main as license_closure_main
 
@@ -53,25 +58,7 @@ def test_cli_writes_failed_bindings_as_unclosed(tmp_path: Path):
     bundle = spdx_known_bundle()
     bundle["manifest"]["sha256"] = "e" * 64
     paths = _write_cli_bundle(tmp_path, bundle)
-    assert (
-        license_closure_main(
-            [
-                "--records",
-                str(paths["records"]),
-                "--card",
-                str(paths["card"]),
-                "--manifest",
-                str(paths["manifest"]),
-                "--inventory",
-                str(paths["inventory"]),
-                "--snapshot-sha256",
-                bundle["snapshot_sha256"],
-                "--out",
-                str(paths["out"]),
-            ]
-        )
-        == 1
-    )
+    assert license_closure_main(_cli_argv(paths, "--out", str(paths["out"]))) == 1
     saved = json.loads(paths["out"].read_text(encoding="utf-8"))
     assert saved["closed"] is False
     assert saved["bundle_errors"]
@@ -84,25 +71,7 @@ def test_cli_rejects_missing_dataset_manifest_digest(tmp_path: Path):
     manifest = json.loads(paths["manifest"].read_text(encoding="utf-8"))
     manifest.pop("sha256", None)
     paths["manifest"].write_text(json.dumps(manifest), encoding="utf-8")
-    assert (
-        license_closure_main(
-            [
-                "--records",
-                str(paths["records"]),
-                "--card",
-                str(paths["card"]),
-                "--manifest",
-                str(paths["manifest"]),
-                "--inventory",
-                str(paths["inventory"]),
-                "--snapshot-sha256",
-                bundle["snapshot_sha256"],
-                "--out",
-                str(paths["out"]),
-            ]
-        )
-        == 1
-    )
+    assert license_closure_main(_cli_argv(paths, "--out", str(paths["out"]))) == 1
     saved = json.loads(paths["out"].read_text(encoding="utf-8"))
     assert saved["closed"] is False
     assert any("missing or malformed" in error for error in saved["bundle_errors"])
