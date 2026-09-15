@@ -9,6 +9,7 @@ import jsonschema
 import pytest
 
 from license_closure_fixtures import (
+    STALE_DIGEST,
     apache_source_bundle,
     changed_license_bundle,
     conflicting_card_manifest_bundle,
@@ -16,6 +17,7 @@ from license_closure_fixtures import (
     custom_license_bundle,
     forge_substitution_bundle,
     license_ref_without_digest_bundle,
+    mismatched_custom_identifier_bundle,
     missing_license_bundle,
     mixed_repository_bundle,
     report_kwargs,
@@ -80,6 +82,13 @@ def test_custom_license_closes_with_frozen_evidence():
 
 def test_license_ref_without_text_digest_is_quarantined():
     report = _report(license_ref_without_digest_bundle())
+    _assert_schema(report)
+    assert report["released_positives"] == []
+    assert "source_license_unknown" in report["quarantined"][0]["reason_codes"]
+
+
+def test_custom_evidence_must_match_inventory_identifier():
+    report = _report(mismatched_custom_identifier_bundle())
     _assert_schema(report)
     assert report["released_positives"] == []
     assert "source_license_unknown" in report["quarantined"][0]["reason_codes"]
@@ -176,6 +185,7 @@ def test_unresolved_record_cannot_appear_in_released_positives():
         conflicting_card_manifest_bundle(),
         conflicting_card_manifest_digest_bundle(),
         license_ref_without_digest_bundle(),
+        mismatched_custom_identifier_bundle(),
         unknown_license_bundle(),
         forge_substitution_bundle(),
     ):
@@ -358,6 +368,35 @@ def test_identifier_outside_license_section_does_not_disclose():
     assert report["released_positives"] == []
 
 
+def test_markdown_prefix_identifier_does_not_disclose():
+    bundle = spdx_known_bundle()
+    bundle["markdown"] = "## License / provenance\n\n- Source license: MIT-0\n"
+    report = _report(bundle)
+    assert "card_disclosure_missing" in report["quarantined"][0]["reason_codes"]
+    assert report["released_positives"] == []
+
+
+def test_singular_and_mapped_license_disagreement_blocks_release():
+    bundle = spdx_known_bundle()
+    bundle["card"]["source_license"] = "Apache-2.0"
+    bundle["card"]["source_licenses"] = {"rmems/widget": "MIT"}
+    report = _report(bundle)
+    _assert_schema(report)
+    assert "declarations_disagree" in report["quarantined"][0]["reason_codes"]
+    assert report["released_positives"] == []
+
+
+def test_singular_and_mapped_digest_disagreement_blocks_release():
+    bundle = spdx_known_bundle()
+    digest = bundle["card"]["license_evidence_digest"]
+    bundle["card"]["license_evidence_digest"] = STALE_DIGEST
+    bundle["card"]["license_evidence_digests"] = {"rmems/widget": digest}
+    report = _report(bundle)
+    _assert_schema(report)
+    assert "declarations_disagree" in report["quarantined"][0]["reason_codes"]
+    assert report["released_positives"] == []
+
+
 def test_card_license_map_is_case_insensitive():
     bundle = mixed_repository_bundle()
     bundle["records"][1]["repo"] = "limen-neural/axon-encoder"
@@ -400,3 +439,76 @@ def test_snapshot_sha256_must_be_frozen_hex():
         build_license_closure_report(
             **{**report_kwargs(bundle), "snapshot_sha256": "not-a-digest"}
         )
+
+
+def _write_cli_bundle(tmp_path: Path, bundle: dict) -> dict[str, Path]:
+    paths = {
+        "records": tmp_path / "records.jsonl",
+        "card": tmp_path / "card.json",
+        "manifest": tmp_path / "manifest.json",
+        "inventory": tmp_path / "inventory.jsonl",
+        "out": tmp_path / "closure.json",
+    }
+    paths["records"].write_text(json.dumps(bundle["records"][0]) + "\n", encoding="utf-8")
+    paths["card"].write_text(json.dumps(bundle["card"]), encoding="utf-8")
+    paths["manifest"].write_text(json.dumps(bundle["manifest"]), encoding="utf-8")
+    paths["inventory"].write_text(json.dumps(bundle["repositories"][0]) + "\n", encoding="utf-8")
+    return paths
+
+
+def test_cli_rejects_conflicting_snapshot_digests(tmp_path: Path):
+    bundle = spdx_known_bundle()
+    paths = _write_cli_bundle(tmp_path, bundle)
+    inventory_manifest = tmp_path / "inventory-manifest.json"
+    inventory_manifest.write_text(
+        json.dumps({"snapshot_sha256": "f" * 64, "files": {}}),
+        encoding="utf-8",
+    )
+    assert (
+        license_closure_main(
+            [
+                "--records",
+                str(paths["records"]),
+                "--card",
+                str(paths["card"]),
+                "--manifest",
+                str(paths["manifest"]),
+                "--inventory",
+                str(paths["inventory"]),
+                "--inventory-manifest",
+                str(inventory_manifest),
+                "--snapshot-sha256",
+                bundle["snapshot_sha256"],
+            ]
+        )
+        == 2
+    )
+
+
+def test_cli_writes_failed_bindings_as_unclosed(tmp_path: Path):
+    bundle = spdx_known_bundle()
+    bundle["manifest"]["sha256"] = "e" * 64
+    paths = _write_cli_bundle(tmp_path, bundle)
+    assert (
+        license_closure_main(
+            [
+                "--records",
+                str(paths["records"]),
+                "--card",
+                str(paths["card"]),
+                "--manifest",
+                str(paths["manifest"]),
+                "--inventory",
+                str(paths["inventory"]),
+                "--snapshot-sha256",
+                bundle["snapshot_sha256"],
+                "--out",
+                str(paths["out"]),
+            ]
+        )
+        == 1
+    )
+    saved = json.loads(paths["out"].read_text(encoding="utf-8"))
+    assert saved["closed"] is False
+    assert saved["bundle_errors"]
+    assert any("sha256 does not match" in error for error in saved["bundle_errors"])
