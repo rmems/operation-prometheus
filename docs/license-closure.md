@@ -26,7 +26,11 @@ including a frozen `custom_license` object when the inventory row carried
 one, and an explicit reason code. Quarantined evidence always includes
 `custom_license` (`null` when there is no custom object). Duplicate
 released IDs that are converted to quarantined rows keep their
-`inventory_license` object. Publication consumers must treat a report as closed
+`inventory_license` object and the released row's `snapshot_sha256` /
+`repository_source_hash`. A record whose `id` and `trajectory_id` are
+absent, blank, or non-string is quarantined as `declarations_disagree`
+instead of closing under a synthetic `repo#pr` identifier.
+Publication consumers must treat a report as closed
 only when the quarantined array is empty, counts match those array lengths
 (including `record_count` equal to released plus quarantined), `bundle_errors`
 is empty, and every released row's repository, digest, family, and identifier
@@ -129,19 +133,22 @@ authenticate `source_hash` before their license is trusted. When the current
 row carries `repository_id`, prior lookup matches that immutable id and does
 not fall back to a reused GitHub name. Card and manifest declaration maps are
 resolved through inventory aliases. Markdown disclosure ignores HTML comments,
-fenced code blocks, hidden raw HTML (`<span hidden>MIT</span>`), non-rendered
-`script` / `style` / `template` content, link destinations, and reference
-definitions, so a URL that only contains `MIT`, including a destination with
-balanced parentheses such as `https://example.test/foo(bar)/MIT`, or a fenced
-`## License / provenance` heading, is not disclosure. A CommonMark
-reference-definition title on the following line is stripped with the
-definition. HTML comments and
+fenced code blocks, hidden raw HTML (`<span hidden>MIT</span>`), inline CSS
+that hides content (`style="display:none"` / `visibility:hidden`),
+non-rendered `script` / `style` / `template` content, link destinations, and
+reference definitions, so a URL that only contains `MIT`, including a
+destination with balanced parentheses such as
+`https://example.test/foo(bar)/MIT`, a destination on the line after
+`[source]:`, or a fenced `## License / provenance` heading, is not
+disclosure. A CommonMark reference-definition title on the following line is
+stripped with the definition. HTML comments and
 non-rendered HTML are stripped before the license heading is located, so a
 commented-out `## License / provenance` block cannot disclose a later
 visible identifier. A void tag such as `<br/>` inside a hidden block
 cannot close that hidden scope. Visible markup such as
-`<p>MIT</p>` still counts. Disclosure stops the license section at the next
-H1 or H2 heading, including CommonMark headings indented by up to three
+`<p>MIT</p>` still counts; splitting the identifier across block tags
+(`<p>MI</p><p>T</p>`) does not. Disclosure stops the license section at the
+next H1 or H2 heading, including CommonMark headings indented by up to three
 spaces.
 Released rows persist the inventory `license` object so publication can
 recompute the evidence digest; swapping a custom `text_sha256` or an SPDX
