@@ -235,8 +235,7 @@ def test_hf_release_verify_refuses_pull_request_event(monkeypatch, tmp_path):
     monkeypatch.setenv("GITHUB_EVENT_NAME", "release")
     jsonl = tmp_path / "jsonl"
     jsonl.mkdir()
-    (jsonl / "a.jsonl").write_text("{}
-")
+    (jsonl / "a.jsonl").write_bytes(b"{}\n")
     result = verify(
         tag="v0.7.0",
         dataset_repo="rmems/operation-prometheus-trajectories",
