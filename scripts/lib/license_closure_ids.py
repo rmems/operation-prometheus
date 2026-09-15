@@ -12,13 +12,14 @@ GIT_OID_RE = re.compile(r"^(?:[0-9a-fA-F]{40}|[0-9a-fA-F]{64})$")
 LICENSE_REF_RE = re.compile(r"^LicenseRef-[A-Za-z0-9.-]+$")
 EXPRESSION_SPLIT_RE = re.compile(r"\s+(AND|OR|WITH)\s+", re.IGNORECASE)
 MARKDOWN_LICENSE_SECTION_RE = re.compile(
-    r"^ {0,3}##\s+License\s*/\s*provenance(?:[ \t]+#+)?[ \t]*$",
+    r"^ {0,3}##[ \t]+License[ \t]+/[ \t]*provenance(?:[ \t]+#+)?[ \t]*$",
     re.IGNORECASE | re.MULTILINE,
 )
 MARKDOWN_SECTION_BOUNDARY_RE = re.compile(
     r"^ {0,3}#{1,2}(?:\s|$)|^ {0,3}\S[^\n]*\n {0,3}(?:=+|-+)[ \t]*$",
     re.MULTILINE,
 )
+_MAX_EXPRESSION_DEPTH = 32
 
 CLOSED_FAMILIES = frozenset({"spdx", "custom"})
 LICENSE_FAMILIES = frozenset({"spdx", "custom", "missing", "unknown"})
@@ -206,7 +207,9 @@ def _top_level_expression_parts(expression: str) -> list[str] | None:
     return parts
 
 
-def _expression_tokens(identifier: str) -> list[str] | None:
+def _expression_tokens(identifier: str, depth: int = 0) -> list[str] | None:
+    if depth >= _MAX_EXPRESSION_DEPTH:
+        return None
     stripped = identifier.strip()
     if not stripped:
         return []
@@ -232,7 +235,7 @@ def _expression_tokens(identifier: str) -> list[str] | None:
             inner = _unwrap_outer_parens(token)
             if inner is None or inner == token:
                 return None
-            nested = _expression_tokens(inner)
+            nested = _expression_tokens(inner, depth + 1)
             if nested is None:
                 return None
             tokens.extend(nested)
