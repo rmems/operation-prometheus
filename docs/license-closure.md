@@ -16,7 +16,10 @@ Every released positive trajectory must resolve through all three of:
    identifier as the inventory license. If `custom_license` declares both
    `identifier` and `spdx_id`, those fields must agree. If it declares both
    `text_sha256` and `evidence_sha256`, those digests must be valid and equal;
-   a present mismatch cannot close by preferring `text_sha256`.
+   a present mismatch cannot close by preferring `text_sha256`. An SPDX
+   inventory row that also carries a `custom_license` object whose identifier
+   does not match that SPDX license is quarantined as `source_license_conflict`
+   instead of releasing with a digest that publication cannot reconstruct.
 
 Card, manifest, and inventory declarations must agree. Singular and
 per-repository maps in the same artifact must not disagree, including the same
@@ -41,7 +44,8 @@ only when the quarantined array is empty, counts match those array lengths
 present object (a truthy non-object such as `[1]` cannot crash the gate),
 `bundle_errors`
 is a present array of strings and is empty (omitting the key or substituting
-`{}` cannot stand in for `[]`), and every released row's repository, digest, family, and identifier
+`{}` cannot stand in for `[]`), `license_families` is a present array (a
+truthy object such as `{"spdx": 123}` cannot stand in for `["spdx"]`), and every released row's repository, digest, family, and identifier
 appear in `evidence_digests` / `license_families`, released record IDs are
 unique, and each released identifier still classifies as a closed family.
 Trajectory records passed to `build_license_closure_report` must all be
@@ -138,7 +142,9 @@ path as `--records`, `--card`, `--manifest`, `--inventory`,
 through symlinks; a colliding `--out` is rejected before `--check` or write
 so frozen inputs cannot be overwritten. JSON parsers reject the non-finite
 constants `NaN`, `Infinity`, and `-Infinity`; `render_json` writes with
-`allow_nan=False`. A fabricated repository row
+`allow_nan=False`. Duplicate object keys in frozen JSON or JSONL (for
+example `"license": "GPL-3.0-only"` later overwritten by `"license": "MIT"`)
+are rejected instead of silently keeping the last value. A fabricated repository row
 with a newly computed `source_hash` is not authenticated by the snapshot
 digest alone. Inventory rows must declare `visibility` as the exact string
 `public` before `source_hash` is trusted; `private`, `internal`, or a missing
@@ -147,7 +153,9 @@ use the same public-visibility authentication before a license change is
 evaluated. Accepted snapshot digests are stored as lowercase hex.
 The dataset manifest must declare a valid `sha256` of `--records`; a missing
 or malformed digest fails closed. Duplicate inventory aliases that point at
-different repositories are rejected. Duplicate immutable `repository_id`
+different repositories are rejected. Inventory `aliases` must be an array of
+names or `{name_with_owner}` objects; a JSON object such as
+`{"rmems/other": {}}` cannot be indexed as a legitimate alias. Duplicate immutable `repository_id`
 values that point at different names are rejected. Every supplied repository
 inventory row must be an object with a non-empty canonical `name_with_owner`;
 a valid matching row plus a malformed `{}` entry is rejected instead of
@@ -191,7 +199,9 @@ destination with balanced parentheses such as
 `[details [nested]](https://example.test/MIT)`, a destination on the line after
 `[source]:`, or a fenced `## License / provenance` heading, is not
 disclosure. A CommonMark reference-definition title on the following line is
-stripped with the definition. HTML comments and
+stripped with the definition. Labels parse backslash escapes, so
+`[license\]]: https://example.test/MIT` is stripped as a definition rather
+than leaving `MIT` in visible text. HTML comments and
 non-rendered HTML are stripped before the license heading is located, so a
 commented-out `## License / provenance` block cannot disclose a later
 visible identifier. A void tag such as `<br/>` inside a hidden block
