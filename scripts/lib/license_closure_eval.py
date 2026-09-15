@@ -25,6 +25,7 @@ from .license_closure_inventory import (
     evidence_digest,
     inventory_has_custom_evidence,
     inventory_license_object,
+    inventory_row_source_hash,
     license_evidence_payload,
     manifest_license_for_repo,
     record_id,
@@ -105,7 +106,12 @@ def _evaluate_record(
     source_hash = None
     digest = None
     if isinstance(repository, dict):
-        source_hash = _sha256_or_none(repository.get("source_hash"))
+        declared_hash = _sha256_or_none(repository.get("source_hash"))
+        source_hash = (
+            declared_hash
+            if declared_hash == inventory_row_source_hash(repository)
+            else None
+        )
         digest = evidence_digest(license_evidence_payload(repository))
 
     card_digest = declared_digest_for_repo(card, repo)
