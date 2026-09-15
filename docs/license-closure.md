@@ -39,21 +39,27 @@ is a present array of strings and is empty (omitting the key or substituting
 `{}` cannot stand in for `[]`), and every released row's repository, digest, family, and identifier
 appear in `evidence_digests` / `license_families`, released record IDs are
 unique, and each released identifier still classifies as a closed family.
-`released_positives` and `quarantined` must be arrays of objects; a
-non-object quarantined entry cannot be dropped to fake a closed report.
+Trajectory records passed to `build_license_closure_report` must all be
+objects; a valid matching row plus a non-object `"not-a-row"` entry is
+rejected instead of skipped. `released_positives` and `quarantined` must be
+arrays of objects; a non-object quarantined entry cannot be dropped to fake a
+closed report.
 Rows missing `record_id`, or quarantined rows missing `primary_reason` /
 `reason_codes`, fail closed instead of raising `KeyError`.
 Released rows missing `repo`, `license_family`, or `evidence_digest` fail
 closed instead of raising `KeyError` while building the evidence summary.
 Released rows persist `snapshot_sha256`, `repository_source_hash`, and a
 `source_provenance_digest` bound to the record id, pull-request number,
-repository name, and those hashes; swapping the published `repo`, `record_id`,
-`pr_number`, or the report snapshot without that binding fails closed.
+repository name, `evidence_digest`, and those hashes; swapping the published
+`repo`, `record_id`, `pr_number`, `evidence_digest` / inventory license, or
+the report snapshot without that binding fails closed.
 Released identity, family, and digest fields must be non-empty strings;
-`pr_number` must be an `int` or `null` (`type is int`, so `true` cannot stand
-in for `1`). A present record `pr_number` that is not an integer `>= 1`
-(`true`, `0`, `"7"`) quarantines as `declarations_disagree`; omitting the key
-or setting `null` remains allowed when no pull-request inventory is supplied.
+`pr_number` must be `null` or an integer `>= 1` (`type is int`, so `true`
+cannot stand in for `1`, and `0` / `-1` cannot close after rebuilding
+`source_provenance_digest`). A present record `pr_number` that is not an
+integer `>= 1` (`true`, `0`, `"7"`) quarantines as `declarations_disagree`;
+omitting the key or setting `null` remains allowed when no pull-request
+inventory is supplied.
 An integer `repo` such as `7` cannot close by rebuilding
 `source_provenance_digest` and `evidence_digests`. Unhashable values such as
 `[]` fail closed instead of raising `TypeError`.
@@ -115,7 +121,11 @@ file binding; `--snapshot-sha256` without `--inventory-manifest` cannot close,
 including inventories that declare no aliases. The checker reads each
 publication artifact once and hashes those captured bytes, so a rewrite
 between report construction and binding comparison cannot authenticate a
-different file than the report describes. JSON parsers reject the non-finite
+different file than the report describes. `--out` cannot resolve to the same
+path as `--records`, `--card`, `--manifest`, `--inventory`,
+`--inventory-manifest`, `--prior-inventory`, or `--markdown-card`, including
+through symlinks; a colliding `--out` is rejected before `--check` or write
+so frozen inputs cannot be overwritten. JSON parsers reject the non-finite
 constants `NaN`, `Infinity`, and `-Infinity`; `render_json` writes with
 `allow_nan=False`. A fabricated repository row
 with a newly computed `source_hash` is not authenticated by the snapshot
@@ -164,7 +174,8 @@ that hides content (`style="display:none"` / `visibility:hidden`),
 non-rendered `script` / `style` / `template` content, link destinations, and
 reference definitions, so a URL that only contains `MIT`, including a
 destination with balanced parentheses such as
-`https://example.test/foo(bar)/MIT`, a destination on the line after
+`https://example.test/foo(bar)/MIT`, a nested link label such as
+`[details [nested]](https://example.test/MIT)`, a destination on the line after
 `[source]:`, or a fenced `## License / provenance` heading, is not
 disclosure. A CommonMark reference-definition title on the following line is
 stripped with the definition. HTML comments and
@@ -180,8 +191,8 @@ followed by `---` is a Setext H2 and ends the section; a lone thematic break
 with no title line does not. `###` headings do not bound the section.
 Released rows persist the inventory `license` object so publication can
 recompute the evidence digest; swapping a custom `text_sha256` or an SPDX
-`spdx_id` / `evidence_digest` while keeping the other bound fields fails
-closed.
+`spdx_id` / `inventory_license` / `evidence_digest` while keeping
+`source_provenance_digest` fails closed.
 `build_manifest.py` copies license-closure fields from the card when they are
 present. It copies `source_repo` only when the card declares a non-blank
 singular name, so a plural-only `source_repos` card does not emit a blank
