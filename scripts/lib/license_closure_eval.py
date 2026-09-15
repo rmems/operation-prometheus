@@ -276,6 +276,7 @@ def _evaluate_record(
             pr_number=pr_number,
             evidence_digest=digest,
         )
+        released["evidence"] = evidence
         return released
     return {
         "evidence": evidence,
