@@ -20,8 +20,9 @@ per-repository maps in the same artifact must not disagree, including the same
 repository named twice under different casing. A `license_evidence_digest` that
 is present but not a valid SHA-256 quarantines as `declarations_disagree`;
 omitting the digest remains optional. Missing, unknown, conflicting, or changed
-evidence quarantines the row. Quarantined rows keep the evidence they have and
-an explicit reason code. Publication consumers must treat a report as closed
+evidence quarantines the row. Quarantined rows keep the evidence they have,
+including a frozen `custom_license` object when the inventory row carried
+one, and an explicit reason code. Publication consumers must treat a report as closed
 only when the quarantined array is empty, counts match those array lengths
 (including `record_count` equal to released plus quarantined), `bundle_errors`
 is empty, and every released row's repository, digest, family, and identifier
@@ -105,7 +106,10 @@ resolved through inventory aliases. Markdown disclosure ignores HTML comments,
 fenced code blocks, hidden raw HTML (`<span hidden>MIT</span>`), non-rendered
 `script` / `style` / `template` content, link destinations, and reference
 definitions, so a URL that only contains `MIT`, or a fenced
-`## License / provenance` heading, is not disclosure. Visible markup such as
+`## License / provenance` heading, is not disclosure. HTML comments and
+non-rendered HTML are stripped before the license heading is located, so a
+commented-out `## License / provenance` block cannot disclose a later
+visible identifier. Visible markup such as
 `<p>MIT</p>` still counts. Disclosure stops the license section at the next
 H1 or H2 heading.
 Released rows persist the inventory `license` object so publication can
@@ -113,7 +117,9 @@ recompute the evidence digest; swapping a custom `text_sha256` or an SPDX
 `spdx_id` / `evidence_digest` while keeping the other bound fields fails
 closed.
 `build_manifest.py` copies license-closure fields from the card when they are
-present.
+present. It copies `source_repo` only when the card declares a non-blank
+singular name, so a plural-only `source_repos` card does not emit a blank
+`source_repo` that would fail coverage.
 
 When a caller supplies a frozen pull-request inventory, every proposed record
 must appear in that list. Each row must include a `source_hash` bound to the
@@ -126,7 +132,9 @@ Duplicate repository+PR keys in that inventory are rejected. Record
 repository state are compared to the matching PR roles after normalizing
 accepted hexadecimal OIDs to lowercase. Only full Git object IDs are
 accepted (40-character SHA-1 or 64-character SHA-256); truncated values
-such as `abc` cannot close. A correct base OID
+such as `abc` cannot close. A present malformed `base_oid` or `head_oid`
+is not treated as absent: a matching merge OID cannot close over invalid
+declared roles. A correct base OID
 does not mask an incorrect head. A supplied PR inventory also requires a
 valid inventory `merge_commit_oid` and a matching record merge role. A
 record merge/commit OID is not compared to the PR head; missing merge
@@ -137,7 +145,8 @@ canonical PR row still matches a trajectory that uses an old name. Conflicting
 PR rows for a repository and one of its aliases at the same number are
 rejected. When both the inventory repository and the PR row declare
 `repository_id`, those immutable ids must match; a reused name with a
-different id cannot close.
+different id cannot close, including when a canonical PR row matches and an
+alias PR row for the same number declares a different id.
 Omitting the pull-request inventory keeps repository-level snapshot checks only.
 Top-level `repo` and `repository.owner`/`name` must agree when both are
 present.
