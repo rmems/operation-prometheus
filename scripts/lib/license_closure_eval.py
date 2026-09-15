@@ -92,7 +92,7 @@ def _evaluate_record(
         family = classify_license_family(
             declared_record, has_custom_evidence=has_custom
         )
- mar
+
     source_hash = None
     digest = None
     if isinstance(repository, dict):
