@@ -317,7 +317,7 @@ def conflicting_card_manifest_bundle() -> dict[str, Any]:
     digest = digest_for(repo)
     return {
         "card": card("rmems/widget", "MIT", digest=digest),
-        "manifest": manifest("rmems/widget", "MIT", digest=digest),
+        "manifest": manifest("rmems/widget", "Apache-2.0", digest=digest),
         "markdown": None,
         "prior_repositories": None,
         "records": [record("rmems/widget", 1, "MIT")],
