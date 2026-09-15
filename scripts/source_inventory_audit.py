@@ -40,37 +40,49 @@ def _repo_name(row: dict[str, Any]) -> str:
     )
 
 
-def diff_repositories(
-    frozen: list[dict[str, Any]],
-    live: list[dict[str, Any]],
-) -> dict[str, list[dict[str, str]]]:
-    frozen_by_id = {_repo_key(row): row for row in frozen if _repo_key(row)}
-    live_by_id = {_repo_key(row): row for row in live if _repo_key(row)}
-    frozen_by_name = {
-        _repo_name(row).casefold(): row for row in frozen if _repo_name(row)
-    }
-    live_by_name = {_repo_name(row).casefold(): row for row in live if _repo_name(row)}
-
+def _new_repositories(
+    frozen_by_id: dict[str, dict[str, Any]],
+    frozen_by_name: dict[str, dict[str, Any]],
+    live_by_id: dict[str, dict[str, Any]],
+) -> list[dict[str, str]]:
     new_repos: list[dict[str, str]] = []
-    deleted: list[dict[str, str]] = []
-    renamed: list[dict[str, str]] = []
-
     for repo_id, live_row in live_by_id.items():
-        if repo_id not in frozen_by_id:
-            name = _repo_name(live_row)
-            if name.casefold() in frozen_by_name:
-                continue
-            new_repos.append(
-                {"repository_id": repo_id, "name_with_owner": _repo_name(live_row)}
-            )
+        if repo_id in frozen_by_id:
+            continue
+        name = _repo_name(live_row)
+        frozen = frozen_by_name.get(name.casefold())
+        if frozen is not None and _repo_key(frozen) == repo_id:
+            continue
+        new_repos.append(
+            {"repository_id": repo_id, "name_with_owner": _repo_name(live_row)}
+        )
+    return new_repos
+
+
+def _deleted_repositories(
+    frozen_by_id: dict[str, dict[str, Any]],
+    live_by_id: dict[str, dict[str, Any]],
+    live_by_name: dict[str, dict[str, Any]],
+) -> list[dict[str, str]]:
+    deleted: list[dict[str, str]] = []
     for repo_id, frozen_row in frozen_by_id.items():
-        if repo_id not in live_by_id:
-            name = _repo_name(frozen_row)
-            if name.casefold() in live_by_name:
-                continue
-            deleted.append(
-                {"repository_id": repo_id, "name_with_owner": _repo_name(frozen_row)}
-            )
+        if repo_id in live_by_id:
+            continue
+        name = _repo_name(frozen_row)
+        live = live_by_name.get(name.casefold())
+        if live is not None and _repo_key(live) == repo_id:
+            continue
+        deleted.append(
+            {"repository_id": repo_id, "name_with_owner": _repo_name(frozen_row)}
+        )
+    return deleted
+
+
+def _renamed_repositories(
+    frozen_by_id: dict[str, dict[str, Any]],
+    live_by_id: dict[str, dict[str, Any]],
+) -> list[dict[str, str]]:
+    renamed: list[dict[str, str]] = []
     for repo_id, frozen_row in frozen_by_id.items():
         live_row = live_by_id.get(repo_id)
         if live_row is None:
@@ -85,7 +97,24 @@ def diff_repositories(
                     "to": live_name,
                 }
             )
-    return {"new": new_repos, "deleted": deleted, "renamed": renamed}
+    return renamed
+
+
+def diff_repositories(
+    frozen: list[dict[str, Any]],
+    live: list[dict[str, Any]],
+) -> dict[str, list[dict[str, str]]]:
+    frozen_by_id = {_repo_key(row): row for row in frozen if _repo_key(row)}
+    live_by_id = {_repo_key(row): row for row in live if _repo_key(row)}
+    frozen_by_name = {
+        _repo_name(row).casefold(): row for row in frozen if _repo_name(row)
+    }
+    live_by_name = {_repo_name(row).casefold(): row for row in live if _repo_name(row)}
+    return {
+        "new": _new_repositories(frozen_by_id, frozen_by_name, live_by_id),
+        "deleted": _deleted_repositories(frozen_by_id, live_by_id, live_by_name),
+        "renamed": _renamed_repositories(frozen_by_id, live_by_id),
+    }
 
 
 def _live_candidate_id(pr: dict[str, Any]) -> str:
@@ -165,9 +194,12 @@ def build_report(
     live_snapshot: dict[str, Any],
 ) -> dict[str, Any]:
     live_repos = list(live_snapshot.get("repositories") or [])
-    live_prs = list(live_snapshot.get("pull_requests") or [])
     repo_diff = diff_repositories(frozen_repos, live_repos)
-    changed = diff_terminal_candidates(frozen_candidates, live_prs)
+    if live_snapshot.get("skip_terminal_diff"):
+        changed: list[dict[str, Any]] = []
+    else:
+        live_prs = list(live_snapshot.get("pull_requests") or [])
+        changed = diff_terminal_candidates(frozen_candidates, live_prs)
     return {
         "schema_version": REPORT_SCHEMA,
         "read_only": True,
@@ -207,9 +239,21 @@ def main(argv: list[str] | None = None) -> int:
     frozen_repos = load_inventory_repositories(args.inventory_dir)
     frozen_candidates = load_inventory_candidates(args.inventory_dir)
     if args.dry_run:
-        live_snapshot = {"repositories": frozen_repos, "pull_requests": []}
+        live_snapshot = {
+            "repositories": frozen_repos,
+            "pull_requests": [],
+            "skip_terminal_diff": True,
+        }
     elif args.snapshot:
         live_snapshot = json.loads(args.snapshot.read_text(encoding="utf-8"))
+        repos = live_snapshot.get("repositories")
+        prs = live_snapshot.get("pull_requests")
+        if not isinstance(repos, list) or not isinstance(prs, list):
+            print(
+                "source-inventory-audit FAILED: snapshot must include repositories and pull_requests lists",
+                file=sys.stderr,
+            )
+            return 1
     else:
         client = GitHubClient.from_env()
         try:

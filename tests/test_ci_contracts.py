@@ -32,12 +32,17 @@ from source_inventory_audit import (
 )
 from validate_jsonl import load_schema, validate_file
 
-ROOT = Path(__file__).resolve().parents[1]
-
 try:
     import jsonschema
 except ImportError:
     jsonschema = None
+
+ROOT = Path(__file__).resolve().parents[1]
+V1_FIXTURE = ROOT / "tests" / "fixtures" / "v1" / "software_valid.jsonl"
+
+
+def _v1_record() -> dict:
+    return json.loads(V1_FIXTURE.read_text())
 
 
 def _validators():
@@ -54,9 +59,7 @@ def _validators():
 
 def test_duplicate_trajectory_id_is_rejected(tmp_path):
     v0, v1 = _validators()
-    record = json.loads(
-        (ROOT / "tests" / "fixtures" / "v1" / "software_valid.jsonl").read_text()
-    )
+    record = _v1_record()
     path = tmp_path / "dup.jsonl"
     path.write_text(json.dumps(record) + "\n" + json.dumps(record) + "\n")
     errors = validate_file(path, v0, v1, strict_policy=True)
@@ -65,9 +68,7 @@ def test_duplicate_trajectory_id_is_rejected(tmp_path):
 
 def test_duplicate_event_id_is_rejected(tmp_path):
     v0, v1 = _validators()
-    record = json.loads(
-        (ROOT / "tests" / "fixtures" / "v1" / "software_valid.jsonl").read_text()
-    )
+    record = _v1_record()
     extra = dict(record["events"][0])
     extra["event_id"] = "e1"
     extra["timestamp"] = "2023-01-01T13:00:00Z"
@@ -80,9 +81,7 @@ def test_duplicate_event_id_is_rejected(tmp_path):
 
 def test_private_file_uri_on_source_url_is_rejected(tmp_path):
     v0, v1 = _validators()
-    record = json.loads(
-        (ROOT / "tests" / "fixtures" / "v1" / "software_valid.jsonl").read_text()
-    )
+    record = _v1_record()
     record["source_urls"] = ["file:///etc/passwd"]
     path = tmp_path / "private.jsonl"
     path.write_text(json.dumps(record) + "\n")
@@ -96,14 +95,12 @@ def test_patch_mentions_of_localhost_are_not_private_references():
         "source_urls": ["https://github.com/rmems/ci-demo/pull/17"],
     }
     assert iter_uri_fields(record) == ["https://github.com/rmems/ci-demo/pull/17"]
-    assert private_reference_errors(record["source_urls"][0]) == []
+    assert private_reference_errors("http://[::1]/health") == ["private host ::1"]
 
 
 def test_blank_license_is_rejected(tmp_path):
     v0, v1 = _validators()
-    record = json.loads(
-        (ROOT / "tests" / "fixtures" / "v1" / "software_valid.jsonl").read_text()
-    )
+    record = _v1_record()
     record["license"] = "   "
     path = tmp_path / "blank-license.jsonl"
     path.write_text(json.dumps(record) + "\n")
