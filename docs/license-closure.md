@@ -22,6 +22,9 @@ Every released positive trajectory must resolve through all three of:
    inventory row that also carries a `custom_license` object whose identifier
    does not match that SPDX license is quarantined as `source_license_conflict`
    instead of releasing with a digest that publication cannot reconstruct.
+   Persisted SPDX released rows cannot add that unmatched object and close by
+   recomputing `evidence_digest`, `source_provenance_digest`, and the evidence
+   summary.
 
 Card, manifest, and inventory declarations must agree. Singular and
 per-repository maps in the same artifact must not disagree, including the same
@@ -49,7 +52,9 @@ present object (a truthy non-object such as `[1]` cannot crash the gate),
 `bundle_errors`
 is a present array of strings and is empty (omitting the key or substituting
 `{}` cannot stand in for `[]`), `license_families` is a present array (a
-truthy object such as `{"spdx": 123}` cannot stand in for `["spdx"]`), and every released row's repository, digest, family, and identifier
+truthy object such as `{"spdx": 123}` cannot stand in for `["spdx"]`),
+`evidence_digests` is a present array (a truthy scalar such as `1` or `true`
+cannot crash the gate), and every released row's repository, digest, family, and identifier
 appear in `evidence_digests` / `license_families`, released record IDs are
 unique, and each released identifier still classifies as a closed family.
 Trajectory records passed to `build_license_closure_report` must all be
