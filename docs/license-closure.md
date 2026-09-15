@@ -13,7 +13,8 @@ Every released positive trajectory must resolve through all three of:
    `License / provenance` section when a markdown card is supplied). Markdown
    disclosure must name the complete identifier; a prefix such as `MIT` does
    not satisfy `MIT-0`. `LicenseRef-*` custom evidence must use the same
-   identifier as the inventory license.
+   identifier as the inventory license. If `custom_license` declares both
+   `identifier` and `spdx_id`, those fields must agree.
 
 Card, manifest, and inventory declarations must agree. Singular and
 per-repository maps in the same artifact must not disagree, including the same
@@ -38,9 +39,12 @@ Rows missing `record_id`, or quarantined rows missing `primary_reason` /
 Released rows missing `repo`, `license_family`, or `evidence_digest` fail
 closed instead of raising `KeyError` while building the evidence summary.
 Released rows persist `snapshot_sha256`, `repository_source_hash`, and a
-`source_provenance_digest` bound to the repository name plus those hashes;
-swapping the published `repo` or the report snapshot without that binding
-fails closed. Report count fields must be actual integers (`type is int`);
+`source_provenance_digest` bound to the record id, pull-request number,
+repository name, and those hashes; swapping the published `repo`, `record_id`,
+`pr_number`, or the report snapshot without that binding fails closed.
+`closed` must be an actual boolean (`type is bool`); a string such as
+`"false"` cannot stand in for the derived closure state.
+Report count fields must be actual integers (`type is int`);
 booleans such as `true`/`false` cannot stand in for `1`/`0`.
 Manifest count fields must be actual integers; fractional values such as
 `0.5` fail closed. A present `records` array, including `[]`, must enumerate
@@ -91,9 +95,11 @@ still sees a license change on the previous name. If both `--snapshot-sha256`
 and `--inventory-manifest` are supplied, they must name the same snapshot
 digest. A supplied inventory manifest must bind `--inventory` through a
 `files` entry (`repositories.jsonl` or the inventory basename) whose `sha256`
-matches the file bytes. `--snapshot-sha256` without `--inventory-manifest`
-cannot close an inventory that declares aliases, because aliases are not
-part of `source_hash`. Accepted snapshot digests are stored as lowercase hex.
+matches the file bytes. Every publication run requires that inventory-manifest
+file binding; `--snapshot-sha256` without `--inventory-manifest` cannot close,
+including inventories that declare no aliases. A fabricated repository row
+with a newly computed `source_hash` is not authenticated by the snapshot
+digest alone. Accepted snapshot digests are stored as lowercase hex.
 The dataset manifest must declare a valid `sha256` of `--records`; a missing
 or malformed digest fails closed. Duplicate inventory aliases that point at
 different repositories are rejected. Duplicate immutable `repository_id`
@@ -116,14 +122,17 @@ with closed evidence when they are declared. Non-string family elements such
 as `["spdx", 1]` or `[{}]` fail closed as a bundle error instead of raising. When both
 artifacts declare `source_repo` / `source_repos`, the complete normalized
 sets must agree after alias resolution; membership of the current record
-alone is not enough. Prior-inventory rows must
+alone is not enough. Card and manifest `source_licenses` /
+`license_evidence_digests` maps are compared for every declared repository,
+not only repositories that have a proposed record. Prior-inventory rows must
 authenticate `source_hash` before their license is trusted. When the current
 row carries `repository_id`, prior lookup matches that immutable id and does
 not fall back to a reused GitHub name. Card and manifest declaration maps are
 resolved through inventory aliases. Markdown disclosure ignores HTML comments,
 fenced code blocks, hidden raw HTML (`<span hidden>MIT</span>`), non-rendered
 `script` / `style` / `template` content, link destinations, and reference
-definitions, so a URL that only contains `MIT`, or a fenced
+definitions, so a URL that only contains `MIT`, including a destination with
+balanced parentheses such as `https://example.test/foo(bar)/MIT`, or a fenced
 `## License / provenance` heading, is not disclosure. A CommonMark
 reference-definition title on the following line is stripped with the
 definition. HTML comments and
@@ -149,7 +158,9 @@ published object (canonical JSON of the row without `source_hash`). That
 digest authenticates the OIDs used for code-state matching; it is not the
 eligibility producer hash, which binds unsanitized GraphQL title/body the
 published row does not keep. Missing or stale PR hashes are rejected.
-Duplicate repository+PR keys in that inventory are rejected. Record
+Every supplied PR inventory row must be an object with a repository name, PR
+number, and authenticated hash; a valid matching row plus a malformed `{}`
+entry is rejected. Duplicate repository+PR keys in that inventory are rejected. Record
 `base_oid` / `head_oid` / merge `commit_oid` values on the record's
 repository state are compared to the matching PR roles after normalizing
 accepted hexadecimal OIDs to lowercase. Only full Git object IDs are
