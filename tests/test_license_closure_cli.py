@@ -20,6 +20,7 @@ from license_closure_helpers import (
     V0_SCHEMA,
     V1_SCHEMA,
     _assert_schema,
+    _cli_argv,
     _report,
     _write_cli_bundle,
 )
@@ -31,6 +32,7 @@ from lib.license_closure import (
 )
 from validate_jsonl import load_schema, validate_file
 from validate_license_closure import main as license_closure_main
+
 
 def test_existing_v0_extracts_cannot_publish_as_positives():
     records = [
@@ -94,48 +96,14 @@ def test_strict_policy_still_accepts_existing_jsonl():
 def test_cli_writes_manifest_and_fails_closed(tmp_path: Path):
     bundle = spdx_known_bundle()
     paths = _write_cli_bundle(tmp_path, bundle)
-    assert (
-        license_closure_main(
-            [
-                "--records",
-                str(paths["records"]),
-                "--card",
-                str(paths["card"]),
-                "--manifest",
-                str(paths["manifest"]),
-                "--inventory",
-                str(paths["inventory"]),
-                "--snapshot-sha256",
-                bundle["snapshot_sha256"],
-                "--out",
-                str(paths["out"]),
-            ]
-        )
-        == 0
-    )
+    assert license_closure_main(_cli_argv(paths, "--out", str(paths["out"]))) == 0
     saved = json.loads(paths["out"].read_text(encoding="utf-8"))
     assert saved["schema_version"] == SCHEMA_VERSION
     assert saved["closed"] is True
 
     missing = missing_license_bundle()
     paths = _write_cli_bundle(tmp_path, missing)
-    assert (
-        license_closure_main(
-            [
-                "--records",
-                str(paths["records"]),
-                "--card",
-                str(paths["card"]),
-                "--manifest",
-                str(paths["manifest"]),
-                "--inventory",
-                str(paths["inventory"]),
-                "--snapshot-sha256",
-                missing["snapshot_sha256"],
-            ]
-        )
-        == 1
-    )
+    assert license_closure_main(_cli_argv(paths)) == 1
 
 
 def test_module_does_not_import_network_clients():
