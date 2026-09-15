@@ -2,17 +2,27 @@
 
 from __future__ import annotations
 
+import hashlib
+import json
+from pathlib import Path
+
 import pytest
 
 from license_closure_fixtures import (
     WRONG_HEAD_OID,
     inventory_pr,
+    report_kwargs,
     repository,
     spdx_known_bundle,
     with_code_state,
 )
-from license_closure_helpers import _assert_schema, _report
-from lib.license_closure import classify_license_family, validate_positive_release
+from license_closure_helpers import _assert_schema, _report, _write_cli_bundle
+from lib.license_closure import (
+    build_license_closure_report,
+    classify_license_family,
+    validate_positive_release,
+)
+from validate_license_closure import main as license_closure_main
 
 
 def test_empty_spdx_operands_are_unknown():
@@ -83,3 +93,122 @@ def test_conflicting_record_repo_identities_cannot_close():
     _assert_schema(report)
     assert "declarations_disagree" in report["quarantined"][0]["reason_codes"]
     assert report["released_positives"] == []
+
+
+def test_inventory_alias_claimed_by_two_rows_is_rejected():
+    bundle = spdx_known_bundle()
+    other = repository(
+        "rmems/other",
+        spdx_id="MIT",
+        license_name="MIT License",
+        url="https://api.github.com/licenses/mit",
+    )
+    other["aliases"] = [{"name_with_owner": "rmems/widget"}]
+    bundle["repositories"].append(other)
+    with pytest.raises(ValueError, match="Duplicate inventory alias"):
+        _report(bundle)
+
+
+def test_inventory_row_may_repeat_its_own_name_as_alias():
+    bundle = spdx_known_bundle()
+    row = dict(bundle["repositories"][0])
+    row["aliases"] = [{"name_with_owner": "rmems/widget"}]
+    bundle["repositories"] = [row]
+    report = _report(bundle)
+    _assert_schema(report)
+    assert report["closed"] is True
+
+
+def test_uppercase_snapshot_digest_is_emitted_lowercase():
+    bundle = spdx_known_bundle()
+    report = build_license_closure_report(
+        **{
+            **report_kwargs(bundle),
+            "snapshot_sha256": bundle["snapshot_sha256"].upper(),
+        }
+    )
+    _assert_schema(report)
+    assert report["snapshot_sha256"] == bundle["snapshot_sha256"]
+    assert report["closed"] is True
+
+
+def test_fractional_unresolved_count_cannot_close():
+    bundle = spdx_known_bundle()
+    bundle["manifest"]["unresolved_license_count"] = 0.5
+    report = _report(bundle)
+    _assert_schema(report)
+    assert report["closed"] is False
+    assert any("unresolved_license_count" in error for error in report["bundle_errors"])
+
+
+def test_emptied_evidence_summary_cannot_validate_release():
+    report = _report(spdx_known_bundle())
+    report["evidence_digests"] = []
+    errors = validate_positive_release(report)
+    assert errors
+    assert any("evidence_digests" in error for error in errors)
+
+
+def test_cli_requires_inventory_manifest_file_binding(tmp_path: Path):
+    bundle = spdx_known_bundle()
+    paths = _write_cli_bundle(tmp_path, bundle)
+    inventory_manifest = tmp_path / "inventory-manifest.json"
+    inventory_manifest.write_text(
+        json.dumps({"snapshot_sha256": bundle["snapshot_sha256"]}),
+        encoding="utf-8",
+    )
+    assert (
+        license_closure_main(
+            [
+                "--records",
+                str(paths["records"]),
+                "--card",
+                str(paths["card"]),
+                "--manifest",
+                str(paths["manifest"]),
+                "--inventory",
+                str(paths["inventory"]),
+                "--inventory-manifest",
+                str(inventory_manifest),
+                "--out",
+                str(paths["out"]),
+            ]
+        )
+        == 1
+    )
+    saved = json.loads(paths["out"].read_text(encoding="utf-8"))
+    assert saved["closed"] is False
+    assert any("file binding" in error for error in saved["bundle_errors"])
+
+
+def test_cli_accepts_bound_inventory_manifest(tmp_path: Path):
+    bundle = spdx_known_bundle()
+    paths = _write_cli_bundle(tmp_path, bundle)
+    digest = hashlib.sha256(paths["inventory"].read_bytes()).hexdigest()
+    inventory_manifest = tmp_path / "inventory-manifest.json"
+    inventory_manifest.write_text(
+        json.dumps(
+            {
+                "files": {"repositories.jsonl": {"sha256": digest}},
+                "snapshot_sha256": bundle["snapshot_sha256"],
+            }
+        ),
+        encoding="utf-8",
+    )
+    assert (
+        license_closure_main(
+            [
+                "--records",
+                str(paths["records"]),
+                "--card",
+                str(paths["card"]),
+                "--manifest",
+                str(paths["manifest"]),
+                "--inventory",
+                str(paths["inventory"]),
+                "--inventory-manifest",
+                str(inventory_manifest),
+            ]
+        )
+        == 0
+    )
