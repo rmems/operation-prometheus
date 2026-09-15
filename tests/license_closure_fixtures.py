@@ -10,6 +10,10 @@ SNAPSHOT_SHA256 = "a" * 64
 SOURCE_HASH = "b" * 64
 CUSTOM_TEXT_SHA256 = "c" * 64
 STALE_DIGEST = "d" * 64
+BASE_OID = "1" * 40
+HEAD_OID = "2" * 40
+MERGE_OID = "3" * 40
+WRONG_HEAD_OID = "4" * 40
 
 
 def repository(
@@ -47,6 +51,39 @@ def record(
     if license_id is not None:
         row["license"] = license_id
     return row
+
+
+def with_code_state(
+    row: dict[str, Any],
+    *,
+    base_oid: str = BASE_OID,
+    head_oid: str = HEAD_OID,
+    commit_oid: str = MERGE_OID,
+) -> dict[str, Any]:
+    updated = dict(row)
+    updated["repository"] = {
+        "base_oid": base_oid,
+        "head_oid": head_oid,
+        "commit_oid": commit_oid,
+    }
+    return updated
+
+
+def inventory_pr(
+    repo: str,
+    number: int,
+    *,
+    base_oid: str = BASE_OID,
+    head_oid: str = HEAD_OID,
+    merge_commit_oid: str = MERGE_OID,
+) -> dict[str, Any]:
+    return {
+        "base_oid": base_oid,
+        "head_oid": head_oid,
+        "merge_commit_oid": merge_commit_oid,
+        "number": number,
+        "repository_name_with_owner": repo,
+    }
 
 
 def card(
@@ -365,7 +402,7 @@ def apache_source_bundle() -> dict[str, Any]:
 
 
 def report_kwargs(bundle: dict[str, Any]) -> dict[str, Any]:
-    return {
+    kwargs = {
         "card": bundle["card"],
         "manifest": bundle["manifest"],
         "markdown_card": bundle["markdown"],
@@ -374,3 +411,6 @@ def report_kwargs(bundle: dict[str, Any]) -> dict[str, Any]:
         "repositories": bundle["repositories"],
         "snapshot_sha256": bundle["snapshot_sha256"],
     }
+    if "pull_requests" in bundle:
+        kwargs["pull_requests"] = bundle["pull_requests"]
+    return kwargs
