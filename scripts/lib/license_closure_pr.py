@@ -105,6 +105,7 @@ def _valid_oid(value: Any) -> str | None:
     return None
 
 
+_PR_OID_KEYS = ("base_oid", "head_oid", "merge_commit_oid")
 _RECORD_TO_PR_ROLE = (
     ("base_oid", "base_oid"),
     ("head_oid", "head_oid"),
@@ -121,22 +122,23 @@ def _record_role_oids(record: dict[str, Any], key: str) -> set[str]:
     return {oid} if oid is not None else set()
 
 
-def _present_role_oid_invalid(record: dict[str, Any], key: str) -> bool:
-    container = record.get("repository")
+def _present_oid_invalid(container: Any, key: str) -> bool:
     if not isinstance(container, dict) or key not in container:
         return False
     return _valid_oid(container[key]) is None
+
+
+def _present_role_oid_invalid(record: dict[str, Any], key: str) -> bool:
+    return _present_oid_invalid(record.get("repository"), key)
 
 
 def _code_state_matches_inventory_pr(
     record: dict[str, Any],
     inventory_pr: dict[str, Any],
 ) -> bool:
-    pr_oids = {
-        "base_oid": _valid_oid(inventory_pr.get("base_oid")),
-        "head_oid": _valid_oid(inventory_pr.get("head_oid")),
-        "merge_commit_oid": _valid_oid(inventory_pr.get("merge_commit_oid")),
-    }
+    if any(_present_oid_invalid(inventory_pr, key) for key in _PR_OID_KEYS):
+        return False
+    pr_oids = {key: _valid_oid(inventory_pr.get(key)) for key in _PR_OID_KEYS}
     if not any(pr_oids.values()):
         return False
     saw_record_oid = False
