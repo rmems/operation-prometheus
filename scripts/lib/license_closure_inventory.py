@@ -360,7 +360,8 @@ def _declared_source_maps_conflict(
     inventory_index: dict[str, dict[str, Any]],
 ) -> bool:
     for name in declared_repos:
-        names = _identity_names(_inventory_for_repo(inventory_index, name), name)
+        inventory = _inventory_for_repo(inventory_index, name)
+        names = _identity_names(inventory, name)
         if _declaration_map_conflicts(card, manifest, names):
             return True
         card_license = card_license_for_repo(card, names)
@@ -371,6 +372,15 @@ def _declared_source_maps_conflict(
             and not _same_license(card_license, manifest_license)
         ):
             return True
+        inventory_license = normalize_license_id(inventory_license_object(inventory))
+        if card_license is not None and not _same_license(
+            card_license, inventory_license
+        ):
+            return True
+        if manifest_license is not None and not _same_license(
+            manifest_license, inventory_license
+        ):
+            return True
         card_digest = declared_digest_for_repo(card, names)
         manifest_digest = declared_digest_for_repo(manifest, names)
         if (
@@ -378,6 +388,15 @@ def _declared_source_maps_conflict(
             and manifest_digest is not None
             and card_digest != manifest_digest
         ):
+            return True
+        inventory_digest = (
+            evidence_digest(license_evidence_payload(inventory))
+            if isinstance(inventory, dict)
+            else None
+        )
+        if card_digest is not None and card_digest != inventory_digest:
+            return True
+        if manifest_digest is not None and manifest_digest != inventory_digest:
             return True
     return False
 
@@ -417,9 +436,11 @@ def index_repositories(repositories: list[dict[str, Any]]) -> dict[str, dict[str
     index: dict[str, dict[str, Any]] = {}
     seen_ids: dict[str, str] = {}
     for row in repositories:
+        if not isinstance(row, dict):
+            raise ValueError("repository inventory rows must be objects")
         name = _text(row.get("name_with_owner"))
         if not name:
-            continue
+            raise ValueError("repository inventory row is missing a canonical name")
         folded = name.casefold()
         if folded in index:
             raise ValueError(f"Duplicate inventory repository {name}")
