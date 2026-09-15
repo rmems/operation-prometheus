@@ -14,7 +14,9 @@ Every released positive trajectory must resolve through all three of:
    disclosure must name the complete identifier; a prefix such as `MIT` does
    not satisfy `MIT-0`. `LicenseRef-*` custom evidence must use the same
    identifier as the inventory license. If `custom_license` declares both
-   `identifier` and `spdx_id`, those fields must agree.
+   `identifier` and `spdx_id`, those fields must agree. If it declares both
+   `text_sha256` and `evidence_sha256`, those digests must be valid and equal;
+   a present mismatch cannot close by preferring `text_sha256`.
 
 Card, manifest, and inventory declarations must agree. Singular and
 per-repository maps in the same artifact must not disagree, including the same
@@ -33,7 +35,8 @@ instead of closing under a synthetic `repo#pr` identifier.
 Publication consumers must treat a report as closed
 only when the quarantined array is empty, counts match those array lengths
 (including `record_count` equal to released plus quarantined), `bundle_errors`
-is empty, and every released row's repository, digest, family, and identifier
+is a present array of strings and is empty (omitting the key or substituting
+`{}` cannot stand in for `[]`), and every released row's repository, digest, family, and identifier
 appear in `evidence_digests` / `license_families`, released record IDs are
 unique, and each released identifier still classifies as a closed family.
 `released_positives` and `quarantined` must be arrays of objects; a
@@ -48,7 +51,10 @@ repository name, and those hashes; swapping the published `repo`, `record_id`,
 `pr_number`, or the report snapshot without that binding fails closed.
 Released identity, family, and digest fields must be non-empty strings;
 `pr_number` must be an `int` or `null` (`type is int`, so `true` cannot stand
-in for `1`). An integer `repo` such as `7` cannot close by rebuilding
+in for `1`). A present record `pr_number` that is not an integer `>= 1`
+(`true`, `0`, `"7"`) quarantines as `declarations_disagree`; omitting the key
+or setting `null` remains allowed when no pull-request inventory is supplied.
+An integer `repo` such as `7` cannot close by rebuilding
 `source_provenance_digest` and `evidence_digests`. Unhashable values such as
 `[]` fail closed instead of raising `TypeError`.
 `closed` must be an actual boolean (`type is bool`); a string such as
@@ -109,7 +115,9 @@ file binding; `--snapshot-sha256` without `--inventory-manifest` cannot close,
 including inventories that declare no aliases. The checker reads each
 publication artifact once and hashes those captured bytes, so a rewrite
 between report construction and binding comparison cannot authenticate a
-different file than the report describes. A fabricated repository row
+different file than the report describes. JSON parsers reject the non-finite
+constants `NaN`, `Infinity`, and `-Infinity`; `render_json` writes with
+`allow_nan=False`. A fabricated repository row
 with a newly computed `source_hash` is not authenticated by the snapshot
 digest alone. Inventory rows must declare `visibility` as the exact string
 `public` before `source_hash` is trusted; `private`, `internal`, or a missing
