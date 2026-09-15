@@ -221,7 +221,11 @@ def record_pr_number_invalid(record: dict[str, Any]) -> bool:
 
 
 def record_license(record: dict[str, Any]) -> str | None:
-    return normalize_license_id(record.get("license"))
+    value = record.get("license")
+    if not isinstance(value, str):
+        return None
+    text = value.strip()
+    return text or None
 
 
 def _folded_mapping(mapped: Any) -> dict[str, Any]:
@@ -478,12 +482,7 @@ def index_repositories(repositories: list[dict[str, Any]]) -> dict[str, dict[str
             seen_ids[repo_id] = folded
         index[folded] = row
         for alias in _alias_entries(row, name):
-            if isinstance(alias, dict):
-                alias_name = _text(alias.get("name_with_owner")).casefold()
-            else:
-                alias_name = _text(alias).casefold()
-            if not alias_name:
-                continue
+            alias_name = _alias_name(alias, name).casefold()
             existing = index.get(alias_name)
             if existing is not None and existing is not row:
                 raise ValueError(f"Duplicate inventory alias {alias_name}")
@@ -507,13 +506,24 @@ def _alias_entries(row: dict[str, Any], name: str) -> list[Any]:
     return aliases
 
 
+def _alias_name(alias: Any, name: str) -> str:
+    if isinstance(alias, dict):
+        alias_name = _text(alias.get("name_with_owner"))
+    elif isinstance(alias, str):
+        alias_name = alias.strip()
+    else:
+        alias_name = ""
+    if not alias_name:
+        raise ValueError(f"inventory aliases for {name} contain a malformed entry")
+    return alias_name
+
+
 def _repository_names(row: dict[str, Any]) -> list[str]:
     names = [_text(row.get("name_with_owner"))]
-    for alias in _alias_entries(row, names[0] if names else ""):
-        if isinstance(alias, dict):
-            names.append(_text(alias.get("name_with_owner")))
-        else:
-            names.append(_text(alias))
+    canonical = names[0] if names else ""
+    names.extend(
+        _alias_name(alias, canonical) for alias in _alias_entries(row, canonical)
+    )
     return [name for name in names if name]
 
 
