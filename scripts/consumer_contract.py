@@ -100,7 +100,7 @@ def load_derivative_rows(path: Path) -> list[tuple[int, dict[str, Any]]]:
     with path.open(encoding="utf-8") as handle:
         for line_number, line in enumerate(handle, start=1):
             if not line.strip():
-            continue
+                continue
             record = json.loads(line)
             if isinstance(record, dict):
                 rows.append((line_number, record))
