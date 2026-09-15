@@ -150,6 +150,12 @@ def _folded_mapping(mapped: Any) -> dict[str, Any]:
     return {_text(key).casefold(): value for key, value in mapped.items() if _text(key)}
 
 
+def _malformed_plural_field(container: dict[str, Any], plural: str) -> bool:
+    if plural not in container:
+        return False
+    return not isinstance(container.get(plural), dict)
+
+
 def _folded_value_conflicts(mapped: Any, coerce: Callable[[Any], str | None]) -> bool:
     if not isinstance(mapped, dict):
         return False
@@ -250,6 +256,11 @@ def _declaration_map_conflicts(
             _sha256_or_none,
         ),
     )
+    if any(
+        _malformed_plural_field(container, plural)
+        for container, _singular, plural, _coerce in checks
+    ):
+        return True
     if any(
         _singular_map_conflict(container, repo, singular, plural, coerce)
         for container, singular, plural, coerce in checks
