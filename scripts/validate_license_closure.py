@@ -62,10 +62,16 @@ def _snapshot_sha256(args: argparse.Namespace) -> str:
         manifest = _load_json(args.inventory_manifest)
         declared = str(manifest.get("snapshot_sha256") or "").strip().lower()
     if explicit and declared and explicit != declared:
-        raise ValueError("--snapshot-sha256 disagrees with inventory-manifest snapshot_sha256")
+        raise ValueError(
+            "--snapshot-sha256 disagrees with inventory-manifest snapshot_sha256"
+        )
     digest = explicit or declared
     if not digest:
-        source = args.inventory_manifest if args.inventory_manifest is not None else "snapshot_sha256"
+        source = (
+            args.inventory_manifest
+            if args.inventory_manifest is not None
+            else "snapshot_sha256"
+        )
         raise ValueError(f"{source} is missing snapshot_sha256")
     return digest
 
@@ -89,12 +95,27 @@ def _hex_digest(value: Any) -> str | None:
     return None
 
 
-def _publication_binding_errors(args: argparse.Namespace, record_count: int) -> list[str]:
+def _require_matching_digest(declared: Any, path: Path, label: str) -> str | None:
+    digest = _hex_digest(declared)
+    if digest is None:
+        return f"{label} sha256 is missing or malformed"
+    if digest != _sha256_file(path):
+        return f"{label} sha256 does not match {path}"
+    return None
+
+
+def _publication_binding_errors(
+    args: argparse.Namespace, record_count: int
+) -> list[str]:
     errors: list[str] = []
     dataset_manifest = _load_json(args.manifest)
-    expected_records = _hex_digest(dataset_manifest.get("sha256"))
-    if expected_records and expected_records != _sha256_file(args.records):
-        errors.append(f"{args.manifest} sha256 does not match {args.records}")
+    mismatch = _require_matching_digest(
+        dataset_manifest.get("sha256"),
+        args.records,
+        str(args.manifest),
+    )
+    if mismatch:
+        errors.append(mismatch)
     if "record_count" in dataset_manifest:
         try:
             declared = int(dataset_manifest["record_count"])
@@ -110,19 +131,27 @@ def _publication_binding_errors(args: argparse.Namespace, record_count: int) -> 
     if isinstance(files, dict):
         listed = files.get(args.inventory.name) or files.get("repositories.jsonl")
     if isinstance(listed, dict):
-        expected_inventory = _hex_digest(listed.get("sha256"))
-        if expected_inventory and expected_inventory != _sha256_file(args.inventory):
-            errors.append(
-                f"{args.inventory_manifest} repositories digest does not match {args.inventory}"
-            )
+        mismatch = _require_matching_digest(
+            listed.get("sha256"),
+            args.inventory,
+            f"{args.inventory_manifest} repositories",
+        )
+        if mismatch:
+            errors.append(mismatch)
     return errors
 
 
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("--records", type=Path, required=True, help="Proposed positive JSONL")
-    parser.add_argument("--card", type=Path, required=True, help="Machine dataset card JSON")
-    parser.add_argument("--manifest", type=Path, required=True, help="Dataset manifest JSON")
+    parser.add_argument(
+        "--records", type=Path, required=True, help="Proposed positive JSONL"
+    )
+    parser.add_argument(
+        "--card", type=Path, required=True, help="Machine dataset card JSON"
+    )
+    parser.add_argument(
+        "--manifest", type=Path, required=True, help="Dataset manifest JSON"
+    )
     parser.add_argument(
         "--inventory",
         type=Path,
@@ -186,13 +215,19 @@ def main(argv: list[str] | None = None) -> int:
 
     binding_errors = _publication_binding_errors(args, report["counts"]["record_count"])
     if binding_errors:
-        report["bundle_errors"] = list(report.get("bundle_errors") or []) + binding_errors
+        report["bundle_errors"] = (
+            list(report.get("bundle_errors") or []) + binding_errors
+        )
         report["closed"] = False
 
     validator = _schema_validator()
-    schema_errors = sorted(validator.iter_errors(report), key=lambda error: list(error.path))
+    schema_errors = sorted(
+        validator.iter_errors(report), key=lambda error: list(error.path)
+    )
     if schema_errors:
-        print("ERROR: license-closure manifest failed schema validation:", file=sys.stderr)
+        print(
+            "ERROR: license-closure manifest failed schema validation:", file=sys.stderr
+        )
         for error in schema_errors:
             path = ".".join(str(part) for part in error.absolute_path) or "(root)"
             print(f"  [{path}] {error.message}", file=sys.stderr)

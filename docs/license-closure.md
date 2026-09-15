@@ -14,10 +14,12 @@ Every released positive trajectory must resolve through all three of:
    identifier as the inventory license.
 
 Card, manifest, and inventory declarations must agree. Singular and
-per-repository maps in the same artifact must not disagree. Missing, unknown,
-conflicting, or changed evidence quarantines the row. Quarantined rows keep the
-evidence they have and an explicit reason code. The closure manifest reports
-license families, per-repository evidence digests, and unresolved counts.
+per-repository maps in the same artifact must not disagree, including the same
+repository named twice under different casing. Missing, unknown, conflicting,
+or changed evidence quarantines the row. Quarantined rows keep the evidence
+they have and an explicit reason code. Publication consumers must treat a
+report as closed only when the quarantined array is empty, counts match those
+array lengths, and `bundle_errors` is empty.
 
 This check does **not** decide license compatibility, relicense source-derived
 material under Operation Prometheus's Apache-2.0 terms, or guess a license
@@ -46,9 +48,21 @@ least one unresolved row would otherwise have entered the released-positive
 set; those rows appear only under `quarantined`.
 
 Pass `--prior-inventory` to compare a previous frozen repositories JSONL and
-treat a digest or SPDX change as `source_license_changed`. If both
-`--snapshot-sha256` and `--inventory-manifest` are supplied, they must name the
-same snapshot digest.
+treat a digest or SPDX change as `source_license_changed`. Evidence digests
+cover only `license` and `custom_license` objects, so a repository rename
+expressed through inventory aliases does not look like a license change. If
+both `--snapshot-sha256` and `--inventory-manifest` are supplied, they must
+name the same snapshot digest. The dataset manifest must declare a valid
+`sha256` of `--records`; a missing or malformed digest fails closed.
+
+When a caller supplies a frozen pull-request inventory, every proposed record
+must appear in that list. Record `base_oid` / `head_oid` / merge `commit_oid`
+values are compared to the matching PR roles; a correct base OID does not
+mask an incorrect head. Omitting the pull-request inventory keeps
+repository-level snapshot checks only.
+
+The closure manifest reports license families, per-repository evidence
+digests, and unresolved counts.
 
 ## Schema
 
