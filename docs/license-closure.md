@@ -22,7 +22,10 @@ is present but not a valid SHA-256 quarantines as `declarations_disagree`;
 omitting the digest remains optional. Missing, unknown, conflicting, or changed
 evidence quarantines the row. Quarantined rows keep the evidence they have,
 including a frozen `custom_license` object when the inventory row carried
-one, and an explicit reason code. Publication consumers must treat a report as closed
+one, and an explicit reason code. Quarantined evidence always includes
+`custom_license` (`null` when there is no custom object). Duplicate
+released IDs that are converted to quarantined rows keep their
+`inventory_license` object. Publication consumers must treat a report as closed
 only when the quarantined array is empty, counts match those array lengths
 (including `record_count` equal to released plus quarantined), `bundle_errors`
 is empty, and every released row's repository, digest, family, and identifier
@@ -30,6 +33,8 @@ appear in `evidence_digests` / `license_families`, released record IDs are
 unique, and each released identifier still classifies as a closed family.
 `released_positives` and `quarantined` must be arrays of objects; a
 non-object quarantined entry cannot be dropped to fake a closed report.
+Rows missing `record_id`, or quarantined rows missing `primary_reason` /
+`reason_codes`, fail closed instead of raising `KeyError`.
 Manifest count fields must be actual integers; fractional values such as
 `0.5` fail closed. A present `records` array, including `[]`, must enumerate
 every evaluated row.
@@ -109,7 +114,8 @@ definitions, so a URL that only contains `MIT`, or a fenced
 `## License / provenance` heading, is not disclosure. HTML comments and
 non-rendered HTML are stripped before the license heading is located, so a
 commented-out `## License / provenance` block cannot disclose a later
-visible identifier. Visible markup such as
+visible identifier. A void tag such as `<br/>` inside a hidden block
+cannot close that hidden scope. Visible markup such as
 `<p>MIT</p>` still counts. Disclosure stops the license section at the next
 H1 or H2 heading.
 Released rows persist the inventory `license` object so publication can
