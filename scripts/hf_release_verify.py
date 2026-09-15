@@ -36,7 +36,7 @@ except ImportError:
     hf_hub_download = None
 
 DEFAULT_REPO = "rmems/operation-prometheus-trajectories"
-IMMUTABLE_TAG_RE = r"^v\d+\.\d+\.\d+$"
+IMMUTABLE_TAG_RE = r"^v\\d+\\.\\d+\\.\\d+$"
 RELEASE_EVENT_ENV = "GITHUB_EVENT_NAME"
 
 
@@ -164,21 +164,25 @@ def pinned_revision_checksums(
     return errors
 
 
+def _tag_name_and_oid(tag: Any) -> tuple[str, str] | None:
+    name = getattr(tag, "name", None) or getattr(tag, "ref", None)
+    oid = getattr(tag, "target_commit", None) or getattr(tag, "ref", None)
+    if name and oid:
+        return str(name), str(oid)
+    return None
+
+
 def load_remote_tags(dataset_repo: str, token: str | None) -> dict[str, str]:
     if not token:
         return {}
     if HfApi is None:
-        raise ReleaseVerifyError(
-            "huggingface_hub is required when HF_TOKEN is set"
-        )
-    api = HfApi(token=token)
-    refs = api.list_repo_refs(dataset_repo, repo_type="dataset")
+        raise ReleaseVerifyError("huggingface_hub is required when HF_TOKEN is set")
+    refs = HfApi(token=token).list_repo_refs(dataset_repo, repo_type="dataset")
     tags: dict[str, str] = {}
     for tag in getattr(refs, "tags", []) or []:
-        name = getattr(tag, "name", None) or getattr(tag, "ref", None)
-        oid = getattr(tag, "target_commit", None) or getattr(tag, "ref", None)
-        if name and oid:
-            tags[str(name)] = str(oid)
+        parsed = _tag_name_and_oid(tag)
+        if parsed is not None:
+            tags[parsed[0]] = parsed[1]
     return tags
 
 
@@ -191,9 +195,7 @@ def download_pinned_checksums(
     if not token:
         return {}
     if hf_hub_download is None:
-        raise ReleaseVerifyError(
-            "huggingface_hub is required when HF_TOKEN is set"
-        )
+        raise ReleaseVerifyError("huggingface_hub is required when HF_TOKEN is set")
     checksums: dict[str, str] = {}
     for name in filenames:
         local = hf_hub_download(
@@ -308,13 +310,13 @@ def main(argv: list[str] | None = None) -> int:
     if args.write_manifest:
         RELEASE_MANIFEST.parent.mkdir(parents=True, exist_ok=True)
         RELEASE_MANIFEST.write_text(
-            json.dumps(result["release_manifest"], indent=2, ensure_ascii=False) + "\n",
+            json.dumps(result["release_manifest"], indent=2, ensure_ascii=False) + "\\n",
             encoding="utf-8",
         )
         result["wrote_local_manifest"] = True
     args.out.parent.mkdir(parents=True, exist_ok=True)
     args.out.write_text(
-        json.dumps(result, indent=2, ensure_ascii=False) + "\n", encoding="utf-8"
+        json.dumps(result, indent=2, ensure_ascii=False) + "\\n", encoding="utf-8"
     )
     print(f"hf-release-verify passed for {args.dataset_repo}@{args.tag}")
     return 0
