@@ -26,6 +26,7 @@ from lib.license_closure import (
     validate_positive_release,
 )
 
+
 def test_spdx_known_license_closes_and_is_released():
     report = _report(spdx_known_bundle())
     _assert_schema(report)
@@ -192,6 +193,8 @@ def test_repeated_build_is_byte_identical():
 def test_classify_license_family_is_fail_closed():
     assert classify_license_family("MIT") == "spdx"
     assert classify_license_family("MIT OR Apache-2.0") == "spdx"
+    assert classify_license_family("(MIT OR Apache-2.0) AND BSD-3-Clause") == "spdx"
+    assert classify_license_family("MIT AND (Apache-2.0 OR BSD-3-Clause)") == "spdx"
     assert classify_license_family("(MIT)") == "spdx"
     assert classify_license_family("LicenseRef-TemporalFocus") == "unknown"
     assert (
