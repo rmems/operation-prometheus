@@ -14,12 +14,11 @@ from .normalize_v1_common import (
     V1_SCHEMA_VERSION,
     V1NormalizeOptions,
 )
+from .normalize_v1_artifacts import _assemble_artifacts, _patch_artifact
 from .normalize_v1_events import _ensure_min_event, _event_context, build_v1_events
 from .normalize_v1_payload import (
-    _assemble_artifacts,
     _evidence_quality,
     _lineage,
-    _patch_artifact,
     _task_family,
     _typed_payloads,
 )
