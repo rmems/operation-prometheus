@@ -207,3 +207,86 @@ def test_html_comment_is_not_markdown_disclosure():
     _assert_schema(report)
     assert "card_disclosure_missing" in report["quarantined"][0]["reason_codes"]
     assert report["released_positives"] == []
+
+
+def test_prior_inventory_matches_repository_id_not_reused_name():
+    bundle = spdx_known_bundle()
+    current = dict(bundle["repositories"][0])
+    current["repository_id"] = "R_kgDOwidget"
+    bundle["repositories"] = [bind_source_hash(current)]
+    name_holder = bind_source_hash(
+        {
+            **repository(
+                "rmems/widget",
+                spdx_id="MIT",
+                license_name="MIT License",
+                url="https://api.github.com/licenses/mit",
+            ),
+            "repository_id": "R_kgDOunrelated",
+        }
+    )
+    actual_prior = bind_source_hash(
+        {
+            **repository(
+                "rmems/widget-old",
+                spdx_id="Apache-2.0",
+                license_name="Apache License 2.0",
+                url="https://api.github.com/licenses/apache-2.0",
+            ),
+            "repository_id": "R_kgDOwidget",
+        }
+    )
+    bundle["prior_repositories"] = [name_holder, actual_prior]
+    report = _report(bundle)
+    _assert_schema(report)
+    assert "source_license_changed" in report["quarantined"][0]["reason_codes"]
+    assert report["released_positives"] == []
+
+
+def test_conflicting_pr_rows_across_aliases_are_rejected():
+    bundle = spdx_known_bundle()
+    current = dict(bundle["repositories"][0])
+    current["aliases"] = [{"name_with_owner": "rmems/widget-old"}]
+    bundle["repositories"] = [bind_source_hash(current)]
+    bundle["records"][0] = with_code_state(bundle["records"][0])
+    bundle["pull_requests"] = [
+        inventory_pr("rmems/widget", 1),
+        inventory_pr("rmems/widget-old", 1, head_oid=WRONG_HEAD_OID),
+    ]
+    with pytest.raises(ValueError, match="Duplicate inventory pull request"):
+        _report(bundle)
+
+
+def test_h1_after_license_section_is_not_disclosure():
+    bundle = spdx_known_bundle()
+    bundle["markdown"] = "## License / provenance\n\nNo license\n# Appendix\nMIT\n"
+    report = _report(bundle)
+    _assert_schema(report)
+    assert "card_disclosure_missing" in report["quarantined"][0]["reason_codes"]
+    assert report["released_positives"] == []
+
+
+def test_card_declaration_follows_inventory_aliases():
+    bundle = spdx_known_bundle()
+    current = dict(bundle["repositories"][0])
+    current["name_with_owner"] = "rmems/widget-renamed"
+    current["aliases"] = [{"name_with_owner": "rmems/widget"}]
+    bundle["repositories"] = [bind_source_hash(current)]
+    digest = bundle["card"]["license_evidence_digest"]
+    bundle["card"] = {
+        "name": "fixture",
+        "source_repo": "rmems/widget-renamed",
+        "source_licenses": {"rmems/widget-renamed": "MIT"},
+        "license_evidence_digests": {"rmems/widget-renamed": digest},
+    }
+    bundle["manifest"] = {
+        "name": "fixture",
+        "source_repo": "rmems/widget-renamed",
+        "source_licenses": {"rmems/widget-renamed": "MIT"},
+        "license_evidence_digests": {"rmems/widget-renamed": digest},
+        "license_families": ["spdx"],
+        "unresolved_license_count": 0,
+    }
+    report = _report(bundle)
+    _assert_schema(report)
+    assert report["closed"] is True
