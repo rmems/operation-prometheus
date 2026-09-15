@@ -148,6 +148,8 @@ def build_license_closure_report(
         else None
     )
     pr_index = None if pull_requests is None else _index_pull_requests(pull_requests)
+    if any(not isinstance(record, dict) for record in records):
+        raise ValueError("trajectory records must be objects")
     evaluated = [
         _evaluate_record(
             record,
@@ -160,7 +162,6 @@ def build_license_closure_report(
             markdown=markdown_card,
         )
         for record in records
-        if isinstance(record, dict)
     ]
     id_counts = Counter(row["record_id"] for row in evaluated)
     evaluated = [
@@ -208,9 +209,15 @@ def _nonempty_str(value: Any) -> bool:
     return isinstance(value, str) and bool(value.strip())
 
 
+def _released_pr_number(value: Any) -> int | None:
+    if type(value) is int and value >= 1:
+        return value
+    return None
+
+
 def _released_row_types_valid(row: dict[str, Any]) -> bool:
     pr_number = row.get("pr_number")
-    if pr_number is not None and type(pr_number) is not int:
+    if pr_number is not None and _released_pr_number(pr_number) is None:
         return False
     if any(
         not _nonempty_str(row.get(key))
@@ -250,7 +257,8 @@ def _released_evidence_bound(row: dict[str, Any], report_snapshot: str | None) -
         source_hash,
         snapshot,
         record_id=_text(row.get("record_id")),
-        pr_number=row.get("pr_number") if type(row.get("pr_number")) is int else None,
+        pr_number=_released_pr_number(row.get("pr_number")),
+        evidence_digest=_sha256_or_none(row.get("evidence_digest")) or "",
     ):
         return False
     reconstructed = {
