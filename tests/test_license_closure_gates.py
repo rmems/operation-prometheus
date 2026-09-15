@@ -180,6 +180,49 @@ def test_wrong_head_oid_is_not_masked_by_matching_base():
     assert report["released_positives"] == []
 
 
+def test_distinct_tree_oid_does_not_block_matching_pr():
+    bundle = spdx_known_bundle()
+    bundle["records"][0] = with_code_state(bundle["records"][0])
+    bundle["records"][0]["repository"]["tree_oid"] = "5" * 40
+    bundle["pull_requests"] = [inventory_pr("rmems/widget", 1)]
+    report = _report(bundle)
+    _assert_schema(report)
+    assert report["closed"] is True
+    assert report["released_positives"][0]["record_id"] == "rmems-widget-1"
+
+
+def test_malformed_declared_digest_cannot_close():
+    bundle = spdx_known_bundle()
+    bundle["card"]["license_evidence_digest"] = "not-a-digest"
+    bundle["manifest"]["license_evidence_digest"] = "not-a-digest"
+    report = _report(bundle)
+    _assert_schema(report)
+    assert "declarations_disagree" in report["quarantined"][0]["reason_codes"]
+    assert report["released_positives"] == []
+
+
+def test_malformed_mapped_digest_cannot_close():
+    bundle = spdx_known_bundle()
+    del bundle["card"]["license_evidence_digest"]
+    del bundle["manifest"]["license_evidence_digest"]
+    bundle["card"]["license_evidence_digests"] = {"rmems/widget": "not-a-digest"}
+    bundle["manifest"]["license_evidence_digests"] = {"rmems/widget": "not-a-digest"}
+    report = _report(bundle)
+    _assert_schema(report)
+    assert "declarations_disagree" in report["quarantined"][0]["reason_codes"]
+    assert report["released_positives"] == []
+
+
+def test_omitted_declared_digest_still_closes():
+    bundle = spdx_known_bundle()
+    del bundle["card"]["license_evidence_digest"]
+    del bundle["manifest"]["license_evidence_digest"]
+    report = _report(bundle)
+    _assert_schema(report)
+    assert report["closed"] is True
+    assert report["released_positives"][0]["record_id"] == "rmems-widget-1"
+
+
 def test_validate_positive_release_uses_quarantined_rows_not_declared_counts():
     report = _report(missing_license_bundle())
     report["counts"]["unresolved_count"] = 0
