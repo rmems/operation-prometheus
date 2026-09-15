@@ -17,6 +17,7 @@ from .license_closure_ids import (
     normalize_license_id,
 )
 from .license_closure_inventory import (
+    _authenticated_inventory_source_hash,
     _canonical_declared_repos,
     _declaration_map_conflicts,
     _declared_source_maps_conflict,
@@ -29,7 +30,6 @@ from .license_closure_inventory import (
     evidence_digest,
     inventory_has_custom_evidence,
     inventory_license_object,
-    inventory_row_source_hash,
     license_evidence_payload,
     manifest_license_for_repo,
     source_provenance_digest,
@@ -122,12 +122,7 @@ def _evaluate_record(
     source_hash = None
     digest = None
     if isinstance(repository, dict):
-        declared_hash = _sha256_or_none(repository.get("source_hash"))
-        source_hash = (
-            declared_hash
-            if declared_hash == inventory_row_source_hash(repository)
-            else None
-        )
+        source_hash = _authenticated_inventory_source_hash(repository)
         digest = evidence_digest(license_evidence_payload(repository))
 
     card_digest = declared_digest_for_repo(card, names)
@@ -145,10 +140,7 @@ def _evaluate_record(
     if prior_index is not None:
         prior_repo = _prior_repository(prior_index, repository, repo)
         if isinstance(prior_repo, dict):
-            declared_prior = _sha256_or_none(prior_repo.get("source_hash"))
-            if declared_prior is None or declared_prior != inventory_row_source_hash(
-                prior_repo
-            ):
+            if _authenticated_inventory_source_hash(prior_repo) is None:
                 reasons.append("source_license_changed")
             else:
                 prior_id = normalize_license_id(inventory_license_object(prior_repo))
