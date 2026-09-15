@@ -35,7 +35,51 @@ _VOID_HTML_TAGS = frozenset(
         "wbr",
     }
 )
+_BLOCK_HTML_TAGS = frozenset(
+    {
+        "address",
+        "article",
+        "blockquote",
+        "br",
+        "dd",
+        "div",
+        "dl",
+        "dt",
+        "figcaption",
+        "figure",
+        "footer",
+        "h1",
+        "h2",
+        "h3",
+        "h4",
+        "h5",
+        "h6",
+        "header",
+        "hr",
+        "li",
+        "main",
+        "nav",
+        "ol",
+        "p",
+        "pre",
+        "section",
+        "table",
+        "tbody",
+        "td",
+        "tfoot",
+        "th",
+        "thead",
+        "tr",
+        "ul",
+    }
+)
+_HIDDEN_STYLE_RE = re.compile(
+    r"(?:^|;)\s*(?:display\s*:\s*none|visibility\s*:\s*hidden)\b",
+    re.IGNORECASE,
+)
 MARKDOWN_REFERENCE_DEFINITION_RE = re.compile(r"^\s*\[[^\]\n]+\]:\s+\S")
+MARKDOWN_REFERENCE_LABEL_ONLY_RE = re.compile(r"^\s*\[[^\]\n]+\]:\s*$")
+MARKDOWN_REFERENCE_DESTINATION_RE = re.compile(r"""^[ \t]*(?:<[^>\n]*>|\S+)\s*$""")
 MARKDOWN_REFERENCE_TITLE_RE = re.compile(
     r"""^[ \t]+(?:"(?:\\.|[^"\\])*"|'(?:\\.|[^'\\])*'|\((?:\\.|[^)\\])*\))\s*$"""
 )
@@ -254,21 +298,35 @@ class _VisibleHtmlText(HTMLParser):
     def _hides(self, tag: str, attrs: list[tuple[str, str | None]]) -> bool:
         if tag in _NON_RENDERED_HTML_TAGS:
             return True
-        return any(name.casefold() == "hidden" for name, _value in attrs)
+        for name, value in attrs:
+            folded = name.casefold()
+            if folded == "hidden":
+                return True
+            if folded == "style" and value and _HIDDEN_STYLE_RE.search(value):
+                return True
+        return False
 
     def handle_starttag(self, tag: str, attrs: list[tuple[str, str | None]]) -> None:
         if self._skip:
             if tag not in _VOID_HTML_TAGS:
                 self._skip.append(tag)
             return
-        if self._hides(tag, attrs) and tag not in _VOID_HTML_TAGS:
-            self._skip.append(tag)
+        if self._hides(tag, attrs):
+            if tag not in _VOID_HTML_TAGS:
+                self._skip.append(tag)
+            return
+        if tag in _BLOCK_HTML_TAGS:
+            self.parts.append("\n")
 
     def handle_endtag(self, tag: str) -> None:
-        if not self._skip or tag in _VOID_HTML_TAGS:
+        if tag in _VOID_HTML_TAGS:
             return
-        if tag == self._skip[-1]:
-            self._skip.pop()
+        if self._skip:
+            if tag == self._skip[-1]:
+                self._skip.pop()
+            return
+        if tag in _BLOCK_HTML_TAGS:
+            self.parts.append("\n")
 
     def handle_data(self, data: str) -> None:
         if not self._skip:
@@ -292,6 +350,15 @@ def _strip_reference_definitions(markdown: str) -> str:
             if index < len(lines) and MARKDOWN_REFERENCE_TITLE_RE.match(lines[index]):
                 index += 1
             continue
+        if MARKDOWN_REFERENCE_LABEL_ONLY_RE.match(lines[index]):
+            nxt = index + 1
+            if nxt < len(lines) and MARKDOWN_REFERENCE_DESTINATION_RE.match(lines[nxt]):
+                index = nxt + 1
+                if index < len(lines) and MARKDOWN_REFERENCE_TITLE_RE.match(
+                    lines[index]
+                ):
+                    index += 1
+                continue
         kept.append(lines[index])
         index += 1
     return "\n".join(kept)
