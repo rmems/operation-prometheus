@@ -37,7 +37,7 @@ _VOID_HTML_TAGS = frozenset(
 )
 MARKDOWN_REFERENCE_DEFINITION_RE = re.compile(r"^\s*\[[^\]\n]+\]:\s+\S")
 MARKDOWN_REFERENCE_TITLE_RE = re.compile(
-    r"""^[ \t]+(?:"(?:\\.|[^"\\])*"|'(?:\\.|[^'\\])*'|\((?:\\.|[^)\\])*\))\s*$"""
+    r"""^[ \t]+(?=\"(?:\\.|[^\"\\])*\"|'(?:\\.|[^'\\])*'|\((?:\\.|[^)\\])*\))\s*$"""
 )
 MARKDOWN_INLINE_LINK_RE = re.compile(r"!?\[([^\]\n]*)\]\((?:[^)\\]|\\.)*\)")
 MARKDOWN_REFERENCE_LINK_RE = re.compile(r"!?\[([^\]\n]*)\]\[[^\]\n]*\]")
@@ -193,12 +193,13 @@ def _source_coverage_invalid(container: dict[str, Any]) -> bool:
         singular = container.get("source_repo")
         if not isinstance(singular, str) or not singular.strip():
             return True
-    if "source_repos" not in container:
-        return False
-    extra = container.get("source_repos")
-    if not isinstance(extra, list):
-        return True
-    return any(not isinstance(item, str) or not item.strip() for item in extra)
+    if "source_repos" in container:
+        extra = container.get("source_repos")
+        if not isinstance(extra, list):
+            return True
+        if any(not isinstance(item, str) or not item.strip() for item in extra):
+            return True
+    return not _declared_repos(container)
 
 
 def _strip_fenced_code(markdown: str) -> str:
