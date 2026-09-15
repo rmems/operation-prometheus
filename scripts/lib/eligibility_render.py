@@ -14,12 +14,16 @@ def render_jsonl(rows: list[dict[str, Any]]) -> bytes:
 
 
 def render_json(value: dict[str, Any]) -> bytes:
-    return json.dumps(
-        value,
-        indent=2,
-        ensure_ascii=False,
-        sort_keys=True,
-    ).encode("utf-8") + b"\n"
+    return (
+        json.dumps(
+            value,
+            indent=2,
+            ensure_ascii=False,
+            sort_keys=True,
+            allow_nan=False,
+        ).encode("utf-8")
+        + b"\n"
+    )
 
 
 def render_artifacts(artifacts: dict[str, Any]) -> dict[str, bytes]:

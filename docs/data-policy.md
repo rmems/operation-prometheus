@@ -93,6 +93,11 @@ repository retains that repository's own license:
 - The canonical Hugging Face dataset card must document the full set of
   represented source licenses rather than implying a single blanket license
   for the dataset.
+- Before any positive split is published, `scripts/validate_license_closure.py`
+  must close every released row against frozen inventory evidence, snapshot
+  hashes, and card/manifest disclosure. See
+  [license-closure.md](license-closure.md). Unresolved rows are quarantined
+  with their evidence and cannot appear in released positives.
 
 See [NOTICE](../NOTICE) for the complete distinction between
 Operation Prometheus-owned material and incorporated source-derived material.

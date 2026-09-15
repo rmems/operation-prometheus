@@ -34,7 +34,10 @@ from. The `license` field in the trajectory schema (see
 schemas/trajectory_v1.schema.json and schemas/pr_trajectory.schema.json)
 records this per-record, machine-readable, so that the license of the
 originating source repository travels with the data rather than being implied
-by this repository's own license.
+by this repository's own license. Positive corpus publication must pass
+`scripts/validate_license_closure.py` (see docs/license-closure.md) so that
+missing, unknown, conflicting, or changed source-license evidence cannot
+enter a released positive split.
 
 Per-source-repository license documentation is required to live alongside
 each extraction shortlist in docs/source-repos/ and to be summarized in that

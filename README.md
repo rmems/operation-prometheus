@@ -62,12 +62,14 @@ See [datasets/README.md](datasets/README.md) for rules on what may be committed.
 Project-owned material is licensed under **Apache-2.0** ([LICENSE](LICENSE)).
 Incorporated source-derived trajectory data retains its originating
 repository's own license and is not relicensed by this repository — see
-[NOTICE](NOTICE) and [docs/data-policy.md](docs/data-policy.md#licensing-model).
+[NOTICE](NOTICE), [docs/data-policy.md](docs/data-policy.md#licensing-model),
+and the publication gate in [docs/license-closure.md](docs/license-closure.md).
 
 ## Schemas and Data Policy
 
 - **Schema v0** (initial draft, not final): [schemas/pr_trajectory.schema.json](schemas/pr_trajectory.schema.json). Implements GitHub [#2](https://github.com/rmems/operation-prometheus/issues/2). See the tiny example in `datasets/examples/`.
 - **Data policy & hygiene**: [docs/data-policy.md](docs/data-policy.md). Implements GitHub [#3](https://github.com/rmems/operation-prometheus/issues/3). Covers allowed public sources, excluded material, manual inspection requirement, and the distinction between public engineering history vs. raw chat log scraping.
+- **Source-license closure**: [docs/license-closure.md](docs/license-closure.md). Fail-closed validator used before positive corpus publication (Linear RM-1347; builds on GitHub [#49](https://github.com/rmems/operation-prometheus/issues/49) / [#60](https://github.com/rmems/operation-prometheus/issues/60)).
 
 ## Extraction Shortlists
 
