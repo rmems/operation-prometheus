@@ -136,11 +136,28 @@ def _parentheses_balanced(identifier: str) -> bool:
     return depth == 0
 
 
+def _matching_close_index(identifier: str) -> int | None:
+    depth = 0
+    for index, char in enumerate(identifier):
+        if char == "(":
+            depth += 1
+        elif char == ")":
+            if depth == 0:
+                return None
+            depth -= 1
+            if depth == 0:
+                return index
+    return None
+
+
 def _unwrap_outer_parens(identifier: str) -> str | None:
     stripped = identifier.strip()
     if not stripped or not _parentheses_balanced(stripped):
         return None
-    while stripped.startswith("(") and stripped.endswith(")"):
+    while stripped.startswith("("):
+        close = _matching_close_index(stripped)
+        if close is None or close != len(stripped) - 1:
+            break
         inner = stripped[1:-1].strip()
         if not inner or not _parentheses_balanced(inner):
             return None
