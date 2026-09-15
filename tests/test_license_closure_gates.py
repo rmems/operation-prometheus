@@ -7,6 +7,7 @@ from pathlib import Path
 
 from license_closure_fixtures import (
     WRONG_HEAD_OID,
+    digest_for,
     inventory_pr,
     missing_license_bundle,
     repository,
@@ -187,3 +188,24 @@ def test_validate_positive_release_uses_quarantined_rows_not_declared_counts():
     errors = validate_positive_release(report)
     assert errors
     assert any("unresolved" in error.lower() for error in errors)
+
+
+def test_unbalanced_spdx_parentheses_cannot_close():
+    bundle = spdx_known_bundle()
+    malformed = "(MIT"
+    repo = dict(bundle["repositories"][0])
+    license_obj = dict(repo["license"])
+    license_obj["spdx_id"] = malformed
+    repo["license"] = license_obj
+    digest = digest_for(repo)
+    bundle["repositories"] = [repo]
+    bundle["records"][0]["license"] = malformed
+    bundle["card"]["source_license"] = malformed
+    bundle["card"]["license_evidence_digest"] = digest
+    bundle["manifest"]["source_license"] = malformed
+    bundle["manifest"]["license_evidence_digest"] = digest
+    bundle["markdown"] = "## License / provenance\n\n(MIT\n"
+    report = _report(bundle)
+    _assert_schema(report)
+    assert "source_license_unknown" in report["quarantined"][0]["reason_codes"]
+    assert report["released_positives"] == []
