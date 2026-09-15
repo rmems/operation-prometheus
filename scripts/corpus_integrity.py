@@ -94,6 +94,53 @@ def _duplicate_report(inventory_dir: Path) -> dict[str, Any]:
     }
 
 
+def _unresolved_row(row: dict[str, Any]) -> dict[str, Any]:
+    return {
+        "file": row["file"],
+        "line": row["line"],
+        "record_id": row["record_id"],
+        "repo": row["repo"],
+        "pr_number": row["pr_number"],
+        "reason": "not_in_frozen_inventory",
+    }
+
+
+def _resolved_row(
+    row: dict[str, Any], candidate: dict[str, Any], state: str
+) -> dict[str, Any]:
+    return {
+        "file": row["file"],
+        "line": row["line"],
+        "record_id": row["record_id"],
+        "candidate_id": candidate.get("candidate_id"),
+        "state": state,
+    }
+
+
+def _mutable_state_errors(
+    row: dict[str, Any], candidate: dict[str, Any]
+) -> tuple[list[str], str]:
+    state = candidate.get("state")
+    source_state = candidate.get("source_state")
+    errors: list[str] = []
+    if state is None:
+        errors.append(
+            f"{row['file']}:{row['line']} maps to candidate "
+            f"{candidate.get('candidate_id')} with no ledger state"
+        )
+        state = "unknown"
+    if state in MUTABLE_STATES or source_state in MUTABLE_SOURCE_STATES:
+        errors.append(
+            f"{row['file']}:{row['line']} maps to mutable candidate "
+            f"{candidate.get('candidate_id')} ({state}/{source_state}) and cannot enter a positive release"
+        )
+    if state in POSITIVE_RELEASE_STATES and source_state in MUTABLE_SOURCE_STATES:
+        errors.append(
+            f"{row['file']}:{row['line']} is included_positive but source_state is {source_state}"
+        )
+    return errors, str(state)
+
+
 def _resolve_records(
     candidates: list[dict[str, Any]],
 ) -> tuple[list[str], dict[str, int], list[dict[str, Any]], list[dict[str, Any]]]:
@@ -101,48 +148,15 @@ def _resolve_records(
     errors: list[str] = []
     resolved: list[dict[str, Any]] = []
     unresolved: list[dict[str, Any]] = []
-    existing = _load_existing_rows(ROOT)
-    for row in existing:
+    for row in _load_existing_rows(ROOT):
         key = (str(row["repo"]).casefold(), int(row["pr_number"]))
         candidate = index.get(key)
         if candidate is None:
-            unresolved.append(
-                {
-                    "file": row["file"],
-                    "line": row["line"],
-                    "record_id": row["record_id"],
-                    "repo": row["repo"],
-                    "pr_number": row["pr_number"],
-                    "reason": "not_in_frozen_inventory",
-                }
-            )
+            unresolved.append(_unresolved_row(row))
             continue
-        state = candidate.get("state")
-        source_state = candidate.get("source_state")
-        if state is None:
-            errors.append(
-                f"{row['file']}:{row['line']} maps to candidate "
-                f"{candidate.get('candidate_id')} with no ledger state"
-            )
-            state = "unknown"
-        if state in MUTABLE_STATES or source_state in MUTABLE_SOURCE_STATES:
-            errors.append(
-                f"{row['file']}:{row['line']} maps to mutable candidate "
-                f"{candidate.get('candidate_id')} ({state}/{source_state}) and cannot enter a positive release"
-            )
-        if state in POSITIVE_RELEASE_STATES and source_state in MUTABLE_SOURCE_STATES:
-            errors.append(
-                f"{row['file']}:{row['line']} is included_positive but source_state is {source_state}"
-            )
-        resolved.append(
-            {
-                "file": row["file"],
-                "line": row["line"],
-                "record_id": row["record_id"],
-                "candidate_id": candidate.get("candidate_id"),
-                "state": state,
-            }
-        )
+        mutable_errors, state = _mutable_state_errors(row, candidate)
+        errors.extend(mutable_errors)
+        resolved.append(_resolved_row(row, candidate, state))
     return errors, Counter(item["state"] for item in resolved), resolved, unresolved
 
 
