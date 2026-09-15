@@ -543,3 +543,58 @@ def test_pr_inventory_repository_id_match_can_close():
     report = _report(bundle)
     _assert_schema(report)
     assert report["closed"] is True
+
+
+def test_unknown_declared_source_repo_cannot_close():
+    bundle = spdx_known_bundle()
+    bundle["card"]["source_repos"] = ["rmems/widget", "evil/unknown"]
+    bundle["manifest"]["source_repos"] = ["rmems/widget", "evil/unknown"]
+    report = _report(bundle)
+    _assert_schema(report)
+    assert "declarations_disagree" in report["quarantined"][0]["reason_codes"]
+    assert report["released_positives"] == []
+
+
+def test_hidden_html_is_not_markdown_disclosure():
+    bundle = spdx_known_bundle()
+    bundle["markdown"] = "## License / provenance\n\n<span hidden>MIT</span>\n"
+    report = _report(bundle)
+    _assert_schema(report)
+    assert "card_disclosure_missing" in report["quarantined"][0]["reason_codes"]
+    assert report["released_positives"] == []
+
+
+def test_script_html_is_not_markdown_disclosure():
+    bundle = spdx_known_bundle()
+    bundle["markdown"] = "## License / provenance\n\n<script>MIT</script>\n"
+    report = _report(bundle)
+    _assert_schema(report)
+    assert "card_disclosure_missing" in report["quarantined"][0]["reason_codes"]
+    assert report["released_positives"] == []
+
+
+def test_visible_html_is_markdown_disclosure():
+    bundle = spdx_known_bundle()
+    bundle["markdown"] = "## License / provenance\n\n<p>MIT</p>\n"
+    report = _report(bundle)
+    _assert_schema(report)
+    assert report["closed"] is True
+
+
+def test_malformed_quarantined_row_cannot_validate_release():
+    report = _report(spdx_known_bundle())
+    report["released_positives"] = []
+    report["quarantined"] = ["malformed"]
+    report["closed"] = True
+    report["bundle_errors"] = []
+    report["evidence_digests"] = []
+    report["license_families"] = []
+    report["counts"] = {
+        "quarantined_count": 0,
+        "record_count": 0,
+        "released_positive_count": 0,
+        "unresolved_count": 0,
+    }
+    errors = validate_positive_release(report)
+    assert errors
+    assert any("objects" in error for error in errors)
