@@ -31,10 +31,15 @@ released IDs that are converted to quarantined rows keep their
 `inventory_license` object and the released row's `snapshot_sha256` /
 `repository_source_hash`. A record whose `id` and `trajectory_id` are
 absent, blank, or non-string is quarantined as `declarations_disagree`
-instead of closing under a synthetic `repo#pr` identifier.
+instead of closing under a synthetic `repo#pr` identifier. If both
+identifiers are present as non-empty strings, they must be identical;
+conflicting `id` / `trajectory_id` values quarantine as
+`declarations_disagree` instead of silently preferring `id`.
 Publication consumers must treat a report as closed
 only when the quarantined array is empty, counts match those array lengths
-(including `record_count` equal to released plus quarantined), `bundle_errors`
+(including `record_count` equal to released plus quarantined), `counts` is a
+present object (a truthy non-object such as `[1]` cannot crash the gate),
+`bundle_errors`
 is a present array of strings and is empty (omitting the key or substituting
 `{}` cannot stand in for `[]`), and every released row's repository, digest, family, and identifier
 appear in `evidence_digests` / `license_families`, released record IDs are
@@ -108,7 +113,12 @@ completed but closure failed because records were quarantined or bundle
 declarations were invalid.
 
 Pass `--prior-inventory` to compare a previous frozen repositories JSONL and
-treat a digest or SPDX change as `source_license_changed`. Evidence digests
+treat a digest or SPDX change as `source_license_changed`. A supplied
+`--prior-inventory` also requires `--prior-inventory-manifest` with a `files`
+entry (`repositories.jsonl` or the prior basename) whose `sha256` matches the
+prior file bytes; replacing an unbound prior file whose public per-row
+`source_hash` matches the current license cannot suppress
+`source_license_changed`. Evidence digests
 cover only `license` and `custom_license` objects, so a repository rename
 expressed through inventory aliases does not look like a license change. Prior
 inventory lookup also follows the current row's aliases, so a forward rename
@@ -123,7 +133,8 @@ publication artifact once and hashes those captured bytes, so a rewrite
 between report construction and binding comparison cannot authenticate a
 different file than the report describes. `--out` cannot resolve to the same
 path as `--records`, `--card`, `--manifest`, `--inventory`,
-`--inventory-manifest`, `--prior-inventory`, or `--markdown-card`, including
+`--inventory-manifest`, `--prior-inventory`, `--prior-inventory-manifest`, or
+`--markdown-card`, including
 through symlinks; a colliding `--out` is rejected before `--check` or write
 so frozen inputs cannot be overwritten. JSON parsers reject the non-finite
 constants `NaN`, `Infinity`, and `-Infinity`; `render_json` writes with
@@ -161,7 +172,9 @@ artifacts declare `source_repo` / `source_repos`, the complete normalized
 sets must agree after alias resolution; membership of the current record
 alone is not enough. Card and manifest `source_licenses` /
 `license_evidence_digests` maps are compared for every declared repository,
-not only repositories that have a proposed record. Those declared licenses
+not only repositories that have a proposed record. Each declared repository
+must resolve to a license in both artifacts; omitting an unused repository
+from both `source_licenses` maps cannot close. Those declared licenses
 and digests are also compared to the matching inventory row, so an unused
 declared repository cannot close by agreeing with the other artifact while
 disagreeing with frozen inventory evidence. Prior-inventory rows must
