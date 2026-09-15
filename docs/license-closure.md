@@ -82,9 +82,13 @@ matching per-repository map. A present non-object plural map such as
 `source_licenses: []` cannot be ignored in favor of a valid singular.
 Card and manifest `license_families` / `unresolved_license_count` must agree
 with closed evidence when they are declared. Prior-inventory rows must
-authenticate `source_hash` before their license is trusted. Markdown
-disclosure ignores HTML comments. `build_manifest.py` copies license-closure
-fields from the card when they are present.
+authenticate `source_hash` before their license is trusted. When the current
+row carries `repository_id`, prior lookup matches that immutable id and does
+not fall back to a reused GitHub name. Card and manifest declaration maps are
+resolved through inventory aliases. Markdown disclosure ignores HTML comments
+and stops the license section at the next H1 or H2 heading.
+`build_manifest.py` copies license-closure fields from the card when they are
+present.
 
 When a caller supplies a frozen pull-request inventory, every proposed record
 must appear in that list. Each row must include a `source_hash` bound to the
@@ -99,8 +103,10 @@ does not mask an incorrect head. A record merge/commit OID is not compared
 to the PR head; missing merge evidence fails closed. Intermediate event
 `code_state` commits and trajectory `tree_oid` values are not compared to
 those commit OIDs. Pull-request lookup follows inventory aliases, so a
-canonical PR row still matches a trajectory that uses an old name. Omitting
-the pull-request inventory keeps repository-level snapshot checks only.
+canonical PR row still matches a trajectory that uses an old name. Conflicting
+PR rows for a repository and one of its aliases at the same number are
+rejected.
+Omitting the pull-request inventory keeps repository-level snapshot checks only.
 Top-level `repo` and `repository.owner`/`name` must agree when both are
 present.
 
