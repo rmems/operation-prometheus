@@ -178,6 +178,49 @@ def _candidate_reason_errors(candidates: list[dict[str, Any]]) -> list[str]:
     return errors
 
 
+def _report_counts(payload: dict[str, Any]) -> dict[str, Any]:
+    state_counts: Counter = payload["state_counts"]
+    duplicates: dict[str, Any] = payload["duplicates"]
+    return {
+        "candidates": len(payload["candidates"]),
+        "jsonl_records": len(_load_existing_rows(ROOT)),
+        "resolved_jsonl_records": len(payload["resolved"]),
+        "unresolved_jsonl_records": len(payload["unresolved"]),
+        "ledger_state_counts": dict(sorted(state_counts.items())),
+        "resolved_state_counts": dict(sorted(payload["resolved_states"].items())),
+        "duplicate_groups": duplicates["group_count"],
+    }
+
+
+def _inventory_label(inventory_dir: Path) -> str:
+    if inventory_dir.is_relative_to(ROOT):
+        return inventory_dir.relative_to(ROOT).as_posix()
+    return str(inventory_dir)
+
+
+def _write_corpus_outputs(
+    out_dir: Path, report: dict[str, Any], duplicates: dict[str, Any]
+) -> None:
+    out_dir.mkdir(parents=True, exist_ok=True)
+    (out_dir / "corpus-integrity-report.json").write_text(
+        json.dumps(report, indent=2, ensure_ascii=False) + "\n",
+        encoding="utf-8",
+    )
+    (out_dir / "duplicates.jsonl").write_text(
+        "".join(
+            json.dumps(row, ensure_ascii=False) + "\n" for row in duplicates["groups"]
+        ),
+        encoding="utf-8",
+    )
+    (out_dir / "unresolved.jsonl").write_text(
+        "".join(
+            json.dumps(row, ensure_ascii=False) + "\n"
+            for row in report["unresolved_jsonl"]
+        ),
+        encoding="utf-8",
+    )
+
+
 def build_report(
     inventory_dir: Path, out_dir: Path | None, *, strict_resolve: bool = False
 ) -> dict[str, Any]:
@@ -201,18 +244,17 @@ def build_report(
     duplicates = _duplicate_report(inventory_dir)
     report = {
         "schema_version": REPORT_SCHEMA,
-        "inventory_dir": inventory_dir.relative_to(ROOT).as_posix()
-        if inventory_dir.is_relative_to(ROOT)
-        else str(inventory_dir),
-        "counts": {
-            "candidates": len(candidates),
-            "jsonl_records": len(_load_existing_rows(ROOT)),
-            "resolved_jsonl_records": len(resolved),
-            "unresolved_jsonl_records": len(unresolved),
-            "ledger_state_counts": dict(sorted(state_counts.items())),
-            "resolved_state_counts": dict(sorted(resolved_states.items())),
-            "duplicate_groups": duplicates["group_count"],
-        },
+        "inventory_dir": _inventory_label(inventory_dir),
+        "counts": _report_counts(
+            {
+                "candidates": candidates,
+                "resolved": resolved,
+                "unresolved": unresolved,
+                "state_counts": state_counts,
+                "resolved_states": resolved_states,
+                "duplicates": duplicates,
+            }
+        ),
         "quality": {
             "included_positive": state_counts.get("included_positive", 0),
             "included_negative": state_counts.get("included_negative", 0),
@@ -235,22 +277,7 @@ def build_report(
         "ok": not errors,
     }
     if out_dir is not None:
-        out_dir.mkdir(parents=True, exist_ok=True)
-        (out_dir / "corpus-integrity-report.json").write_text(
-            json.dumps(report, indent=2, ensure_ascii=False) + "\n",
-            encoding="utf-8",
-        )
-        (out_dir / "duplicates.jsonl").write_text(
-            "".join(
-                json.dumps(row, ensure_ascii=False) + "\n"
-                for row in duplicates["groups"]
-            ),
-            encoding="utf-8",
-        )
-        (out_dir / "unresolved.jsonl").write_text(
-            "".join(json.dumps(row, ensure_ascii=False) + "\n" for row in unresolved),
-            encoding="utf-8",
-        )
+        _write_corpus_outputs(out_dir, report, duplicates)
     return report
 
 
