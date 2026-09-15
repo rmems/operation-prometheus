@@ -116,6 +116,37 @@ def _sha256_bytes(raw: bytes) -> str:
     return hashlib.sha256(raw).hexdigest()
 
 
+_FROZEN_INPUT_ATTRS = (
+    "records",
+    "card",
+    "manifest",
+    "inventory",
+    "inventory_manifest",
+    "prior_inventory",
+    "markdown_card",
+)
+
+
+def _resolve_path(path: Path) -> Path:
+    try:
+        return path.resolve()
+    except OSError:
+        return path
+
+
+def _out_collides_with_frozen_inputs(args: argparse.Namespace) -> Path | None:
+    if args.out is None:
+        return None
+    out = _resolve_path(args.out)
+    for attr in _FROZEN_INPUT_ATTRS:
+        path = getattr(args, attr)
+        if path is None:
+            continue
+        if _resolve_path(path) == out:
+            return path
+    return None
+
+
 def _hex_digest(value: Any) -> str | None:
     text = str(value or "").strip().lower()
     if len(text) == 64 and all(char in "0123456789abcdef" for char in text):
@@ -238,6 +269,13 @@ def build_parser() -> argparse.ArgumentParser:
 
 def main(argv: list[str] | None = None) -> int:
     args = build_parser().parse_args(argv)
+    colliding = _out_collides_with_frozen_inputs(args)
+    if colliding is not None:
+        print(
+            f"ERROR: --out would overwrite frozen validation input {colliding}",
+            file=sys.stderr,
+        )
+        return 2
     if not args.snapshot_sha256 and not args.inventory_manifest:
         print(
             "ERROR: pass --snapshot-sha256 or --inventory-manifest",
