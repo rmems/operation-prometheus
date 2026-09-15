@@ -224,15 +224,17 @@ def _released_evidence_bound(row: dict[str, Any]) -> bool:
     )
 
 
+def _object_rows(value: Any, field: str) -> list[dict[str, Any]]:
+    if not isinstance(value, list) or not all(isinstance(row, dict) for row in value):
+        raise AssertionError(f"{field} must contain only objects")
+    return value
+
+
 def _report_rows(
     report: dict[str, Any],
 ) -> tuple[list[dict[str, Any]], list[dict[str, Any]]]:
-    released = [
-        row for row in (report.get("released_positives") or []) if isinstance(row, dict)
-    ]
-    quarantined = [
-        row for row in (report.get("quarantined") or []) if isinstance(row, dict)
-    ]
+    released = _object_rows(report.get("released_positives"), "released_positives")
+    quarantined = _object_rows(report.get("quarantined"), "quarantined")
     return released, quarantined
 
 
@@ -303,7 +305,13 @@ def validate_positive_release(report: dict[str, Any]) -> list[str]:
         )
     for bundle_error in report.get("bundle_errors") or []:
         errors.append(f"license-closure manifest: {bundle_error}")
-    _released, quarantined = _report_rows(report)
+    try:
+        _released, quarantined = _report_rows(report)
+    except AssertionError as exc:
+        message = str(exc)
+        if message not in errors:
+            errors.append(message)
+        return errors
     if quarantined:
         errors.append(
             f"license closure is fail-closed: {len(quarantined)} unresolved record(s) "
