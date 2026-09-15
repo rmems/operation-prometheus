@@ -10,8 +10,10 @@ from .license_closure_ids import (
     LICENSE_FAMILIES,
     SCHEMA_VERSION,
     _closed_release_family,
+    _same_license,
     _sha256_or_none,
     _text,
+    normalize_license_id,
 )
 from .license_closure_inventory import (
     evidence_digest,
@@ -58,7 +60,9 @@ def _released_evidence_summary(
 def _declared_families_invalid(declared: Any, expected: list[str]) -> bool:
     if not isinstance(declared, list):
         return True
-    if any(item not in LICENSE_FAMILIES for item in declared):
+    if any(
+        not isinstance(item, str) or item not in LICENSE_FAMILIES for item in declared
+    ):
         return True
     return sorted(declared) != expected
 
@@ -199,17 +203,25 @@ def released_positive_ids(report: dict[str, Any]) -> list[str]:
     return [row["record_id"] for row in report.get("released_positives") or []]
 
 
-def _released_custom_bound(row: dict[str, Any]) -> bool:
-    if row.get("license_family") != "custom":
-        return True
+def _released_evidence_bound(row: dict[str, Any]) -> bool:
     reconstructed = {
         "custom_license": row.get("custom_license"),
         "license": row.get("inventory_license"),
     }
-    if not inventory_has_custom_evidence(reconstructed):
+    has_custom = inventory_has_custom_evidence(reconstructed)
+    family = row.get("license_family")
+    if family == "custom":
+        if not has_custom:
+            return False
+    elif has_custom:
         return False
     digest = _sha256_or_none(row.get("evidence_digest"))
-    return digest == evidence_digest(license_evidence_payload(reconstructed))
+    if digest != evidence_digest(license_evidence_payload(reconstructed)):
+        return False
+    return _same_license(
+        normalize_license_id(row.get("inventory_license")),
+        _text(row.get("spdx_id")),
+    )
 
 
 def _report_rows(
@@ -272,7 +284,7 @@ def assert_released_positives_are_closed(report: dict[str, Any]) -> None:
                 }
             ),
         )
-        or not _released_custom_bound(row)
+        or not _released_evidence_bound(row)
         for row in released
     ):
         raise AssertionError("released row license family is not closed")
