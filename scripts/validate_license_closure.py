@@ -43,8 +43,24 @@ def _reject_nonfinite(constant: str) -> None:
     raise json.JSONDecodeError(f"non-finite constant {constant!r}", constant, 0)
 
 
+def _object_pairs(pairs: list[tuple[Any, Any]]) -> dict[str, Any]:
+    seen: set[str] = set()
+    result: dict[str, Any] = {}
+    for key, value in pairs:
+        name = key if isinstance(key, str) else str(key)
+        if name in seen:
+            raise json.JSONDecodeError(f"duplicate object key {name!r}", name, 0)
+        seen.add(name)
+        result[name] = value
+    return result
+
+
 def _loads(text: str) -> Any:
-    return json.loads(text, parse_constant=_reject_nonfinite)
+    return json.loads(
+        text,
+        object_pairs_hook=_object_pairs,
+        parse_constant=_reject_nonfinite,
+    )
 
 
 def _load_json(path: Path) -> Any:
