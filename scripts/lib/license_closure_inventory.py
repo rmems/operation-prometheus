@@ -178,18 +178,38 @@ def _folded_value_conflicts(mapped: Any, coerce: Callable[[Any], str | None]) ->
     return False
 
 
-def _mapped_value(
+def _mapped_value_for_names(
     container: dict[str, Any],
-    repo: str,
+    names: list[str],
     singular: str,
     plural: str,
     coerce: Callable[[Any], str | None],
 ) -> str | None:
     folded = _folded_mapping(container.get(plural))
-    found = coerce(folded.get(repo.casefold()))
-    if found is not None:
-        return found
+    for name in names:
+        if not name or name.casefold() not in folded:
+            continue
+        found = coerce(folded.get(name.casefold()))
+        if found is not None:
+            return found
     return coerce(container.get(singular))
+
+
+def _alias_group_value_conflicts(
+    mapped: Any,
+    names: list[str],
+    coerce: Callable[[Any], str | None],
+) -> bool:
+    if not isinstance(mapped, dict):
+        return False
+    folded = _folded_mapping(mapped)
+    seen: list[str | None] = []
+    for name in names:
+        if not name or name.casefold() not in folded:
+            continue
+        coerced = coerce(folded[name.casefold()])
+        seen.append(None if coerced is None else coerced.casefold())
+    return len(set(seen)) > 1
 
 
 def _malformed_present_value(
@@ -239,12 +259,9 @@ def _digest_declaration_invalid(container: dict[str, Any], repo: str) -> bool:
 
 
 def _declaration_map_conflicts(
-    card: dict[str, Any], manifest: dict[str, Any], repo: str
+    card: dict[str, Any], manifest: dict[str, Any], names: list[str]
 ) -> bool:
-    if _digest_declaration_invalid(card, repo) or _digest_declaration_invalid(
-        manifest, repo
-    ):
-        return True
+    repos = [name for name in names if name] or [""]
     checks = (
         (card, "source_license", "source_licenses", normalize_license_id),
         (manifest, "source_license", "source_licenses", normalize_license_id),
@@ -257,6 +274,12 @@ def _declaration_map_conflicts(
         ),
     )
     if any(
+        _digest_declaration_invalid(container, repo)
+        for container in (card, manifest)
+        for repo in repos
+    ):
+        return True
+    if any(
         _malformed_plural_field(container, plural)
         for container, _singular, plural, _coerce in checks
     ):
@@ -264,38 +287,46 @@ def _declaration_map_conflicts(
     if any(
         _singular_map_conflict(container, repo, singular, plural, coerce)
         for container, singular, plural, coerce in checks
+        for repo in repos
+    ):
+        return True
+    if any(
+        _folded_value_conflicts(container.get(plural), coerce)
+        for container, _singular, plural, coerce in checks
     ):
         return True
     return any(
-        _folded_value_conflicts(container.get(plural), coerce)
+        _alias_group_value_conflicts(container.get(plural), repos, coerce)
         for container, _singular, plural, coerce in checks
     )
 
 
 def _mapping_license(
-    container: dict[str, Any], repo: str, singular: str, plural: str
+    container: dict[str, Any], names: list[str], singular: str, plural: str
 ) -> str | None:
-    return _mapped_value(container, repo, singular, plural, normalize_license_id)
+    return _mapped_value_for_names(
+        container, names, singular, plural, normalize_license_id
+    )
 
 
 def _mapping_digest(
-    container: dict[str, Any], repo: str, singular: str, plural: str
+    container: dict[str, Any], names: list[str], singular: str, plural: str
 ) -> str | None:
-    return _mapped_value(container, repo, singular, plural, _sha256_or_none)
+    return _mapped_value_for_names(container, names, singular, plural, _sha256_or_none)
 
 
-def card_license_for_repo(card: dict[str, Any], repo: str) -> str | None:
-    return _mapping_license(card, repo, "source_license", "source_licenses")
+def card_license_for_repo(card: dict[str, Any], names: list[str]) -> str | None:
+    return _mapping_license(card, names, "source_license", "source_licenses")
 
 
-def manifest_license_for_repo(manifest: dict[str, Any], repo: str) -> str | None:
-    return _mapping_license(manifest, repo, "source_license", "source_licenses")
+def manifest_license_for_repo(manifest: dict[str, Any], names: list[str]) -> str | None:
+    return _mapping_license(manifest, names, "source_license", "source_licenses")
 
 
-def declared_digest_for_repo(container: dict[str, Any], repo: str) -> str | None:
+def declared_digest_for_repo(container: dict[str, Any], names: list[str]) -> str | None:
     return _mapping_digest(
         container,
-        repo,
+        names,
         "license_evidence_digest",
         "license_evidence_digests",
     )
@@ -349,11 +380,45 @@ def _repository_names(row: dict[str, Any]) -> list[str]:
     return [name for name in names if name]
 
 
+def _identity_names(repository: dict[str, Any] | None, repo: str) -> list[str]:
+    names = [repo] if repo else []
+    if isinstance(repository, dict):
+        names.extend(_repository_names(repository))
+    seen: set[str] = set()
+    unique: list[str] = []
+    for name in names:
+        folded = name.casefold()
+        if not name or folded in seen:
+            continue
+        seen.add(folded)
+        unique.append(name)
+    return unique
+
+
+def _unique_inventory_rows(index: dict[str, dict[str, Any]]) -> list[dict[str, Any]]:
+    rows: list[dict[str, Any]] = []
+    seen: set[int] = set()
+    for row in index.values():
+        ident = id(row)
+        if ident in seen:
+            continue
+        seen.add(ident)
+        rows.append(row)
+    return rows
+
+
 def _prior_repository(
     prior_index: dict[str, dict[str, Any]],
     current: dict[str, Any] | None,
     repo: str,
 ) -> dict[str, Any] | None:
+    if isinstance(current, dict):
+        repo_id = _text(current.get("repository_id"))
+        if repo_id:
+            for row in _unique_inventory_rows(prior_index):
+                if _text(row.get("repository_id")) == repo_id:
+                    return row
+            return None
     found = _inventory_for_repo(prior_index, repo)
     if found is not None or not isinstance(current, dict):
         return found
