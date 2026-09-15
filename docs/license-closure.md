@@ -8,9 +8,13 @@ Every released positive trajectory must resolve through all three of:
    content digest);
 2. Snapshot provenance (`snapshot_sha256` and the repository `source_hash`);
 3. Dataset-card disclosure (`source_license` / `source_licenses`, and a
-   `License / provenance` section when a markdown card is supplied).
+   `License / provenance` section when a markdown card is supplied). Markdown
+   disclosure must name the complete identifier; a prefix such as `MIT` does
+   not satisfy `MIT-0`. `LicenseRef-*` custom evidence must use the same
+   identifier as the inventory license.
 
-Card, manifest, and inventory declarations must agree. Missing, unknown,
+Card, manifest, and inventory declarations must agree. Singular and
+per-repository maps in the same artifact must not disagree. Missing, unknown,
 conflicting, or changed evidence quarantines the row. Quarantined rows keep the
 evidence they have and an explicit reason code. The closure manifest reports
 license families, per-repository evidence digests, and unresolved counts.
@@ -42,7 +46,9 @@ least one unresolved row would otherwise have entered the released-positive
 set; those rows appear only under `quarantined`.
 
 Pass `--prior-inventory` to compare a previous frozen repositories JSONL and
-treat a digest or SPDX change as `source_license_changed`.
+treat a digest or SPDX change as `source_license_changed`. If both
+`--snapshot-sha256` and `--inventory-manifest` are supplied, they must name the
+same snapshot digest.
 
 ## Schema
 
