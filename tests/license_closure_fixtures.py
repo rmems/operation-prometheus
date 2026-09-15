@@ -180,7 +180,7 @@ def changed_license_bundle() -> dict[str, Any]:
         "card": card("rmems/widget", "Apache-2.0", digest=digest),
         "manifest": manifest("rmems/widget", "Apache-2.0", digest=digest),
         "markdown": None,
-        "prior_repositories": None,
+        "prior_repositories": [prior],
         "records": [record("rmems/widget", 1, "Apache-2.0")],
         "repositories": [current],
         "snapshot_sha256": SNAPSHOT_SHA256,
