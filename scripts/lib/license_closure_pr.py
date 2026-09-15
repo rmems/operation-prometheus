@@ -404,7 +404,7 @@ def _inline_link_close(markdown: str, start: int) -> int | None:
             char = markdown[index]
             if char == "\\":
                 index += 2
-            continue
+                continue
             if char == "\n":
                 return None
             if char in " \t" and depth == 0:
