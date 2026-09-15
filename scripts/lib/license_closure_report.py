@@ -210,7 +210,11 @@ def _released_evidence_bound(row: dict[str, Any], report_snapshot: str | None) -
     if snapshot is None or source_hash is None or snapshot != report_snapshot:
         return False
     if _sha256_or_none(row.get("source_provenance_digest")) != source_provenance_digest(
-        _text(row.get("repo")), source_hash, snapshot
+        _text(row.get("repo")),
+        source_hash,
+        snapshot,
+        record_id=_text(row.get("record_id")),
+        pr_number=row.get("pr_number") if type(row.get("pr_number")) is int else None,
     ):
         return False
     reconstructed = {
@@ -301,7 +305,8 @@ def assert_released_positives_are_closed(report: dict[str, Any]) -> None:
         )
     if any(row.get("state") != "released_positive" for row in released):
         raise AssertionError("Non-positive row listed as released")
-    if bool(report.get("closed")) != _derived_closed(report, quarantined):
+    closed = report.get("closed")
+    if type(closed) is not bool or closed != _derived_closed(report, quarantined):
         raise AssertionError("closed does not match quarantined rows and bundle errors")
     families, evidence = _released_evidence_summary(released)
     if list(report.get("license_families") or []) != families:
