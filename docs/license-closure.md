@@ -37,6 +37,7 @@ when GitHub reports `NOASSERTION` / `OTHER`. Unbalanced SPDX parentheses,
 empty expression operands (`MIT OR ()`), and non-`LicenseRef-*` identifiers
 stay unknown even if custom text evidence is present. Grouped SPDX
 expressions such as `(MIT OR Apache-2.0) AND BSD-3-Clause` remain SPDX;
+adjacent grouped operands (`(MIT) OR (Apache-2.0)`) remain SPDX;
 misplaced parentheses (`MIT ( AND Apache-2.0)`) stay unknown. `WITH`
 expressions whose right
 operand is a license identifier (`MIT WITH Apache-2.0`) stay unknown. A
@@ -81,7 +82,8 @@ singular `source_license` (for example `{}`) cannot be ignored in favor of a
 matching per-repository map. A present non-object plural map such as
 `source_licenses: []` cannot be ignored in favor of a valid singular.
 Card and manifest `license_families` / `unresolved_license_count` must agree
-with closed evidence when they are declared. Prior-inventory rows must
+with closed evidence when they are declared. Non-string family elements such
+as `["spdx", 1]` fail closed as a bundle error instead of raising. Prior-inventory rows must
 authenticate `source_hash` before their license is trusted. When the current
 row carries `repository_id`, prior lookup matches that immutable id and does
 not fall back to a reused GitHub name. Card and manifest declaration maps are
@@ -99,8 +101,10 @@ published row does not keep. Missing or stale PR hashes are rejected.
 Duplicate repository+PR keys in that inventory are rejected. Record
 `base_oid` / `head_oid` / merge `commit_oid` values on the record's
 repository state are compared to the matching PR roles; a correct base OID
-does not mask an incorrect head. A record merge/commit OID is not compared
-to the PR head; missing merge evidence fails closed. Intermediate event
+does not mask an incorrect head. A supplied PR inventory also requires a
+valid inventory `merge_commit_oid` and a matching record merge role. A
+record merge/commit OID is not compared to the PR head; missing merge
+evidence fails closed. Intermediate event
 `code_state` commits and trajectory `tree_oid` values are not compared to
 those commit OIDs. Pull-request lookup follows inventory aliases, so a
 canonical PR row still matches a trajectory that uses an old name. Conflicting
