@@ -7,6 +7,7 @@ from pathlib import Path
 
 from license_closure_fixtures import (
     WRONG_HEAD_OID,
+    bind_source_hash,
     digest_for,
     inventory_pr,
     missing_license_bundle,
@@ -112,7 +113,7 @@ def test_prior_inventory_rename_does_not_look_like_license_change():
     current = dict(bundle["repositories"][0])
     current["name_with_owner"] = "rmems/widget-renamed"
     current["aliases"] = [{"name_with_owner": "rmems/widget"}]
-    bundle["repositories"] = [current]
+    bundle["repositories"] = [bind_source_hash(current)]
     bundle["prior_repositories"] = [
         repository(
             "rmems/widget",
@@ -240,6 +241,7 @@ def test_unbalanced_spdx_parentheses_cannot_close():
     license_obj = dict(repo["license"])
     license_obj["spdx_id"] = malformed
     repo["license"] = license_obj
+    repo = bind_source_hash(repo)
     digest = digest_for(repo)
     bundle["repositories"] = [repo]
     bundle["records"][0]["license"] = malformed
