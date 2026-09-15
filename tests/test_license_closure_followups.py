@@ -9,7 +9,9 @@ from pathlib import Path
 import pytest
 
 from license_closure_fixtures import (
+    SOURCE_HASH,
     WRONG_HEAD_OID,
+    bind_source_hash,
     inventory_pr,
     report_kwargs,
     repository,
@@ -68,7 +70,7 @@ def test_forward_rename_still_sees_prior_license_change():
     current = dict(bundle["repositories"][0])
     current["name_with_owner"] = "rmems/widget-renamed"
     current["aliases"] = [{"name_with_owner": "rmems/widget"}]
-    bundle["repositories"] = [current]
+    bundle["repositories"] = [bind_source_hash(current)]
     bundle["records"][0]["repo"] = "rmems/widget-renamed"
     bundle["card"]["source_repo"] = "rmems/widget-renamed"
     bundle["manifest"]["source_repo"] = "rmems/widget-renamed"
@@ -113,7 +115,7 @@ def test_inventory_row_may_repeat_its_own_name_as_alias():
     bundle = spdx_known_bundle()
     row = dict(bundle["repositories"][0])
     row["aliases"] = [{"name_with_owner": "rmems/widget"}]
-    bundle["repositories"] = [row]
+    bundle["repositories"] = [bind_source_hash(row)]
     report = _report(bundle)
     _assert_schema(report)
     assert report["closed"] is True
@@ -212,3 +214,49 @@ def test_cli_accepts_bound_inventory_manifest(tmp_path: Path):
         )
         == 0
     )
+
+
+def test_duplicate_released_ids_cannot_validate_release():
+    report = _report(spdx_known_bundle())
+    report["released_positives"].append(dict(report["released_positives"][0]))
+    report["counts"]["released_positive_count"] = 2
+    report["counts"]["record_count"] = 2
+    errors = validate_positive_release(report)
+    assert errors
+    assert any("unique" in error.lower() for error in errors)
+
+
+def test_unknown_identifier_labeled_spdx_cannot_validate_release():
+    report = _report(spdx_known_bundle())
+    report["released_positives"][0]["spdx_id"] = "NOASSERTION"
+    report["released_positives"][0]["license_family"] = "spdx"
+    report["evidence_digests"][0]["spdx_id"] = "NOASSERTION"
+    report["evidence_digests"][0]["family"] = "spdx"
+    errors = validate_positive_release(report)
+    assert errors
+    assert any("license family" in error for error in errors)
+
+
+def test_with_license_operand_is_unknown():
+    assert classify_license_family("MIT WITH Apache-2.0") == "unknown"
+    assert classify_license_family("MIT AND Apache-2.0") == "spdx"
+
+
+def test_empty_manifest_records_cannot_close():
+    bundle = spdx_known_bundle()
+    bundle["manifest"]["records"] = []
+    report = _report(bundle)
+    _assert_schema(report)
+    assert report["closed"] is False
+    assert any("record ids" in error for error in report["bundle_errors"])
+
+
+def test_stale_inventory_source_hash_cannot_close():
+    bundle = spdx_known_bundle()
+    row = dict(bundle["repositories"][0])
+    row["source_hash"] = SOURCE_HASH
+    bundle["repositories"] = [row]
+    report = _report(bundle)
+    _assert_schema(report)
+    assert "snapshot_provenance_missing" in report["quarantined"][0]["reason_codes"]
+    assert report["released_positives"] == []
