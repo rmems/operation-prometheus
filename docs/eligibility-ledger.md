@@ -145,4 +145,7 @@ The schemas are:
 The tracked inventory retains source licensing provenance but does not relicense
 source-derived metadata under Operation Prometheus's Apache-2.0 license. A
 candidate remains quarantined when source-license evidence is absent or only a
-current repository-level license is known.
+current repository-level license is known. Promoting a candidate into a
+released positive split additionally requires
+[license-closure](license-closure.md) against that frozen inventory, the
+dataset card, and the dataset manifest.

@@ -61,4 +61,8 @@ if ls datasets/jsonl/*.jsonl 1>/dev/null 2>&1; then
 else
   echo "No JSONL files found; skipping schema validation."
 fi
+# Required before publishing released positives (fail-closed; frozen evidence only):
+# python scripts/validate_license_closure.py --records ... --card ... --manifest ... \
+#   --inventory datasets/inventory/v0.7/repositories.jsonl \
+#   --inventory-manifest datasets/inventory/v0.7/manifest.json
 ```
