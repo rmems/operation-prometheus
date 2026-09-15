@@ -33,6 +33,7 @@ def repository(
     row: dict[str, Any] = {
         "name_with_owner": name,
         "license": {"spdx_id": spdx_id, "name": license_name or spdx_id, "url": url},
+        "visibility": "public",
     }
     if custom is not None:
         row["custom_license"] = custom
