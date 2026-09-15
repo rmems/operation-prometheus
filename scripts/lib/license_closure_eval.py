@@ -30,6 +30,7 @@ from .license_closure_inventory import (
     inventory_row_source_hash,
     license_evidence_payload,
     manifest_license_for_repo,
+    source_provenance_digest,
     record_id,
     record_license,
     record_pr_number,
@@ -257,6 +258,12 @@ def _evaluate_record(
             released["custom_license"] = custom_license_obj
         if inventory_license is not None:
             released["inventory_license"] = inventory_license
+        assert source_hash is not None
+        released["repository_source_hash"] = source_hash
+        released["snapshot_sha256"] = snapshot_sha256
+        released["source_provenance_digest"] = source_provenance_digest(
+            repo, source_hash, snapshot_sha256
+        )
         return released
     return {
         "evidence": evidence,
