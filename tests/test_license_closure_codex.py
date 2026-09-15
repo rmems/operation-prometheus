@@ -82,6 +82,8 @@ def test_misplaced_spdx_parentheses_are_unknown():
     assert classify_license_family("(MIT OR Apache-2.0)") == "spdx"
     assert classify_license_family("(MIT OR Apache-2.0) AND BSD-3-Clause") == "spdx"
     assert classify_license_family("(MIT) OR (Apache-2.0)") == "spdx"
+    assert classify_license_family("(MIT)(Apache-2.0)") == "unknown"
+    assert classify_license_family("((MIT)(Apache-2.0))") == "unknown"
 
 
 def test_duplicate_repository_id_is_rejected():
@@ -313,3 +315,70 @@ def test_non_string_license_families_are_bundle_errors():
     assert report["closed"] is False
     assert report["bundle_errors"]
 
+
+def test_markdown_link_destination_is_not_disclosure():
+    bundle = spdx_known_bundle()
+    bundle["markdown"] = (
+        "## License / provenance\n\n[license details](https://example.test/MIT)\n"
+    )
+    report = _report(bundle)
+    _assert_schema(report)
+    assert "card_disclosure_missing" in report["quarantined"][0]["reason_codes"]
+    assert report["released_positives"] == []
+
+
+def test_markdown_link_text_is_disclosure():
+    bundle = spdx_known_bundle()
+    bundle["markdown"] = (
+        "## License / provenance\n\n[MIT](https://example.test/license)\n"
+    )
+    report = _report(bundle)
+    _assert_schema(report)
+    assert report["closed"] is True
+
+
+def test_uppercase_record_oid_matches_inventory_pr():
+    base_oid = "abc" + "1" * 37
+    head_oid = "def" + "2" * 37
+    merge_oid = "a1b" + "3" * 37
+    bundle = spdx_known_bundle()
+    bundle["records"][0] = with_code_state(
+        bundle["records"][0],
+        base_oid=base_oid.upper(),
+        head_oid=head_oid.upper(),
+        commit_oid=merge_oid.upper(),
+    )
+    bundle["pull_requests"] = [
+        inventory_pr(
+            "rmems/widget",
+            1,
+            base_oid=base_oid,
+            head_oid=head_oid,
+            merge_commit_oid=merge_oid,
+        )
+    ]
+    report = _report(bundle)
+    _assert_schema(report)
+    assert report["closed"] is True
+
+
+def test_card_and_manifest_source_repos_must_agree():
+    bundle = spdx_known_bundle()
+    bundle["card"]["source_repos"] = ["rmems/widget", "a/one"]
+    bundle["manifest"]["source_repos"] = ["rmems/widget", "b/two"]
+    report = _report(bundle)
+    _assert_schema(report)
+    assert "declarations_disagree" in report["quarantined"][0]["reason_codes"]
+    assert report["released_positives"] == []
+
+
+def test_card_and_manifest_source_repos_follow_aliases():
+    bundle = spdx_known_bundle()
+    current = dict(bundle["repositories"][0])
+    current["aliases"] = [{"name_with_owner": "rmems/widget-old"}]
+    bundle["repositories"] = [bind_source_hash(current)]
+    bundle["card"]["source_repo"] = "rmems/widget"
+    bundle["manifest"]["source_repo"] = "rmems/widget-old"
+    report = _report(bundle)
+    _assert_schema(report)
+    assert report["closed"] is True
