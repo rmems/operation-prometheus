@@ -71,6 +71,16 @@
   "definitions": {
     "count": { "type": "integer", "minimum": 0 },
     "sha256": { "type": "string", "pattern": "^[a-f0-9]{64}$" },
+    "inventory_license": {
+      "type": "object",
+      "required": ["spdx_id", "name", "url"],
+      "properties": {
+        "spdx_id": { "type": ["string", "null"] },
+        "name": { "type": ["string", "null"] },
+        "url": { "type": ["string", "null"] }
+      },
+      "additionalProperties": false
+    },
     "license_family": { "enum": ["spdx", "custom", "missing", "unknown"] },
     "reason_code": {
       "enum": [
@@ -104,7 +114,8 @@
         "license_family": { "enum": ["spdx", "custom"] },
         "spdx_id": { "type": "string", "minLength": 1 },
         "evidence_digest": { "$ref": "#/definitions/sha256" },
-        "custom_license": { "type": "object" }
+        "custom_license": { "type": "object" },
+        "inventory_license": { "$ref": "#/definitions/inventory_license" }
       },
       "additionalProperties": false
     },
@@ -155,14 +166,10 @@
         "card_license": { "type": ["string", "null"] },
         "manifest_license": { "type": ["string", "null"] },
         "inventory_license": {
-          "type": ["object", "null"],
-          "required": ["spdx_id", "name", "url"],
-          "properties": {
-            "spdx_id": { "type": ["string", "null"] },
-            "name": { "type": ["string", "null"] },
-            "url": { "type": ["string", "null"] }
-          },
-          "additionalProperties": false
+          "anyOf": [
+            { "$ref": "#/definitions/inventory_license" },
+            { "type": "null" }
+          ]
         },
         "evidence_digest": { "type": ["string", "null"], "pattern": "^[a-f0-9]{64}$" },
         "declared_evidence_digest": {
