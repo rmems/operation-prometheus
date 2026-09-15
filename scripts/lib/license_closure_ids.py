@@ -142,12 +142,13 @@ def _expression_tokens(identifier: str) -> list[str] | None:
         return []
     if not _parentheses_balanced(stripped):
         return None
-    tokens = [
-        token.strip("() ")
-        for token in EXPRESSION_SPLIT_RE.split(stripped)
-        if token.strip("() ")
-    ]
-    return tokens or [stripped]
+    tokens: list[str] = []
+    for part in EXPRESSION_SPLIT_RE.split(stripped):
+        token = part.strip("() ")
+        if not token:
+            return None
+        tokens.append(token)
+    return tokens
 
 
 def classify_license_family(
