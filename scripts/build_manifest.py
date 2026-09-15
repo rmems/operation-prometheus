@@ -58,7 +58,9 @@ def build_manifest(
     name: str,
 ) -> dict[str, Any]:
     data = jsonl_path.read_bytes()
-    records = [json.loads(line) for line in data.decode("utf-8").splitlines() if line.strip()]
+    records = [
+        json.loads(line) for line in data.decode("utf-8").splitlines() if line.strip()
+    ]
     return {
         "name": name,
         "schema_version": str(card.get("schema_version") or "pr_trajectory_v0"),
@@ -72,6 +74,19 @@ def build_manifest(
         "sha256": hashlib.sha256(data).hexdigest(),
         "bytes": len(data),
         "records": [record_row(r) for r in records],
+        **{
+            key: card[key]
+            for key in (
+                "source_repos",
+                "source_license",
+                "source_licenses",
+                "license_evidence_digest",
+                "license_evidence_digests",
+                "license_families",
+                "unresolved_license_count",
+            )
+            if key in card
+        },
     }
 
 
@@ -82,9 +97,17 @@ def render(manifest: dict[str, Any]) -> str:
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--jsonl", type=Path, required=True, help="curated JSONL file")
-    parser.add_argument("--card", type=Path, help="dataset card (default: cards/<name>.json)")
-    parser.add_argument("--out", type=Path, help="manifest path (default: manifests/<name>.manifest.json)")
-    parser.add_argument("--created-at", help="override the preserved created_at (YYYY-MM-DD)")
+    parser.add_argument(
+        "--card", type=Path, help="dataset card (default: cards/<name>.json)"
+    )
+    parser.add_argument(
+        "--out",
+        type=Path,
+        help="manifest path (default: manifests/<name>.manifest.json)",
+    )
+    parser.add_argument(
+        "--created-at", help="override the preserved created_at (YYYY-MM-DD)"
+    )
     parser.add_argument("--created-by", help="override the preserved created_by")
     parser.add_argument(
         "--check",
@@ -134,7 +157,9 @@ def main(argv: list[str] | None = None) -> int:
         return 0
 
     if rendered == current:
-        print(f"{out_path.name} already up to date ({manifest['record_count']} records).")
+        print(
+            f"{out_path.name} already up to date ({manifest['record_count']} records)."
+        )
         return 0
     out_path.write_text(rendered, encoding="utf-8")
     print(f"Wrote {out_path.name} ({manifest['record_count']} records).")
