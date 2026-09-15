@@ -13,13 +13,13 @@ import pytest
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "scripts"))
 
-from lib.cas import ContentAddressedStore, sha256_bytes  # noqa: E402
+from lib.cas import ArtifactSpec, ContentAddressedStore, sha256_bytes  # noqa: E402
 from lib.github_client import GitHubError  # noqa: E402
 from lib.inventory_targets import load_inventory_targets  # noqa: E402
-from lib.normalize_v1 import normalize_record_v1  # noqa: E402
-from lib.raw_record import collect_pr, write_raw_record  # noqa: E402
+from lib.normalize_v1 import V1NormalizeOptions, normalize_record_v1  # noqa: E402
+from lib.raw_record import CollectOptions, collect_pr, write_raw_record  # noqa: E402
 from lib.resume_state import ResumeState  # noqa: E402
-from lib.snapshots import collect_snapshots  # noqa: E402
+from lib.snapshots import GitFetch, SnapshotScope, collect_snapshots  # noqa: E402
 import collect_pr_records as collect_mod  # noqa: E402
 import build_trajectory_jsonl as build_mod  # noqa: E402
 
@@ -44,21 +44,23 @@ def _ledger_row(repo: str, number: int, *, owner_state: str = "quarantined") -> 
 
 def test_cas_verifies_content_hash_not_filename(tmp_path: Path):
     store = ContentAddressedStore(tmp_path)
-    meta = store.put_text("hello-cas", media_type="text/plain", kind="blob")
+    spec = ArtifactSpec(media_type="text/plain", kind="blob")
+    meta = store.put_text("hello-cas", spec)
     digest = meta["sha256"]
     assert store.get_text(digest) == "hello-cas"
     obj = tmp_path / "objects" / digest[:2] / digest
     obj.write_bytes(b"tampered")
     with pytest.raises(ValueError, match="content-hash"):
         store.get_bytes(digest)
-    store.put_text("hello-cas", media_type="text/plain", kind="blob")
+    store.put_text("hello-cas", spec)
     assert store.get_text(digest) == "hello-cas"
 
 
 def test_cas_put_is_idempotent(tmp_path: Path):
     store = ContentAddressedStore(tmp_path)
-    a = store.put_text("same", media_type="text/plain", kind="blob")
-    b = store.put_text("same", media_type="text/plain", kind="blob")
+    spec = ArtifactSpec(media_type="text/plain", kind="blob")
+    a = store.put_text("same", spec)
+    b = store.put_text("same", spec)
     assert a["sha256"] == b["sha256"]
     files = [p for p in (tmp_path / "objects").rglob("*") if p.is_file() and not p.name.endswith(".tmp")]
     assert len(files) == 1
@@ -133,12 +135,12 @@ def test_snapshots_quarantine_missing_commit(tmp_path: Path):
 
     store = ContentAddressedStore(tmp_path / "cas")
     pack = collect_snapshots(
-        MissingCommitClient(),
-        store,
-        "rmems/corinth-canal",
-        pull={"base_sha": "abc", "head_sha": "def", "merge_commit_sha": "ghi"},
-        commits=[{"sha": "c1"}],
-        files=[],
+        GitFetch(MissingCommitClient(), store, "rmems/corinth-canal"),
+        SnapshotScope(
+            pull={"base_sha": "abc", "head_sha": "def", "merge_commit_sha": "ghi"},
+            commits=[{"sha": "c1"}],
+            files=[],
+        ),
     )
     assert pack["complete"] is False
     assert pack["quarantine"]
@@ -150,13 +152,13 @@ def test_snapshots_store_reproducible_blobs(tmp_path: Path):
     store = ContentAddressedStore(tmp_path / "cas")
     files = [{"filename": "src/ok.rs", "status": "modified", "sha": "cafebabe"}]
     pack = collect_snapshots(
-        FakeClient(),
-        store,
-        "rmems/corinth-canal",
-        pull={"base_sha": "abc", "head_sha": "def"},
-        commits=[{"sha": "c1"}],
-        files=files,
-        review_comments=[{"commit_id": "def", "original_commit_id": "abc"}],
+        GitFetch(FakeClient(), store, "rmems/corinth-canal"),
+        SnapshotScope(
+            pull={"base_sha": "abc", "head_sha": "def"},
+            commits=[{"sha": "c1"}],
+            files=files,
+            review_comments=[{"commit_id": "def", "original_commit_id": "abc"}],
+        ),
     )
     present = [o for o in pack["objects"] if o["availability"] == "present"]
     assert present
@@ -171,8 +173,7 @@ def test_collect_with_snapshots_writes_pack(tmp_path: Path):
         FakeClient(),
         "rmems/corinth-canal",
         89,
-        include_snapshots=True,
-        artifact_store=store,
+        CollectOptions(include_snapshots=True, artifact_store=store),
     )
     path = write_raw_record(record, tmp_path / "raw", artifact_store=store)
     assert path.exists()
@@ -185,7 +186,7 @@ def test_collect_with_snapshots_writes_pack(tmp_path: Path):
 def test_normalize_v1_from_fixture_validates():
     raw = collect_pr(FakeClient(), "rmems/corinth-canal", 89)
     card = json.loads(CARD.read_text()) if CARD.exists() else {}
-    traj = normalize_record_v1(raw, card, source_license="Apache-2.0")
+    traj = normalize_record_v1(raw, card, V1NormalizeOptions(source_license="Apache-2.0"))
     schema = json.loads(V1_SCHEMA.read_text())
     jsonschema.Draft7Validator(schema).validate(traj)
     assert traj["schema_version"] == "1.0"
@@ -208,8 +209,8 @@ def test_v1_emit_is_deterministic():
     from lib.source_inventory_common import sha256_json
 
     raw = collect_pr(FakeClient(), "rmems/corinth-canal", 89)
-    a = normalize_record_v1(raw, {}, source_license="MIT")
-    b = normalize_record_v1(raw, {}, source_license="MIT")
+    a = normalize_record_v1(raw, {}, V1NormalizeOptions(source_license="MIT"))
+    b = normalize_record_v1(raw, {}, V1NormalizeOptions(source_license="MIT"))
     assert sha256_json(a) == sha256_json(b)
 
 
@@ -370,7 +371,7 @@ def test_v1_missing_snapshot_not_silently_complete():
         },
         "collection_meta": {"warnings": ["snapshots_quarantined"], "evidence_complete": False},
     }
-    traj = normalize_record_v1(raw, {}, source_license="MIT")
+    traj = normalize_record_v1(raw, {}, V1NormalizeOptions(source_license="MIT"))
     assert traj["evidence_quality"]["completeness"] < 1.0
     assert traj["terminal_disposition"] == "successful"
     jsonschema.Draft7Validator(json.loads(V1_SCHEMA.read_text())).validate(traj)

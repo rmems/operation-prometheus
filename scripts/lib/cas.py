@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+from dataclasses import dataclass, replace
 from pathlib import Path
 from typing import Any
 
@@ -16,6 +17,17 @@ from .secrets import scan_and_sanitize_obj
 from .source_inventory_common import canonical_json_bytes, sha256_json
 
 SCHEMA_VERSION = "cas_object_v1"
+
+
+@dataclass(frozen=True)
+class ArtifactSpec:
+    """Identity metadata stored alongside a CAS object (keeps put_* at ≤4 args)."""
+
+    media_type: str
+    kind: str
+    git_oid: str | None = None
+    extra: dict[str, Any] | None = None
+    sanitize: bool = True
 
 
 def sha256_bytes(data: bytes) -> str:
@@ -45,104 +57,82 @@ def _atomic_write_text(path: Path, text: str) -> None:
     tmp.replace(path)
 
 
+def _ensure_object(root: Path, digest: str, data: bytes) -> Path:
+    obj_path = _object_path(root, digest)
+    if obj_path.exists():
+        existing = obj_path.read_bytes()
+        if sha256_bytes(existing) != digest:
+            # Path matched but content did not — rewrite after corruption.
+            _atomic_write_bytes(obj_path, data)
+        return obj_path
+    _atomic_write_bytes(obj_path, data)
+    return obj_path
+
+
+def _object_meta(root: Path, digest: str, byte_size: int, spec: ArtifactSpec) -> dict[str, Any]:
+    meta = {
+        "schema_version": SCHEMA_VERSION,
+        "sha256": digest,
+        "byte_size": byte_size,
+        "media_type": spec.media_type,
+        "kind": spec.kind,
+        "git_oid": spec.git_oid,
+        "path": str(_object_path(root, digest).relative_to(root)),
+    }
+    if spec.extra:
+        meta.update(spec.extra)
+    return meta
+
+
+def _with_secret_warnings(payload: Any, spec: ArtifactSpec) -> tuple[Any, ArtifactSpec]:
+    extra = dict(spec.extra or {})
+    if not spec.sanitize:
+        return payload, replace(spec, extra=extra or None)
+    payload, warnings = scan_and_sanitize_obj(payload)
+    if warnings:
+        extra["sanitized"] = True
+        extra["secret_warnings"] = warnings
+    return payload, replace(spec, extra=extra or None)
+
+
 class ContentAddressedStore:
     """Deduplicating SHA-256 object store with hash-verified reads."""
 
     def __init__(self, root: Path) -> None:
         self.root = Path(root)
 
-    def put_bytes(
-        self,
-        data: bytes,
-        *,
-        media_type: str,
-        kind: str,
-        git_oid: str | None = None,
-        extra: dict[str, Any] | None = None,
-    ) -> dict[str, Any]:
+    def put_bytes(self, data: bytes, spec: ArtifactSpec) -> dict[str, Any]:
         """Store ``data`` and return its metadata record."""
         digest = sha256_bytes(data)
-        obj_path = _object_path(self.root, digest)
-        if obj_path.exists():
-            existing = obj_path.read_bytes()
-            if sha256_bytes(existing) != digest:
-                # Path matched but content did not — rewrite after corruption.
-                _atomic_write_bytes(obj_path, data)
-        else:
-            _atomic_write_bytes(obj_path, data)
-        meta = {
-            "schema_version": SCHEMA_VERSION,
-            "sha256": digest,
-            "byte_size": len(data),
-            "media_type": media_type,
-            "kind": kind,
-            "git_oid": git_oid,
-            "path": str(obj_path.relative_to(self.root)),
-        }
-        if extra:
-            meta.update(extra)
+        _ensure_object(self.root, digest, data)
+        meta = _object_meta(self.root, digest, len(data), spec)
         _atomic_write_text(
             _meta_path(self.root, digest),
             json.dumps(meta, indent=2, ensure_ascii=False, sort_keys=True) + "\n",
         )
         return meta
 
-    def put_text(
-        self,
-        text: str,
-        *,
-        media_type: str,
-        kind: str,
-        git_oid: str | None = None,
-        extra: dict[str, Any] | None = None,
-        sanitize: bool = True,
-    ) -> dict[str, Any]:
+    def put_text(self, text: str, spec: ArtifactSpec) -> dict[str, Any]:
         """Store UTF-8 text, optionally running secret scanning first."""
-        payload: Any = text
-        warnings: list[str] = []
-        if sanitize:
-            payload, warnings = scan_and_sanitize_obj(payload)
-            if not isinstance(payload, str):
-                payload = str(payload)
-        extra_meta = dict(extra or {})
-        if warnings:
-            extra_meta["sanitized"] = True
-            extra_meta["secret_warnings"] = warnings
-        return self.put_bytes(
-            payload.encode("utf-8"),
-            media_type=media_type,
-            kind=kind,
-            git_oid=git_oid,
-            extra=extra_meta or None,
-        )
+        payload, spec = _with_secret_warnings(text, spec)
+        if not isinstance(payload, str):
+            payload = str(payload)
+        return self.put_bytes(payload.encode("utf-8"), spec)
 
-    def put_json(
-        self,
-        value: Any,
-        *,
-        media_type: str = "application/json",
-        kind: str = "json",
-        git_oid: str | None = None,
-        extra: dict[str, Any] | None = None,
-        sanitize: bool = True,
-    ) -> dict[str, Any]:
+    def put_json(self, value: Any, spec: ArtifactSpec | None = None) -> dict[str, Any]:
         """Store a canonical JSON document (sorted keys, compact separators)."""
-        payload: Any = value
-        extra_meta = dict(extra or {})
-        if sanitize:
-            payload, warnings = scan_and_sanitize_obj(payload)
-            if warnings:
-                extra_meta["sanitized"] = True
-                extra_meta["secret_warnings"] = warnings
-        data = canonical_json_bytes(payload)
-        extra_meta["canonical_sha256"] = sha256_json(payload)
-        return self.put_bytes(
-            data,
-            media_type=media_type,
-            kind=kind,
-            git_oid=git_oid,
-            extra=extra_meta or None,
+        spec = spec or ArtifactSpec(media_type="application/json", kind="json")
+        payload, spec = _with_secret_warnings(value, spec)
+        extra = dict(spec.extra or {})
+        extra["canonical_sha256"] = sha256_json(payload)
+        stored = ArtifactSpec(
+            media_type=spec.media_type,
+            kind=spec.kind,
+            git_oid=spec.git_oid,
+            extra=extra,
+            sanitize=spec.sanitize,
         )
+        return self.put_bytes(canonical_json_bytes(payload), stored)
 
     def get_bytes(self, digest: str) -> bytes:
         """Read and verify an object by SHA-256. Raises ``FileNotFoundError`` / ``ValueError``."""

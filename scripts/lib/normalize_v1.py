@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import hashlib
+from dataclasses import dataclass
 from datetime import datetime, timezone
 from typing import Any
 
@@ -14,6 +15,36 @@ from .normalize import extract_patch, extract_validation, outcome_for, resolve_s
 
 V1_SCHEMA_VERSION = "1.0"
 COLLECTION_POLICY = "public-github-read-only"
+
+
+@dataclass
+class V1NormalizeOptions:
+    artifact_store: ContentAddressedStore | None = None
+    max_patch_bytes: int = 96 * 1024
+    source_license: str | None = None
+
+
+@dataclass
+class EventDraft:
+    event_id: str
+    timestamp: str | None
+    actor: dict[str, str]
+    event_type: str
+    code_state: dict[str, str] | None = None
+    evidence: list[str] | None = None
+    disposition: str | None = None
+    content: str | None = None
+
+
+@dataclass
+class EventContext:
+    raw: dict[str, Any]
+    source_id: str
+    pull: dict[str, Any]
+    base_oid: Any
+    head_oid: Any
+    author: dict[str, str]
+    events: list[dict[str, Any]]
 
 
 def _utc(ts: str | None) -> str | None:
@@ -47,29 +78,25 @@ def _event_id(kind: str, source: str, *parts: Any) -> str:
     return kind + ":" + hashlib.sha256(blob.encode("utf-8")).hexdigest()[:16]
 
 
-def _code_state(
-    *,
-    commit_oid: str | None = None,
-    base_oid: str | None = None,
-    head_oid: str | None = None,
-    tree_oid: str | None = None,
-    before_blob: str | None = None,
-    after_blob: str | None = None,
-) -> dict[str, str]:
-    state = {}
-    if commit_oid:
-        state["commit_oid"] = str(commit_oid)
-    if base_oid:
-        state["base_oid"] = str(base_oid)
-    if head_oid:
-        state["head_oid"] = str(head_oid)
-    if tree_oid:
-        state["tree_oid"] = str(tree_oid)
-    if before_blob:
-        state["before_blob"] = str(before_blob)
-    if after_blob:
-        state["after_blob"] = str(after_blob)
+def _code_state(values: dict[str, Any] | None = None) -> dict[str, str]:
+    state: dict[str, str] = {}
+    if not values:
+        return state
+    for key in ("commit_oid", "base_oid", "head_oid", "tree_oid", "before_blob", "after_blob"):
+        val = values.get(key)
+        if val:
+            state[key] = str(val)
     return state
+
+
+def _head_state(ctx: EventContext, commit_oid: Any) -> dict[str, str]:
+    return _code_state(
+        {
+            "commit_oid": commit_oid or ctx.head_oid,
+            "base_oid": ctx.base_oid,
+            "head_oid": commit_oid or ctx.head_oid,
+        }
+    )
 
 
 def _check_disposition(conclusion: str | None, status: str | None) -> str:
@@ -99,40 +126,31 @@ def _terminal_disposition(raw: dict[str, Any]) -> str:
     return "inconclusive"
 
 
-def _blob_map(pack: dict[str, Any] | None) -> dict[str, dict[str, Any]]:
-    out: dict[str, dict[str, Any]] = {}
-    if not isinstance(pack, dict):
-        return out
-    for obj in pack.get("objects") or []:
-        if not isinstance(obj, dict):
-            continue
-        oid = obj.get("git_oid")
-        if isinstance(oid, str) and oid:
-            out[oid] = obj
-    return out
-
-
-def _artifact_from_object(obj: dict[str, Any], index: int) -> dict[str, Any] | None:
+def _present_git_artifact(obj: dict[str, Any], index: int) -> dict[str, Any] | None:
     availability = obj.get("availability") or "missing"
     sha256 = obj.get("sha256")
-    if availability == "present" and isinstance(sha256, str) and len(sha256) == 64:
-        art = {
-            "id": f"obj-{index}",
-            "sha256": sha256,
-            "media_type": obj.get("media_type") or "application/octet-stream",
-            "byte_size": int(obj.get("byte_size") or 0),
-            "availability": "remote" if obj.get("uri") else "inline",
-            "reproduction_role": obj.get("role") or obj.get("kind") or "git_object",
-        }
-        if obj.get("uri"):
-            art["availability"] = "remote"
-            art["uri"] = obj["uri"]
-        return art
+    if availability != "present" or not isinstance(sha256, str) or len(sha256) != 64:
+        return None
+    art = {
+        "id": f"obj-{index}",
+        "sha256": sha256,
+        "media_type": obj.get("media_type") or "application/octet-stream",
+        "byte_size": int(obj.get("byte_size") or 0),
+        "availability": "remote" if obj.get("uri") else "inline",
+        "reproduction_role": obj.get("role") or obj.get("kind") or "git_object",
+    }
+    if obj.get("uri"):
+        art["availability"] = "remote"
+        art["uri"] = obj["uri"]
+    return art
+
+
+def _placeholder_git_artifact(obj: dict[str, Any], index: int) -> dict[str, Any]:
     placeholder = {
         "reason": obj.get("reason") or "missing",
         "git_oid": obj.get("git_oid"),
         "kind": obj.get("kind"),
-        "availability": availability,
+        "availability": obj.get("availability") or "missing",
     }
     encoded = repr(placeholder).encode("utf-8")
     return {
@@ -145,22 +163,28 @@ def _artifact_from_object(obj: dict[str, Any], index: int) -> dict[str, Any] | N
     }
 
 
-def _patch_artifact(raw: dict[str, Any], max_patch_bytes: int) -> tuple[str, dict[str, Any] | None]:
-    patch = extract_patch(raw, max_bytes=max_patch_bytes)
-    diff = raw.get("diff") or {}
-    artifact_meta = diff.get("artifact") if isinstance(diff, dict) else None
-    if isinstance(artifact_meta, dict) and artifact_meta.get("sha256"):
-        art = {
-            "id": "unified-diff",
-            "sha256": artifact_meta["sha256"],
-            "media_type": "text/x-diff",
-            "byte_size": int(artifact_meta.get("byte_size") or len(patch.encode("utf-8"))),
-            "availability": "remote",
-            "reproduction_role": "implementation_patch",
-            "uri": artifact_meta.get("uri") or f"cas://sha256/{artifact_meta['sha256']}",
-        }
-        summary = patch if patch else f"cas://sha256/{artifact_meta['sha256']}"
-        return summary, art
+def _artifact_from_object(obj: dict[str, Any], index: int) -> dict[str, Any]:
+    present = _present_git_artifact(obj, index)
+    if present:
+        return present
+    return _placeholder_git_artifact(obj, index)
+
+
+def _cas_patch_artifact(artifact_meta: dict[str, Any], patch: str) -> tuple[str, dict[str, Any]]:
+    art = {
+        "id": "unified-diff",
+        "sha256": artifact_meta["sha256"],
+        "media_type": "text/x-diff",
+        "byte_size": int(artifact_meta.get("byte_size") or len(patch.encode("utf-8"))),
+        "availability": "remote",
+        "reproduction_role": "implementation_patch",
+        "uri": artifact_meta.get("uri") or f"cas://sha256/{artifact_meta['sha256']}",
+    }
+    summary = patch if patch else f"cas://sha256/{artifact_meta['sha256']}"
+    return summary, art
+
+
+def _inline_patch_artifact(patch: str) -> tuple[str, dict[str, Any] | None]:
     if not patch:
         return "patch not collected", None
     data = patch.encode("utf-8")
@@ -175,24 +199,34 @@ def _patch_artifact(raw: dict[str, Any], max_patch_bytes: int) -> tuple[str, dic
     }
 
 
+def _patch_artifact(raw: dict[str, Any], max_patch_bytes: int) -> tuple[str, dict[str, Any] | None]:
+    patch = extract_patch(raw, max_bytes=max_patch_bytes)
+    diff = raw.get("diff") or {}
+    artifact_meta = diff.get("artifact") if isinstance(diff, dict) else None
+    if isinstance(artifact_meta, dict) and artifact_meta.get("sha256"):
+        return _cas_patch_artifact(artifact_meta, patch)
+    return _inline_patch_artifact(patch)
+
+
+def _text_parts(title: Any, body: Any) -> list[str]:
+    parts: list[str] = []
+    title_text = (title or "").strip()
+    body_text = strip_bot_boilerplate(body or "")
+    if title_text:
+        parts.append(title_text)
+    if body_text:
+        parts.append(body_text)
+    return parts
+
+
 def _issue_statement(raw: dict[str, Any]) -> str:
     linked = raw.get("linked_issues") or []
     parts: list[str] = []
     for issue in linked:
-        title = (issue.get("title") or "").strip()
-        body = strip_bot_boilerplate(issue.get("body") or "")
-        if title:
-            parts.append(title)
-        if body:
-            parts.append(body)
+        parts.extend(_text_parts(issue.get("title"), issue.get("body")))
     pull = raw.get("pull") or {}
     if not parts:
-        title = (pull.get("title") or "").strip()
-        body = strip_bot_boilerplate(pull.get("body") or "")
-        if title:
-            parts.append(title)
-        if body:
-            parts.append(body)
+        parts = _text_parts(pull.get("title"), pull.get("body"))
     text = "\n\n".join(p for p in parts if p).strip()
     return text or (pull.get("title") or "untitled pull request")
 
@@ -223,255 +257,313 @@ def _software_payload(raw: dict[str, Any], patch_text: str) -> dict[str, str]:
     return payload
 
 
-def _append_event(
-    events: list[dict[str, Any]],
-    *,
-    event_id: str,
-    timestamp: str | None,
-    actor: dict[str, str],
-    event_type: str,
-    code_state: dict[str, str] | None = None,
-    evidence: list[str] | None = None,
-    disposition: str | None = None,
-    content: str | None = None,
-) -> None:
-    ts = _utc(timestamp)
+def _append_event(events: list[dict[str, Any]], draft: EventDraft) -> None:
+    ts = _utc(draft.timestamp)
     if not ts:
         return
     event: dict[str, Any] = {
-        "event_id": event_id,
+        "event_id": draft.event_id,
         "timestamp": ts,
-        "actor": actor,
-        "event_type": event_type,
+        "actor": draft.actor,
+        "event_type": draft.event_type,
     }
-    if code_state:
-        event["code_state"] = code_state
-    if evidence:
-        event["evidence_references"] = evidence
-    if disposition:
-        event["disposition"] = disposition
-    if content:
-        event["content"] = content
+    if draft.code_state:
+        event["code_state"] = draft.code_state
+    if draft.evidence:
+        event["evidence_references"] = draft.evidence
+    if draft.disposition:
+        event["disposition"] = draft.disposition
+    if draft.content:
+        event["content"] = draft.content
     events.append(event)
 
 
-def build_v1_events(raw: dict[str, Any], source_id: str) -> list[dict[str, Any]]:
-    """Build chronological v1 events from a raw PR record."""
+def _event_context(raw: dict[str, Any], source_id: str) -> EventContext:
     pull = raw.get("pull") or {}
-    base_oid = pull.get("base_sha")
-    head_oid = pull.get("head_sha")
-    default_state = _code_state(base_oid=base_oid, head_oid=head_oid)
-    author = _actor(pull.get("user_login"), pull.get("user_type"))
-    events: list[dict[str, Any]] = []
-
-    _append_event(
-        events,
-        event_id=_event_id("pr_opened", source_id, pull.get("created_at") or pull.get("title")),
-        timestamp=pull.get("created_at") or pull.get("updated_at") or pull.get("merged_at"),
-        actor=author,
-        event_type="issue_opened" if not pull.get("created_at") else "pr_opened",
-        code_state=default_state,
-        content=pull.get("title") or "",
+    return EventContext(
+        raw=raw,
+        source_id=source_id,
+        pull=pull,
+        base_oid=pull.get("base_sha"),
+        head_oid=pull.get("head_sha"),
+        author=_actor(pull.get("user_login"), pull.get("user_type")),
+        events=[],
     )
 
-    for issue in raw.get("linked_issues") or []:
-        _append_event(
-            events,
-            event_id=_event_id("linked_issue", source_id, issue.get("number")),
-            timestamp=issue.get("created_at") or pull.get("created_at"),
+
+def _add_pr_opened(ctx: EventContext) -> None:
+    pull = ctx.pull
+    created = pull.get("created_at")
+    _append_event(
+        ctx.events,
+        EventDraft(
+            event_id=_event_id("pr_opened", ctx.source_id, created or pull.get("title")),
+            timestamp=created or pull.get("updated_at") or pull.get("merged_at"),
+            actor=ctx.author,
+            event_type="issue_opened" if not created else "pr_opened",
+            code_state=_code_state({"base_oid": ctx.base_oid, "head_oid": ctx.head_oid}),
+            content=pull.get("title") or "",
+        ),
+    )
+
+
+def _add_linked_issue(ctx: EventContext, issue: dict[str, Any]) -> None:
+    evidence = [issue.get("html_url")] if issue.get("html_url") else None
+    _append_event(
+        ctx.events,
+        EventDraft(
+            event_id=_event_id("linked_issue", ctx.source_id, issue.get("number")),
+            timestamp=issue.get("created_at") or ctx.pull.get("created_at"),
             actor=_actor(issue.get("user_login"), issue.get("user_type")),
             event_type="issue_opened",
             content=issue.get("title") or "",
-            evidence=[issue.get("html_url")] if issue.get("html_url") else None,
-        )
-        for comment in issue.get("comments") or []:
-            _append_event(
-                events,
-                event_id=_event_id("issue_comment", source_id, comment.get("id")),
+            evidence=evidence,
+        ),
+    )
+    for comment in issue.get("comments") or []:
+        _append_event(
+            ctx.events,
+            EventDraft(
+                event_id=_event_id("issue_comment", ctx.source_id, comment.get("id")),
                 timestamp=comment.get("created_at"),
                 actor=_actor(comment.get("user_login"), comment.get("user_type")),
                 event_type="issue_comment",
                 content=comment.get("body") or "",
-            )
-
-    for commit in raw.get("commits") or []:
-        _append_event(
-            events,
-            event_id=_event_id("commit", source_id, commit.get("sha")),
-            timestamp=commit.get("date"),
-            actor=_actor(commit.get("author_login"), commit.get("author_type")),
-            event_type="commit",
-            code_state=_code_state(
-                commit_oid=commit.get("sha"),
-                base_oid=base_oid,
-                head_oid=commit.get("sha") or head_oid,
-                tree_oid=commit.get("tree_oid"),
             ),
-            content=commit.get("message") or "",
-            disposition="successful",
         )
 
-    for comment in raw.get("issue_comments") or []:
-        _append_event(
-            events,
-            event_id=_event_id("pr_comment", source_id, comment.get("id")),
-            timestamp=comment.get("created_at"),
-            actor=_actor(comment.get("user_login"), comment.get("user_type")),
-            event_type="issue_comment",
-            code_state=default_state,
-            content=comment.get("body") or "",
-        )
 
-    for review in raw.get("reviews") or []:
-        state = str(review.get("state") or "").upper()
-        if state == "APPROVED":
-            disp = "successful"
-        elif state in {"CHANGES_REQUESTED", "DISMISSED"}:
-            disp = "failed"
-        else:
-            disp = "neutral"
+def _add_opened_events(ctx: EventContext) -> None:
+    _add_pr_opened(ctx)
+    for issue in ctx.raw.get("linked_issues") or []:
+        _add_linked_issue(ctx, issue)
+
+
+def _add_commit_events(ctx: EventContext) -> None:
+    for commit in ctx.raw.get("commits") or []:
         _append_event(
-            events,
-            event_id=_event_id("review", source_id, review.get("id")),
-            timestamp=review.get("submitted_at"),
-            actor=_actor(review.get("user_login"), review.get("user_type")),
-            event_type="review",
-            code_state=_code_state(
-                commit_oid=review.get("commit_id") or head_oid,
-                base_oid=base_oid,
-                head_oid=review.get("commit_id") or head_oid,
+            ctx.events,
+            EventDraft(
+                event_id=_event_id("commit", ctx.source_id, commit.get("sha")),
+                timestamp=commit.get("date"),
+                actor=_actor(commit.get("author_login"), commit.get("author_type")),
+                event_type="commit",
+                code_state=_code_state(
+                    {
+                        "commit_oid": commit.get("sha"),
+                        "base_oid": ctx.base_oid,
+                        "head_oid": commit.get("sha") or ctx.head_oid,
+                        "tree_oid": commit.get("tree_oid"),
+                    }
+                ),
+                content=commit.get("message") or "",
+                disposition="successful",
             ),
-            content=review.get("body") or "",
-            disposition=disp,
-            evidence=[review.get("html_url")] if review.get("html_url") else None,
         )
 
-    for comment in raw.get("review_comments") or []:
-        refs = []
-        if comment.get("html_url"):
-            refs.append(comment["html_url"])
-        if comment.get("in_reply_to_id"):
-            refs.append(f"in_reply_to:{comment['in_reply_to_id']}")
-        hunk = comment.get("diff_hunk") or ""
-        body = comment.get("body") or ""
-        content = body
-        if hunk:
-            content = f"{hunk}\n\n{body}".strip()
-        loc = f"{comment.get('path')}:{comment.get('line') or comment.get('original_line')}"
+
+def _add_pr_comment_events(ctx: EventContext) -> None:
+    default_state = _code_state({"base_oid": ctx.base_oid, "head_oid": ctx.head_oid})
+    for comment in ctx.raw.get("issue_comments") or []:
         _append_event(
-            events,
-            event_id=_event_id("review_comment", source_id, comment.get("id")),
-            timestamp=comment.get("created_at"),
-            actor=_actor(comment.get("user_login"), comment.get("user_type")),
-            event_type="review_comment",
-            code_state=_code_state(
-                commit_oid=comment.get("commit_id") or comment.get("original_commit_id") or head_oid,
-                base_oid=base_oid,
-                head_oid=comment.get("commit_id") or head_oid,
+            ctx.events,
+            EventDraft(
+                event_id=_event_id("pr_comment", ctx.source_id, comment.get("id")),
+                timestamp=comment.get("created_at"),
+                actor=_actor(comment.get("user_login"), comment.get("user_type")),
+                event_type="issue_comment",
+                code_state=default_state,
+                content=comment.get("body") or "",
             ),
-            content=f"{loc}\n{content}".strip(),
-            evidence=refs or None,
         )
 
-    checks = raw.get("checks") or {}
+
+def _review_disposition(state: str) -> str:
+    upper = state.upper()
+    if upper == "APPROVED":
+        return "successful"
+    if upper in {"CHANGES_REQUESTED", "DISMISSED"}:
+        return "failed"
+    return "neutral"
+
+
+def _add_review_events(ctx: EventContext) -> None:
+    for review in ctx.raw.get("reviews") or []:
+        evidence = [review.get("html_url")] if review.get("html_url") else None
+        _append_event(
+            ctx.events,
+            EventDraft(
+                event_id=_event_id("review", ctx.source_id, review.get("id")),
+                timestamp=review.get("submitted_at"),
+                actor=_actor(review.get("user_login"), review.get("user_type")),
+                event_type="review",
+                code_state=_head_state(ctx, review.get("commit_id")),
+                content=review.get("body") or "",
+                disposition=_review_disposition(str(review.get("state") or "")),
+                evidence=evidence,
+            ),
+        )
+
+
+def _review_comment_body(comment: dict[str, Any]) -> tuple[str, list[str] | None]:
+    refs: list[str] = []
+    if comment.get("html_url"):
+        refs.append(comment["html_url"])
+    if comment.get("in_reply_to_id"):
+        refs.append(f"in_reply_to:{comment['in_reply_to_id']}")
+    hunk = comment.get("diff_hunk") or ""
+    body = comment.get("body") or ""
+    content = f"{hunk}\n\n{body}".strip() if hunk else body
+    loc = f"{comment.get('path')}:{comment.get('line') or comment.get('original_line')}"
+    return f"{loc}\n{content}".strip(), refs or None
+
+
+def _add_review_comment_events(ctx: EventContext) -> None:
+    for comment in ctx.raw.get("review_comments") or []:
+        content, refs = _review_comment_body(comment)
+        oid = comment.get("commit_id") or comment.get("original_commit_id")
+        _append_event(
+            ctx.events,
+            EventDraft(
+                event_id=_event_id("review_comment", ctx.source_id, comment.get("id")),
+                timestamp=comment.get("created_at"),
+                actor=_actor(comment.get("user_login"), comment.get("user_type")),
+                event_type="review_comment",
+                code_state=_code_state(
+                    {
+                        "commit_oid": oid or ctx.head_oid,
+                        "base_oid": ctx.base_oid,
+                        "head_oid": comment.get("commit_id") or ctx.head_oid,
+                    }
+                ),
+                content=content,
+                evidence=refs,
+            ),
+        )
+
+
+def _add_check_run_events(ctx: EventContext) -> None:
+    checks = ctx.raw.get("checks") or {}
     for run in checks.get("check_runs") or []:
-        ts = run.get("completed_at") or run.get("started_at") or pull.get("merged_at")
+        ts = run.get("completed_at") or run.get("started_at") or ctx.pull.get("merged_at")
+        evidence = [run.get("html_url")] if run.get("html_url") else None
         _append_event(
-            events,
-            event_id=_event_id("check_run", source_id, run.get("id") or run.get("name")),
-            timestamp=ts,
-            actor=_actor(run.get("app_slug") or "github-actions", "Bot"),
-            event_type="check_run",
-            code_state=_code_state(
-                commit_oid=run.get("head_sha") or head_oid,
-                base_oid=base_oid,
-                head_oid=run.get("head_sha") or head_oid,
+            ctx.events,
+            EventDraft(
+                event_id=_event_id("check_run", ctx.source_id, run.get("id") or run.get("name")),
+                timestamp=ts,
+                actor=_actor(run.get("app_slug") or "github-actions", "Bot"),
+                event_type="check_run",
+                code_state=_head_state(ctx, run.get("head_sha")),
+                content=f"{run.get('name')} {run.get('status')} {run.get('conclusion')}",
+                disposition=_check_disposition(run.get("conclusion"), run.get("status")),
+                evidence=evidence,
             ),
-            content=f"{run.get('name')} {run.get('status')} {run.get('conclusion')}",
-            disposition=_check_disposition(run.get("conclusion"), run.get("status")),
-            evidence=[run.get("html_url")] if run.get("html_url") else None,
         )
+
+
+def _add_check_suite_events(ctx: EventContext) -> None:
+    checks = ctx.raw.get("checks") or {}
     for suite in checks.get("check_suites") or []:
-        ts = suite.get("updated_at") or suite.get("created_at") or pull.get("merged_at")
+        ts = suite.get("updated_at") or suite.get("created_at") or ctx.pull.get("merged_at")
         _append_event(
-            events,
-            event_id=_event_id("check_suite", source_id, suite.get("id")),
-            timestamp=ts,
-            actor=_actor(suite.get("app_slug") or "github-actions", "Bot"),
-            event_type="check_suite",
-            code_state=_code_state(
-                commit_oid=suite.get("head_sha") or head_oid,
-                base_oid=base_oid,
-                head_oid=suite.get("head_sha") or head_oid,
+            ctx.events,
+            EventDraft(
+                event_id=_event_id("check_suite", ctx.source_id, suite.get("id")),
+                timestamp=ts,
+                actor=_actor(suite.get("app_slug") or "github-actions", "Bot"),
+                event_type="check_suite",
+                code_state=_head_state(ctx, suite.get("head_sha")),
+                content=f"{suite.get('app_slug')} {suite.get('status')} {suite.get('conclusion')}",
+                disposition=_check_disposition(suite.get("conclusion"), suite.get("status")),
             ),
-            content=f"{suite.get('app_slug')} {suite.get('status')} {suite.get('conclusion')}",
-            disposition=_check_disposition(suite.get("conclusion"), suite.get("status")),
         )
+
+
+def _add_commit_status_events(ctx: EventContext) -> None:
+    checks = ctx.raw.get("checks") or {}
     for status in checks.get("commit_statuses") or []:
         _append_event(
-            events,
-            event_id=_event_id("commit_status", source_id, status.get("id") or status.get("context")),
-            timestamp=status.get("updated_at") or status.get("created_at"),
-            actor=_actor("github-status", "application"),
-            event_type="commit_status",
-            code_state=_code_state(
-                commit_oid=status.get("sha") or head_oid,
-                base_oid=base_oid,
-                head_oid=status.get("sha") or head_oid,
+            ctx.events,
+            EventDraft(
+                event_id=_event_id("commit_status", ctx.source_id, status.get("id") or status.get("context")),
+                timestamp=status.get("updated_at") or status.get("created_at"),
+                actor=_actor("github-status", "application"),
+                event_type="commit_status",
+                code_state=_head_state(ctx, status.get("sha")),
+                content=f"{status.get('context')}={status.get('state')}",
+                disposition=_check_disposition(status.get("state"), None),
             ),
-            content=f"{status.get('context')}={status.get('state')}",
-            disposition=_check_disposition(status.get("state"), None),
         )
 
-    for event in raw.get("timeline") or []:
+
+def _add_check_events(ctx: EventContext) -> None:
+    _add_check_run_events(ctx)
+    _add_check_suite_events(ctx)
+    _add_commit_status_events(ctx)
+
+
+def _add_timeline_events(ctx: EventContext) -> None:
+    for event in ctx.raw.get("timeline") or []:
         ev = str(event.get("event") or "timeline")
         _append_event(
-            events,
-            event_id=_event_id("timeline", source_id, event.get("id"), ev),
-            timestamp=event.get("created_at"),
-            actor=_actor(event.get("actor_login"), event.get("actor_type")),
-            event_type=f"timeline_{ev}",
-            code_state=_code_state(
-                commit_oid=event.get("commit_id") or head_oid,
-                base_oid=base_oid,
-                head_oid=event.get("commit_id") or head_oid,
+            ctx.events,
+            EventDraft(
+                event_id=_event_id("timeline", ctx.source_id, event.get("id"), ev),
+                timestamp=event.get("created_at"),
+                actor=_actor(event.get("actor_login"), event.get("actor_type")),
+                event_type=f"timeline_{ev}",
+                code_state=_head_state(ctx, event.get("commit_id")),
+                content=event.get("body") or ev,
+                disposition="successful" if ev in {"merged", "closed"} else None,
             ),
-            content=event.get("body") or ev,
-            disposition="successful" if ev in {"merged", "closed"} else None,
         )
 
-    merge = raw.get("merge_state") or {}
+
+def _add_terminal_events(ctx: EventContext) -> None:
+    merge = ctx.raw.get("merge_state") or {}
+    pull = ctx.pull
     if merge.get("merged") and pull.get("merged_at"):
         _append_event(
-            events,
-            event_id=_event_id("merged", source_id, pull.get("merged_at")),
-            timestamp=pull.get("merged_at"),
-            actor=author,
-            event_type="merged",
-            code_state=_code_state(
-                commit_oid=pull.get("merge_commit_sha") or head_oid,
-                base_oid=base_oid,
-                head_oid=head_oid,
+            ctx.events,
+            EventDraft(
+                event_id=_event_id("merged", ctx.source_id, pull.get("merged_at")),
+                timestamp=pull.get("merged_at"),
+                actor=ctx.author,
+                event_type="merged",
+                code_state=_code_state(
+                    {
+                        "commit_oid": pull.get("merge_commit_sha") or ctx.head_oid,
+                        "base_oid": ctx.base_oid,
+                        "head_oid": ctx.head_oid,
+                    }
+                ),
+                disposition="reverted" if merge.get("reverted") else "successful",
             ),
-            disposition="reverted" if merge.get("reverted") else "successful",
         )
-    elif pull.get("closed_at") and not merge.get("merged"):
+        return
+    if pull.get("closed_at") and not merge.get("merged"):
         _append_event(
-            events,
-            event_id=_event_id("closed", source_id, pull.get("closed_at")),
-            timestamp=pull.get("closed_at"),
-            actor=author,
-            event_type="closed",
-            code_state=default_state,
-            disposition="failed",
+            ctx.events,
+            EventDraft(
+                event_id=_event_id("closed", ctx.source_id, pull.get("closed_at")),
+                timestamp=pull.get("closed_at"),
+                actor=ctx.author,
+                event_type="closed",
+                code_state=_code_state({"base_oid": ctx.base_oid, "head_oid": ctx.head_oid}),
+                disposition="failed",
+            ),
         )
 
-    events.sort(key=lambda e: (
-        e["timestamp"],
-        99 if e["event_type"] in {"merged", "closed"} else 50,
-        e["event_id"],
-    ))
-    # Deduplicate identical event_ids (resume-safe, deterministic).
+
+def _sort_unique_events(events: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    events.sort(
+        key=lambda e: (
+            e["timestamp"],
+            99 if e["event_type"] in {"merged", "closed"} else 50,
+            e["event_id"],
+        )
+    )
     uniq: list[dict[str, Any]] = []
     seen: set[str] = set()
     for event in events:
@@ -482,41 +574,143 @@ def build_v1_events(raw: dict[str, Any], source_id: str) -> list[dict[str, Any]]
     return uniq
 
 
-def _evidence_quality(raw: dict[str, Any], events: list[dict[str, Any]]) -> dict[str, float]:
-    pack = raw.get("snapshots") or {}
-    complete = bool(pack.get("complete")) if isinstance(pack, dict) else False
-    warnings = (raw.get("collection_meta") or {}).get("warnings") or []
-    n_events = len(events)
+def build_v1_events(raw: dict[str, Any], source_id: str) -> list[dict[str, Any]]:
+    """Build chronological v1 events from a raw PR record."""
+    ctx = _event_context(raw, source_id)
+    _add_opened_events(ctx)
+    _add_commit_events(ctx)
+    _add_pr_comment_events(ctx)
+    _add_review_events(ctx)
+    _add_review_comment_events(ctx)
+    _add_check_events(ctx)
+    _add_timeline_events(ctx)
+    _add_terminal_events(ctx)
+    return _sort_unique_events(ctx.events)
+
+
+def _completeness_score(n_events: int, pack: dict[str, Any], warnings: list[Any]) -> float:
     completeness = 0.4
     if n_events >= 3:
         completeness = 0.7
-    if complete:
+    if pack.get("complete"):
         completeness = 1.0
     elif pack.get("quarantine"):
         completeness = min(completeness, 0.5)
     if warnings:
         completeness = min(completeness, 0.8)
+    return completeness
+
+
+def _evidence_quality(raw: dict[str, Any], events: list[dict[str, Any]]) -> dict[str, float]:
+    pack = raw.get("snapshots") or {}
+    if not isinstance(pack, dict):
+        pack = {}
+    warnings = (raw.get("collection_meta") or {}).get("warnings") or []
     has_review = any(e.get("event_type") in {"review", "review_comment"} for e in events)
     has_check = any(e.get("event_type") in {"check_run", "check_suite"} for e in events)
     snr = 0.5 + (0.2 if has_review else 0.0) + (0.2 if has_check else 0.0)
-    repro = 1.0 if complete else (0.4 if pack else 0.2)
+    repro = 1.0 if pack.get("complete") else (0.4 if pack else 0.2)
     return {
         "signal_to_noise": round(min(1.0, snr), 3),
         "reproducibility": round(repro, 3),
-        "completeness": round(completeness, 3),
+        "completeness": round(_completeness_score(len(events), pack, warnings), 3),
     }
+
+
+def _ensure_min_event(ctx: EventContext) -> None:
+    if ctx.events:
+        return
+    pull = ctx.pull
+    _append_event(
+        ctx.events,
+        EventDraft(
+            event_id=_event_id("pr_opened", ctx.source_id, (ctx.raw.get("source") or {}).get("pr_number")),
+            timestamp="1970-01-01T00:00:00Z",
+            actor=_actor(pull.get("user_login"), pull.get("user_type")),
+            event_type="pr_opened",
+            code_state=_code_state({"base_oid": pull.get("base_sha"), "head_oid": pull.get("head_sha")}),
+            content=pull.get("title") or "undated pull request",
+            disposition="inconclusive",
+        ),
+    )
+
+
+def _pack_store_artifact(pack: dict[str, Any], store: ContentAddressedStore | None) -> dict[str, Any] | None:
+    if store is None or not pack.get("pack_sha256"):
+        return None
+    digest = pack["pack_sha256"]
+    if not store.exists(digest):
+        return None
+    return {
+        "id": "object-pack",
+        "sha256": digest,
+        "media_type": "application/json",
+        "byte_size": len(store.get_bytes(digest)),
+        "availability": "remote",
+        "reproduction_role": "object_pack",
+        "uri": store.uri(digest),
+    }
+
+
+def _assemble_artifacts(
+    raw: dict[str, Any],
+    patch_art: dict[str, Any] | None,
+    store: ContentAddressedStore | None,
+) -> list[dict[str, Any]]:
+    artifacts: list[dict[str, Any]] = []
+    if patch_art:
+        artifacts.append(patch_art)
+    pack = raw.get("snapshots") or {}
+    objects = pack.get("objects") or [] if isinstance(pack, dict) else []
+    for index, obj in enumerate(objects):
+        artifacts.append(_artifact_from_object(obj, index))
+    pack_art = _pack_store_artifact(pack if isinstance(pack, dict) else {}, store)
+    if pack_art:
+        artifacts.append(pack_art)
+    return artifacts
+
+
+def _task_family(card: dict[str, Any]) -> str:
+    task_family = str(card.get("trajectory_type") or "software")
+    if task_family not in {"software", "research"}:
+        return "software"
+    return task_family
+
+
+def _typed_payloads(raw: dict[str, Any], patch_text: str, task_family: str) -> dict[str, Any]:
+    if task_family == "research":
+        pull = raw.get("pull") or {}
+        return {
+            "research_payload": {
+                "hypothesis": _issue_statement(raw),
+                "initial_state": str(pull.get("base_sha") or "unknown"),
+                "plan": strip_bot_boilerplate(pull.get("body") or "") or pull.get("title") or "unspecified",
+                "measurements": _validation_outcome(raw),
+            }
+        }
+    return {"software_payload": _software_payload(raw, patch_text)}
+
+
+def _lineage(raw: dict[str, Any], source_id: str) -> dict[str, list[str]]:
+    lineage: dict[str, list[str]] = {
+        "supersedes": [],
+        "reverts": [],
+        "multi_pr_links": [],
+    }
+    merge = raw.get("merge_state") or {}
+    if merge.get("reverted"):
+        lineage["reverts"] = [source_id]
+    return lineage
 
 
 def normalize_record_v1(
     raw: dict[str, Any],
     card: dict[str, Any] | None = None,
-    *,
-    artifact_store: ContentAddressedStore | None = None,
-    max_patch_bytes: int = 96 * 1024,
-    source_license: str | None = None,
+    options: V1NormalizeOptions | None = None,
 ) -> dict[str, Any]:
     """Build a schema-v1 trajectory from a raw PR record."""
     card = card or {}
+    opts = options or V1NormalizeOptions()
     source = raw.get("source") or {}
     repo = str(source.get("repo") or card.get("source_repo") or "unknown/unknown")
     pr = int(source.get("pr_number") or 0)
@@ -524,50 +718,16 @@ def normalize_record_v1(
     traj_id = f"{owner}-{name}-{pr}"
     source_id = source.get("html_url") or f"https://github.com/{owner}/{name}/pull/{pr}"
     pull = raw.get("pull") or {}
-    license_id = source_license or resolve_source_license(source, card)
+    license_id = opts.source_license or resolve_source_license(source, card)
 
-    patch_text, patch_art = _patch_artifact(raw, max_patch_bytes)
+    patch_text, patch_art = _patch_artifact(raw, opts.max_patch_bytes)
     events = build_v1_events(raw, source_id)
     if not events:
-        # Frozen raw records without timestamps still need one event for schema minItems.
-        _append_event(
-            events,
-            event_id=_event_id("pr_opened", source_id, pr),
-            timestamp="1970-01-01T00:00:00Z",
-            actor=_actor(pull.get("user_login"), pull.get("user_type")),
-            event_type="pr_opened",
-            code_state=_code_state(base_oid=pull.get("base_sha"), head_oid=pull.get("head_sha")),
-            content=pull.get("title") or "undated pull request",
-            disposition="inconclusive",
-        )
+        ctx = _event_context(raw, source_id)
+        ctx.events = events
+        _ensure_min_event(ctx)
 
-    artifacts: list[dict[str, Any]] = []
-    if patch_art:
-        artifacts.append(patch_art)
-    pack = raw.get("snapshots") or {}
-    for index, obj in enumerate(pack.get("objects") or [] if isinstance(pack, dict) else []):
-        art = _artifact_from_object(obj, index)
-        if art:
-            artifacts.append(art)
-    if artifact_store is not None and isinstance(pack, dict) and pack.get("pack_sha256"):
-        if artifact_store.exists(pack["pack_sha256"]):
-            artifacts.append(
-                {
-                    "id": "object-pack",
-                    "sha256": pack["pack_sha256"],
-                    "media_type": "application/json",
-                    "byte_size": len(artifact_store.get_bytes(pack["pack_sha256"])),
-                    "availability": "remote",
-                    "reproduction_role": "object_pack",
-                    "uri": artifact_store.uri(pack["pack_sha256"]),
-                }
-            )
-
-    task_family = str(card.get("trajectory_type") or "software")
-    if task_family not in {"software", "research"}:
-        task_family = "software"
-
-    terminal = _terminal_disposition(raw)
+    task_family = _task_family(card)
     record: dict[str, Any] = {
         "schema_version": V1_SCHEMA_VERSION,
         "trajectory_id": traj_id,
@@ -587,27 +747,11 @@ def normalize_record_v1(
         "provenance": source_id,
         "collection_policy": COLLECTION_POLICY,
         "takedown_state": "active",
-        "terminal_disposition": terminal,
+        "terminal_disposition": _terminal_disposition(raw),
         "evidence_quality": _evidence_quality(raw, events),
         "events": events,
-        "artifacts": artifacts,
-        "software_payload": _software_payload(raw, patch_text),
+        "artifacts": _assemble_artifacts(raw, patch_art, opts.artifact_store),
+        "lineage": _lineage(raw, source_id),
     }
-    if task_family == "research":
-        record.pop("software_payload")
-        record["research_payload"] = {
-            "hypothesis": _issue_statement(raw),
-            "initial_state": str(pull.get("base_sha") or "unknown"),
-            "plan": strip_bot_boilerplate(pull.get("body") or "") or pull.get("title") or "unspecified",
-            "measurements": _validation_outcome(raw),
-        }
-    lineage = {
-        "supersedes": [],
-        "reverts": [],
-        "multi_pr_links": [],
-    }
-    merge = raw.get("merge_state") or {}
-    if merge.get("reverted"):
-        lineage["reverts"] = [source_id]
-    record["lineage"] = lineage
+    record.update(_typed_payloads(raw, patch_text, task_family))
     return record

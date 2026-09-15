@@ -23,7 +23,14 @@ import json
 import logging
 import re
 import sys
+from dataclasses import dataclass
 from pathlib import Path
+from typing import Any
+
+try:
+    import jsonschema
+except ImportError:  # pragma: no cover - exercised by missing-dep startup path
+    jsonschema = None  # type: ignore[assignment]
 
 # Safe dataset id for deriving datasets/jsonl/<name>.jsonl (no path separators).
 _SAFE_CARD_NAME = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$")
@@ -39,7 +46,7 @@ from lib.normalize import (  # noqa: E402
     normalize_record,
     resolve_source_license,
 )
-from lib.normalize_v1 import normalize_record_v1  # noqa: E402
+from lib.normalize_v1 import V1NormalizeOptions, normalize_record_v1  # noqa: E402
 from lib.paths import resolve_artifact_store_dir  # noqa: E402
 
 logging.basicConfig(level=logging.INFO, format="%(levelname)s: %(message)s")
@@ -49,6 +56,20 @@ ROOT = Path(__file__).resolve().parent.parent
 SCHEMA_V0_PATH = ROOT / "schemas" / "pr_trajectory.schema.json"
 SCHEMA_V1_PATH = ROOT / "schemas" / "trajectory_v1.schema.json"
 V1_ALIASES = {"v1", "1", "1.0"}
+V0_ALIASES = {"v0", "0", "0.1"}
+
+
+@dataclass
+class EmitJob:
+    raw_dir: Path
+    card: dict[str, Any]
+    out_path: Path
+    emit_v1: bool
+    store: ContentAddressedStore | None
+    max_patch_bytes: int
+    pr_filter: set[int] | None
+    validator: Any
+    strict: bool
 
 
 def build_parser() -> argparse.ArgumentParser:
@@ -115,155 +136,208 @@ def _parse_prs(values: list[str] | None) -> set[int] | None:
     return out
 
 
-def _validate(record: dict, validator) -> list[str]:
+def _validate(record: dict, validator: Any) -> list[str]:
     if validator is None:
         return ["jsonschema not installed"]
     return [e.message for e in sorted(validator.iter_errors(record), key=lambda e: list(e.path))]
 
 
-def main(argv: list[str] | None = None) -> int:
-    args = build_parser().parse_args(argv)
-    raw_dir: Path = args.raw_dir
-    if not raw_dir.is_dir():
-        logger.error("raw-dir not found: %s", raw_dir)
-        return 2
+def _schema_choice(version: str) -> tuple[bool, Path] | None:
+    schema_version = str(version or "v0").strip().lower()
+    if schema_version in V1_ALIASES:
+        return True, SCHEMA_V1_PATH
+    if schema_version in V0_ALIASES:
+        return False, SCHEMA_V0_PATH
+    return None
 
-    schema_version = str(args.schema_version or "v0").strip().lower()
-    emit_v1 = schema_version in V1_ALIASES
-    if schema_version not in {"v0", "0", "0.1", *V1_ALIASES}:
-        logger.error("Unknown --schema-version %s (expected v0 or v1)", args.schema_version)
-        return 2
-    schema_path = SCHEMA_V1_PATH if emit_v1 else SCHEMA_V0_PATH
 
-    # Load schema once; missing jsonschema is a hard startup failure (avoid silent skips).
-    try:
-        import jsonschema
-        schema = json.loads(schema_path.read_text(encoding="utf-8"))
-        validator = jsonschema.Draft7Validator(schema)
-    except ImportError:
+def _load_validator(schema_path: Path) -> Any | None:
+    if jsonschema is None:
         logger.error("jsonschema is required. Install with: pip install jsonschema")
-        return 2
+        return None
+    schema = json.loads(schema_path.read_text(encoding="utf-8"))
+    return jsonschema.Draft7Validator(schema)
 
+
+def _derived_out_path(card: dict[str, Any]) -> Path | None:
+    card_name = card.get("name") if isinstance(card, dict) else None
+    name = str(card_name).strip() if card_name is not None else ""
+    if name and _SAFE_CARD_NAME.fullmatch(name) and ".." not in name:
+        return ROOT / "datasets" / "jsonl" / f"{name}.jsonl"
+    if name:
+        logger.error(
+            "Card name %r is not a safe dataset id (must match %s). "
+            "Pass --out explicitly.",
+            name,
+            _SAFE_CARD_NAME.pattern,
+        )
+        return None
+    logger.error(
+        "Refusing to write without --out (or a --card with a safe name field). "
+        "This prevents overwriting curated JSONL by accident."
+    )
+    return None
+
+
+def _load_card_or_fail(path: Path | None) -> dict[str, Any] | None:
     try:
-        card = load_card(args.card)
+        return load_card(path)
     except FileNotFoundError as exc:
         logger.error("%s", exc)
-        return 2
+        return None
     except (OSError, json.JSONDecodeError) as exc:
-        logger.error("Failed to load card %s: %s", args.card, exc)
-        return 2
-    out_path: Path | None = args.out
-    if out_path is None:
-        # Derive from card name when possible; never silently default to corinth-canal.
-        card_name = card.get("name") if isinstance(card, dict) else None
-        name = str(card_name).strip() if card_name is not None else ""
-        if name and _SAFE_CARD_NAME.fullmatch(name) and ".." not in name:
-            out_path = ROOT / "datasets" / "jsonl" / f"{name}.jsonl"
-        else:
-            if name:
-                logger.error(
-                    "Card name %r is not a safe dataset id (must match %s). "
-                    "Pass --out explicitly.",
-                    name,
-                    _SAFE_CARD_NAME.pattern,
-                )
-            else:
-                logger.error(
-                    "Refusing to write without --out (or a --card with a safe name field). "
-                    "This prevents overwriting curated JSONL by accident."
-                )
-            return 2
-    try:
-        pr_filter = _parse_prs(args.pr)
-    except ValueError as exc:
-        logger.error("Invalid --pr value: %s", exc)
-        return 2
-    paths = sorted(raw_dir.glob("pr-*.json"))
-    if not paths:
-        logger.error("No pr-*.json files in %s", raw_dir)
-        return 1
+        logger.error("Failed to load card %s: %s", path, exc)
+        return None
 
-    store = None
+
+def _normalize_one(raw: dict[str, Any], path: Path, job: EmitJob) -> dict[str, Any]:
+    source_license = resolve_source_license(raw.get("source") or {}, job.card)
+    if job.emit_v1:
+        return normalize_record_v1(
+            raw,
+            job.card,
+            V1NormalizeOptions(
+                artifact_store=job.store,
+                max_patch_bytes=job.max_patch_bytes,
+                source_license=source_license,
+            ),
+        )
+    return normalize_record(
+        raw,
+        job.card,
+        raw_path=path,
+        max_patch_bytes=job.max_patch_bytes,
+        source_license=source_license,
+    )
+
+
+def _dump_trajectory(traj: dict[str, Any], emit_v1: bool) -> str:
+    dump_kwargs: dict = {"ensure_ascii": False, "separators": (",", ":")}
     if emit_v1:
-        store = ContentAddressedStore(resolve_artifact_store_dir(args.artifact_store))
+        dump_kwargs["sort_keys"] = True
+    return json.dumps(traj, **dump_kwargs)
 
+
+def _log_ok(path_name: str, traj: dict[str, Any], emit_v1: bool) -> None:
+    if emit_v1:
+        logger.info(
+            "OK %s (v1 disposition=%s events=%s)",
+            path_name,
+            traj.get("terminal_disposition"),
+            len(traj.get("events") or []),
+        )
+        return
+    logger.info(
+        "OK %s (quality=%.2f training_use=%s)",
+        path_name,
+        traj.get("quality_score", 0),
+        traj.get("training_use"),
+    )
+
+
+def _emit_one(path: Path, job: EmitJob) -> str | None:
+    raw = load_raw_record(path)
+    pr = int((raw.get("source") or {}).get("pr_number") or 0)
+    if job.pr_filter is not None and pr not in job.pr_filter:
+        return None
+    traj = _normalize_one(raw, path, job)
+    schema_errors = _validate(traj, job.validator)
+    if schema_errors:
+        logger.error("%s schema errors:", path.name)
+        for err in schema_errors:
+            logger.error("  - %s", err)
+        raise ValueError("schema validation failed")
+    _log_ok(path.name, traj, job.emit_v1)
+    return _dump_trajectory(traj, job.emit_v1)
+
+
+def _emit_all(job: EmitJob) -> tuple[list[str], int]:
+    paths = sorted(job.raw_dir.glob("pr-*.json"))
+    if not paths:
+        logger.error("No pr-*.json files in %s", job.raw_dir)
+        return [], 1
     lines: list[str] = []
     errors = 0
     for path in paths:
         try:
-            raw = load_raw_record(path)
-            pr = int((raw.get("source") or {}).get("pr_number") or 0)
-            if pr_filter is not None and pr not in pr_filter:
-                continue
-            source_license = resolve_source_license(raw.get("source") or {}, card)
-            if emit_v1:
-                traj = normalize_record_v1(
-                    raw,
-                    card,
-                    artifact_store=store,
-                    max_patch_bytes=args.max_patch_bytes,
-                    source_license=source_license,
-                )
-            else:
-                traj = normalize_record(
-                    raw,
-                    card,
-                    raw_path=path,
-                    max_patch_bytes=args.max_patch_bytes,
-                    source_license=source_license,
-                )
-            schema_errors = _validate(traj, validator)
-            if schema_errors:
-                errors += 1
-                logger.error("%s schema errors:", path.name)
-                for err in schema_errors:
-                    logger.error("  - %s", err)
-                if args.strict:
-                    return 1
-                continue
-            dump_kwargs: dict = {"ensure_ascii": False, "separators": (",", ":")}
-            if emit_v1:
-                dump_kwargs["sort_keys"] = True
-            lines.append(json.dumps(traj, **dump_kwargs))
-            if emit_v1:
-                logger.info(
-                    "OK %s (v1 disposition=%s events=%s)",
-                    path.name,
-                    traj.get("terminal_disposition"),
-                    len(traj.get("events") or []),
-                )
-            else:
-                logger.info(
-                    "OK %s (quality=%.2f training_use=%s)",
-                    path.name,
-                    traj.get("quality_score", 0),
-                    traj.get("training_use"),
-                )
+            line = _emit_one(path, job)
         except Exception as exc:
             errors += 1
-            logger.error("Failed %s: %s", path.name, exc)
-            if args.strict:
-                return 1
+            if not isinstance(exc, ValueError) or str(exc) != "schema validation failed":
+                logger.error("Failed %s: %s", path.name, exc)
+            if job.strict:
+                return [], 1
+            continue
+        if line is not None:
+            lines.append(line)
+    return lines, errors
 
-    if not lines:
-        logger.error("No trajectories produced")
-        return 1
 
-    # Never overwrite a curated JSONL with a partial batch after errors.
-    if errors:
-        logger.error(
-            "Aborting write: %s record error(s); leaving %s unchanged",
-            errors,
-            out_path,
-        )
-        return 1
-
-    assert out_path is not None
+def _write_jsonl(out_path: Path, lines: list[str]) -> None:
     out_path.parent.mkdir(parents=True, exist_ok=True)
     tmp_path = out_path.with_suffix(out_path.suffix + ".tmp")
     tmp_path.write_text("\n".join(lines) + "\n", encoding="utf-8")
     tmp_path.replace(out_path)
     logger.info("Wrote %s trajectories → %s", len(lines), out_path)
+
+
+def _build_job(args: argparse.Namespace) -> EmitJob | None:
+    raw_dir: Path = args.raw_dir
+    if not raw_dir.is_dir():
+        logger.error("raw-dir not found: %s", raw_dir)
+        return None
+    choice = _schema_choice(args.schema_version)
+    if choice is None:
+        logger.error("Unknown --schema-version %s (expected v0 or v1)", args.schema_version)
+        return None
+    emit_v1, schema_path = choice
+    validator = _load_validator(schema_path)
+    if validator is None:
+        return None
+    card = _load_card_or_fail(args.card)
+    if card is None:
+        return None
+    out_path: Path | None = args.out or _derived_out_path(card)
+    if out_path is None:
+        return None
+    try:
+        pr_filter = _parse_prs(args.pr)
+    except ValueError as exc:
+        logger.error("Invalid --pr value: %s", exc)
+        return None
+    store = ContentAddressedStore(resolve_artifact_store_dir(args.artifact_store)) if emit_v1 else None
+    return EmitJob(
+        raw_dir=raw_dir,
+        card=card,
+        out_path=out_path,
+        emit_v1=emit_v1,
+        store=store,
+        max_patch_bytes=args.max_patch_bytes,
+        pr_filter=pr_filter,
+        validator=validator,
+        strict=args.strict,
+    )
+
+
+def main(argv: list[str] | None = None) -> int:
+    args = build_parser().parse_args(argv)
+    job = _build_job(args)
+    if job is None:
+        return 2
+    lines, errors = _emit_all(job)
+    if errors and not lines:
+        return 1
+    if not lines:
+        logger.error("No trajectories produced")
+        return 1
+    if errors:
+        logger.error(
+            "Aborting write: %s record error(s); leaving %s unchanged",
+            errors,
+            job.out_path,
+        )
+        return 1
+    _write_jsonl(job.out_path, lines)
     return 0
 
 

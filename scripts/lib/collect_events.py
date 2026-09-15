@@ -24,7 +24,6 @@ def _is_not_found(exc: GitHubError) -> bool:
 def _paginate_wrapped(
     client: GitHubClient,
     first_url: str,
-    *,
     list_key: str,
 ) -> tuple[list[dict[str, Any]], int | None, list[str]]:
     """Paginate a GitHub envelope ``{total_count, <list_key>: [...]}``."""
@@ -51,6 +50,50 @@ def _paginate_wrapped(
     return items, total_count, warnings
 
 
+def _label_name(label: Any) -> Any:
+    if isinstance(label, dict):
+        return label.get("name")
+    return label
+
+
+def _timeline_source_path(event: dict[str, Any]) -> str | None:
+    source = event.get("source")
+    if not isinstance(source, dict):
+        return None
+    issue = source.get("issue")
+    if not isinstance(issue, dict):
+        return None
+    return issue.get("html_url")
+
+
+def _review_source_id(event: dict[str, Any]) -> Any:
+    source = event.get("source")
+    if isinstance(source, dict):
+        return source.get("id")
+    return None
+
+
+def _slim_timeline_event(event: dict[str, Any]) -> dict[str, Any] | None:
+    if not isinstance(event, dict):
+        return None
+    actor = event.get("actor") or event.get("user") or {}
+    actor_dict = actor if isinstance(actor, dict) else None
+    return {
+        "id": event.get("id"),
+        "event": event.get("event") or event.get("event_type"),
+        "created_at": event.get("created_at") or event.get("submitted_at"),
+        "actor_login": _user_login(actor_dict),
+        "actor_type": (actor_dict or {}).get("type") if actor_dict else None,
+        "commit_id": event.get("commit_id") or event.get("sha"),
+        "commit_url": event.get("commit_url"),
+        "label": _label_name(event.get("label")),
+        "state": event.get("state"),
+        "submitted_review_id": _review_source_id(event),
+        "body": event.get("body") or event.get("message") or "",
+        "source_path": _timeline_source_path(event),
+    }
+
+
 def collect_timeline(
     client: GitHubClient,
     full: str,
@@ -61,41 +104,14 @@ def collect_timeline(
     try:
         raw_events = client.get_all(f"/repos/{full}/issues/{pr_number}/timeline")
     except GitHubError as exc:
-        if _is_not_found(exc):
-            warnings.append(f"timeline_unavailable: {exc}")
-            return [], warnings
-        warnings.append(f"timeline_failed: {exc}")
+        prefix = "timeline_unavailable" if _is_not_found(exc) else "timeline_failed"
+        warnings.append(f"{prefix}: {exc}")
         return [], warnings
     slim: list[dict[str, Any]] = []
     for event in raw_events:
-        if not isinstance(event, dict):
-            continue
-        actor = event.get("actor") or event.get("user") or {}
-        slim.append(
-            {
-                "id": event.get("id"),
-                "event": event.get("event") or event.get("event_type"),
-                "created_at": event.get("created_at") or event.get("submitted_at"),
-                "actor_login": _user_login(actor if isinstance(actor, dict) else None),
-                "actor_type": (actor or {}).get("type") if isinstance(actor, dict) else None,
-                "commit_id": event.get("commit_id") or event.get("sha"),
-                "commit_url": event.get("commit_url"),
-                "label": (event.get("label") or {}).get("name")
-                if isinstance(event.get("label"), dict)
-                else event.get("label"),
-                "state": event.get("state"),
-                "submitted_review_id": (event.get("source") or {}).get("id")
-                if isinstance(event.get("source"), dict)
-                else None,
-                "body": event.get("body") or event.get("message") or "",
-                "source_path": (
-                    ((event.get("source") or {}).get("issue") or {}).get("html_url")
-                    if isinstance(event.get("source"), dict)
-                    and isinstance((event.get("source") or {}).get("issue"), dict)
-                    else None
-                ),
-            }
-        )
+        slim_event = _slim_timeline_event(event)
+        if slim_event is not None:
+            slim.append(slim_event)
     return slim, warnings
 
 
@@ -173,6 +189,40 @@ def collect_commit_statuses(
     return [slim_status(s) for s in raw if isinstance(s, dict)], warnings
 
 
+def _commit_revert_markers(commits: list[dict[str, Any]]) -> list[str]:
+    markers: list[str] = []
+    for commit in commits:
+        message = str(commit.get("message") or "")
+        if message.lower().startswith("revert"):
+            markers.append(f"commit:{commit.get('sha')}")
+    return markers
+
+
+def _timeline_revert_markers(timeline: list[dict[str, Any]]) -> list[str]:
+    markers: list[str] = []
+    for event in timeline:
+        ev = str(event.get("event") or "")
+        if ev == "reopened":
+            continue
+        body = str(event.get("body") or "")
+        if ev == "committed" and body.lower().startswith("revert"):
+            markers.append(f"timeline:{event.get('id')}")
+    return markers
+
+
+def _revert_markers(
+    title: str,
+    commits: list[dict[str, Any]],
+    timeline: list[dict[str, Any]],
+) -> list[str]:
+    markers: list[str] = []
+    if title.lower().startswith("revert"):
+        markers.append("title")
+    markers.extend(_commit_revert_markers(commits))
+    markers.extend(_timeline_revert_markers(timeline))
+    return markers
+
+
 def detect_revert_state(
     pull: dict[str, Any],
     commits: list[dict[str, Any]],
@@ -183,20 +233,7 @@ def detect_revert_state(
     merged = bool(pull.get("merged"))
     state = pull.get("state")
     closed = state == "closed" and not merged
-    revert_markers: list[str] = []
-    if title.lower().startswith("revert"):
-        revert_markers.append("title")
-    for commit in commits:
-        message = str(commit.get("message") or "")
-        if message.lower().startswith("revert"):
-            revert_markers.append(f"commit:{commit.get('sha')}")
-    for event in timeline:
-        ev = str(event.get("event") or "")
-        if ev in {"reopened"}:
-            continue
-        body = str(event.get("body") or "")
-        if ev == "committed" and body.lower().startswith("revert"):
-            revert_markers.append(f"timeline:{event.get('id')}")
+    revert_markers = _revert_markers(title, commits, timeline)
     return {
         "merged": merged,
         "merged_at": pull.get("merged_at"),

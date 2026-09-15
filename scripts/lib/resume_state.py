@@ -5,10 +5,15 @@ shard is marked ``complete`` only after its raw record and optional object
 pack have been written and content-hashed.  Crashes or API rate-limit
 failures leave the item in ``pending`` / ``in_progress`` so a later run
 retries it instead of emitting a duplicate or truncated shard.
+
+``save()`` takes a POSIX ``fcntl`` exclusive lock so a second process cannot
+interleave a read-modify-write of the same file.  Inventory collection is
+still documented as single-process; the lock is belt-and-suspenders.
 """
 
 from __future__ import annotations
 
+import fcntl
 import json
 from datetime import datetime, timezone
 from pathlib import Path
@@ -20,10 +25,27 @@ SCHEMA_VERSION = "collector_resume_v1"
 VALID_STATUSES = frozenset(
     {"pending", "in_progress", "complete", "failed", "quarantined"}
 )
+_FINGERPRINT_KEYS = (
+    "status",
+    "repo",
+    "pr_number",
+    "record_sha256",
+    "pack_sha256",
+    "reason",
+)
 
 
 def _now() -> str:
     return datetime.now(timezone.utc).isoformat()
+
+
+def _empty_resume(inventory_sha256: str | None) -> dict[str, Any]:
+    return {
+        "schema_version": SCHEMA_VERSION,
+        "inventory_sha256": inventory_sha256,
+        "updated_at": _now(),
+        "items": {},
+    }
 
 
 def _atomic_write(path: Path, payload: dict[str, Any]) -> None:
@@ -36,34 +58,50 @@ def _atomic_write(path: Path, payload: dict[str, Any]) -> None:
     tmp.replace(path)
 
 
+def _locked_atomic_write(path: Path, payload: dict[str, Any]) -> None:
+    path.parent.mkdir(parents=True, exist_ok=True)
+    lock_path = path.with_name(path.name + ".lock")
+    with lock_path.open("a+") as lock_file:
+        fcntl.flock(lock_file.fileno(), fcntl.LOCK_EX)
+        try:
+            _atomic_write(path, payload)
+        finally:
+            fcntl.flock(lock_file.fileno(), fcntl.LOCK_UN)
+
+
+def _read_existing(path: Path) -> dict[str, Any]:
+    loaded = json.loads(path.read_text(encoding="utf-8"))
+    if not isinstance(loaded, dict):
+        raise ValueError(f"Resume state is not an object: {path}")
+    loaded_schema = loaded.get("schema_version")
+    if loaded_schema not in (None, SCHEMA_VERSION):
+        raise ValueError(f"Unsupported resume schema {loaded_schema!r} in {path}")
+    items = loaded.get("items") or {}
+    if not isinstance(items, dict):
+        raise ValueError(f"Resume state items must be an object: {path}")
+    return loaded
+
+
+def _merge_loaded(loaded: dict[str, Any], inventory_sha256: str | None) -> dict[str, Any]:
+    data = _empty_resume(inventory_sha256)
+    data["items"] = loaded.get("items") or {}
+    stored_hash = loaded.get("inventory_sha256")
+    if stored_hash and not inventory_sha256:
+        data["inventory_sha256"] = stored_hash
+    elif inventory_sha256:
+        data["inventory_sha256"] = inventory_sha256
+    return data
+
+
 class ResumeState:
     """Per-candidate collection progress persisted under ``path``."""
 
-    def __init__(self, path: Path, *, inventory_sha256: str | None = None) -> None:
+    def __init__(self, path: Path, inventory_sha256: str | None = None) -> None:
         self.path = Path(path)
-        self.data: dict[str, Any] = {
-            "schema_version": SCHEMA_VERSION,
-            "inventory_sha256": inventory_sha256,
-            "updated_at": _now(),
-            "items": {},
-        }
         if self.path.is_file():
-            loaded = json.loads(self.path.read_text(encoding="utf-8"))
-            if not isinstance(loaded, dict):
-                raise ValueError(f"Resume state is not an object: {self.path}")
-            loaded_schema = loaded.get("schema_version")
-            if loaded_schema not in (None, SCHEMA_VERSION):
-                raise ValueError(
-                    f"Unsupported resume schema {loaded_schema!r} in {self.path}"
-                )
-            items = loaded.get("items") or {}
-            if not isinstance(items, dict):
-                raise ValueError(f"Resume state items must be an object: {self.path}")
-            self.data["items"] = items
-            if loaded.get("inventory_sha256") and not inventory_sha256:
-                self.data["inventory_sha256"] = loaded.get("inventory_sha256")
-            elif inventory_sha256:
-                self.data["inventory_sha256"] = inventory_sha256
+            self.data = _merge_loaded(_read_existing(self.path), inventory_sha256)
+            return
+        self.data = _empty_resume(inventory_sha256)
 
     def get(self, item_id: str) -> dict[str, Any] | None:
         item = self.data["items"].get(item_id)
@@ -76,24 +114,16 @@ class ResumeState:
         status = str(item.get("status") or "pending")
         return status if status in VALID_STATUSES else "pending"
 
-    def is_complete(self, item_id: str, *, record_sha256: str | None = None) -> bool:
+    def is_complete(self, item_id: str, record_sha256: str | None = None) -> bool:
         """True when a prior run finished this item and the shard hash still matches."""
         item = self.get(item_id)
         if not item or item.get("status") != "complete":
             return False
         if record_sha256 is None:
             return True
-        stored = item.get("record_sha256")
-        return stored == record_sha256
+        return item.get("record_sha256") == record_sha256
 
-    def mark(
-        self,
-        item_id: str,
-        status: str,
-        *,
-        extra: dict[str, Any] | None = None,
-        persist: bool = True,
-    ) -> dict[str, Any]:
+    def mark(self, item_id: str, status: str, extra: dict[str, Any] | None = None) -> dict[str, Any]:
         if status not in VALID_STATUSES:
             raise ValueError(f"Unknown resume status {status}")
         current = self.get(item_id) or {}
@@ -103,12 +133,11 @@ class ResumeState:
             current.update(extra)
         self.data["items"][item_id] = current
         self.data["updated_at"] = _now()
-        if persist:
-            self.save()
+        self.save()
         return dict(current)
 
     def save(self) -> None:
-        _atomic_write(self.path, self.data)
+        _locked_atomic_write(self.path, self.data)
 
     def counts(self) -> dict[str, int]:
         tallies = {name: 0 for name in sorted(VALID_STATUSES)}
@@ -125,16 +154,7 @@ class ResumeState:
         for item_id, item in sorted(self.data["items"].items()):
             if not isinstance(item, dict):
                 continue
-            items[item_id] = {
-                key: item[key]
-                for key in (
-                    "status",
-                    "repo",
-                    "pr_number",
-                    "record_sha256",
-                    "pack_sha256",
-                    "reason",
-                )
-                if key in item
-            }
-        return sha256_json({"items": items, "inventory_sha256": self.data.get("inventory_sha256")})
+            items[item_id] = {key: item[key] for key in _FINGERPRINT_KEYS if key in item}
+        return sha256_json(
+            {"items": items, "inventory_sha256": self.data.get("inventory_sha256")}
+        )
