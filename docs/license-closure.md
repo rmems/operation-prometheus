@@ -15,11 +15,13 @@ Every released positive trajectory must resolve through all three of:
 
 Card, manifest, and inventory declarations must agree. Singular and
 per-repository maps in the same artifact must not disagree, including the same
-repository named twice under different casing. Missing, unknown, conflicting,
-or changed evidence quarantines the row. Quarantined rows keep the evidence
-they have and an explicit reason code. Publication consumers must treat a
-report as closed only when the quarantined array is empty, counts match those
-array lengths, and `bundle_errors` is empty.
+repository named twice under different casing. A `license_evidence_digest` that
+is present but not a valid SHA-256 quarantines as `declarations_disagree`;
+omitting the digest remains optional. Missing, unknown, conflicting, or changed
+evidence quarantines the row. Quarantined rows keep the evidence they have and
+an explicit reason code. Publication consumers must treat a report as closed
+only when the quarantined array is empty, counts match those array lengths, and
+`bundle_errors` is empty.
 
 This check does **not** decide license compatibility, relicense source-derived
 material under Operation Prometheus's Apache-2.0 terms, or guess a license
@@ -59,8 +61,9 @@ name the same snapshot digest. The dataset manifest must declare a valid
 When a caller supplies a frozen pull-request inventory, every proposed record
 must appear in that list. Record `base_oid` / `head_oid` / merge `commit_oid`
 values are compared to the matching PR roles; a correct base OID does not
-mask an incorrect head. Omitting the pull-request inventory keeps
-repository-level snapshot checks only.
+mask an incorrect head. Trajectory `tree_oid` values are not compared to those
+commit OIDs. Omitting the pull-request inventory keeps repository-level
+snapshot checks only.
 
 The closure manifest reports license families, per-repository evidence
 digests, and unresolved counts.
