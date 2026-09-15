@@ -157,6 +157,13 @@ def _resolve_path(path: Path) -> Path:
         return path
 
 
+def _paths_are_same_file(left: Path, right: Path) -> bool:
+    try:
+        return left.exists() and right.exists() and left.samefile(right)
+    except OSError:
+        return False
+
+
 def _out_collides_with_frozen_inputs(args: argparse.Namespace) -> Path | None:
     if args.out is None:
         return None
@@ -165,7 +172,8 @@ def _out_collides_with_frozen_inputs(args: argparse.Namespace) -> Path | None:
         path = getattr(args, attr)
         if path is None:
             continue
-        if _resolve_path(path) == out:
+        resolved = _resolve_path(path)
+        if resolved == out or _paths_are_same_file(out, resolved):
             return path
     return None
 
