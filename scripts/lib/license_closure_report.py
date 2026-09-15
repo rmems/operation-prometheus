@@ -310,6 +310,10 @@ def _rows_with_keys(
     rows = _object_rows(value, field)
     if any(key not in row or row[key] is None for row in rows for key in required):
         raise AssertionError(f"{field} rows are missing required fields")
+    if "record_id" in required and any(
+        not isinstance(row.get("record_id"), str) for row in rows
+    ):
+        raise AssertionError(f"{field} record_id values must be strings")
     return rows
 
 
