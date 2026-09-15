@@ -7,6 +7,7 @@ import json
 import pytest
 
 from license_closure_fixtures import (
+    BASE_OID,
     HEAD_OID,
     SOURCE_HASH,
     WRONG_HEAD_OID,
@@ -80,6 +81,7 @@ def test_misplaced_spdx_parentheses_are_unknown():
     assert classify_license_family("MIT ( AND Apache-2.0)") == "unknown"
     assert classify_license_family("(MIT OR Apache-2.0)") == "spdx"
     assert classify_license_family("(MIT OR Apache-2.0) AND BSD-3-Clause") == "spdx"
+    assert classify_license_family("(MIT) OR (Apache-2.0)") == "spdx"
 
 
 def test_duplicate_repository_id_is_rejected():
@@ -290,4 +292,24 @@ def test_card_declaration_follows_inventory_aliases():
     report = _report(bundle)
     _assert_schema(report)
     assert report["closed"] is True
+
+
+def test_base_only_record_does_not_satisfy_pr_provenance():
+    bundle = spdx_known_bundle()
+    bundle["records"][0] = with_code_state(bundle["records"][0])
+    bundle["records"][0]["repository"] = {"base_oid": BASE_OID}
+    bundle["pull_requests"] = [inventory_pr("rmems/widget", 1)]
+    report = _report(bundle)
+    _assert_schema(report)
+    assert "snapshot_provenance_missing" in report["quarantined"][0]["reason_codes"]
+    assert report["released_positives"] == []
+
+
+def test_non_string_license_families_are_bundle_errors():
+    bundle = spdx_known_bundle()
+    bundle["card"]["license_families"] = ["spdx", 1]
+    report = _report(bundle)
+    _assert_schema(report)
+    assert report["closed"] is False
+    assert report["bundle_errors"]
 
