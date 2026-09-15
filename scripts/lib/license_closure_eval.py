@@ -62,9 +62,11 @@ def _evidence_blob(
     prior_digest: str | None,
     snapshot_sha256: str | None,
     repository_source_hash: str | None,
+    custom_license: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
     return {
         "card_license": card_license,
+        "custom_license": custom_license,
         "declared_evidence_digest": declared_digest,
         "evidence_digest": digest,
         "inventory_license": inventory_license,
@@ -101,6 +103,11 @@ def _evaluate_record(
     inventory_license = inventory_license_object(repository)
     inventory_id = normalize_license_id(inventory_license)
     has_custom = inventory_has_custom_evidence(repository)
+    custom_license_obj: dict[str, Any] | None = None
+    if has_custom and isinstance(repository, dict):
+        custom = repository.get("custom_license")
+        if isinstance(custom, dict):
+            custom_license_obj = custom
     family = classify_license_family(inventory_id, has_custom_evidence=has_custom)
     if family == "missing":
         family = classify_license_family(
@@ -233,6 +240,7 @@ def _evaluate_record(
         prior_digest=prior_digest,
         snapshot_sha256=snapshot_sha256,
         repository_source_hash=source_hash,
+        custom_license=custom_license_obj,
     )
     closed = not reasons and family in CLOSED_FAMILIES and digest is not None
     if closed:
@@ -245,10 +253,8 @@ def _evaluate_record(
             "spdx_id": inventory_id or declared_record or declared_card,
             "state": "released_positive",
         }
-        if has_custom and isinstance(repository, dict):
-            custom = repository.get("custom_license")
-            if isinstance(custom, dict):
-                released["custom_license"] = custom
+        if custom_license_obj is not None:
+            released["custom_license"] = custom_license_obj
         if inventory_license is not None:
             released["inventory_license"] = inventory_license
         return released
@@ -265,17 +271,26 @@ def _evaluate_record(
 
 
 def _duplicate_id_row(row: dict[str, Any]) -> dict[str, Any]:
-    evidence = row.get("evidence") or _evidence_blob(
-        record_license=None,
-        card_license=None,
-        manifest_license=None,
-        inventory_license=None,
-        digest=row.get("evidence_digest"),
-        declared_digest=None,
-        prior_digest=None,
-        snapshot_sha256=None,
-        repository_source_hash=None,
-    )
+    custom = row.get("custom_license")
+    frozen_custom = custom if isinstance(custom, dict) else None
+    existing = row.get("evidence")
+    if isinstance(existing, dict):
+        evidence = dict(existing)
+        if "custom_license" not in evidence:
+            evidence["custom_license"] = frozen_custom
+    else:
+        evidence = _evidence_blob(
+            record_license=None,
+            card_license=None,
+            manifest_license=None,
+            inventory_license=None,
+            digest=row.get("evidence_digest"),
+            declared_digest=None,
+            prior_digest=None,
+            snapshot_sha256=None,
+            repository_source_hash=None,
+            custom_license=frozen_custom,
+        )
     reasons = sorted(
         set(list(row.get("reason_codes") or []) + ["source_license_unresolved"])
     )
