@@ -39,8 +39,16 @@ ROOT = Path(__file__).resolve().parent.parent
 SCHEMA_PATH = ROOT / "schemas" / "license_closure.schema.json"
 
 
+def _reject_nonfinite(constant: str) -> None:
+    raise json.JSONDecodeError(f"non-finite constant {constant!r}", constant, 0)
+
+
+def _loads(text: str) -> Any:
+    return json.loads(text, parse_constant=_reject_nonfinite)
+
+
 def _load_json(path: Path) -> Any:
-    return json.loads(path.read_text(encoding="utf-8"))
+    return _loads(path.read_text(encoding="utf-8"))
 
 
 def _decode_utf8(raw: bytes, path: Path) -> str:
@@ -52,7 +60,7 @@ def _decode_utf8(raw: bytes, path: Path) -> str:
 
 def _parse_json(raw: bytes, path: Path) -> Any:
     try:
-        return json.loads(_decode_utf8(raw, path))
+        return _loads(_decode_utf8(raw, path))
     except json.JSONDecodeError as exc:
         raise ValueError(f"{path}: {exc}") from exc
 
@@ -63,7 +71,7 @@ def _parse_jsonl(raw: bytes, path: Path) -> list[dict[str, Any]]:
         if not line.strip():
             continue
         try:
-            record = json.loads(line)
+            record = _loads(line)
         except json.JSONDecodeError as exc:
             raise ValueError(f"{path}: {exc}") from exc
         if not isinstance(record, dict):
