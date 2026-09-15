@@ -26,7 +26,6 @@ from lib.license_closure import (
     validate_positive_release,
 )
 
-
 def test_spdx_known_license_closes_and_is_released():
     report = _report(spdx_known_bundle())
     _assert_schema(report)
