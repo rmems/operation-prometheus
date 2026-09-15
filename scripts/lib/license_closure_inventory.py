@@ -152,11 +152,18 @@ def record_repo_identities_conflict(record: dict[str, Any]) -> bool:
     return bool(top and nested and top.casefold() != nested.casefold())
 
 
-def record_id(record: dict[str, Any]) -> str:
+def _supplied_record_id(record: dict[str, Any]) -> str:
     for key in ("id", "trajectory_id"):
         value = _text(record.get(key))
         if value:
             return value
+    return ""
+
+
+def record_id(record: dict[str, Any]) -> str:
+    supplied = _supplied_record_id(record)
+    if supplied:
+        return supplied
     repo = record_repo(record)
     pr_number = record.get("pr_number")
     if repo and type(pr_number) is int and pr_number >= 1:
