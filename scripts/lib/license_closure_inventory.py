@@ -380,6 +380,27 @@ def _repository_names(row: dict[str, Any]) -> list[str]:
     return [name for name in names if name]
 
 
+def _canonical_declared_repos(
+    names: set[str],
+    inventory_index: dict[str, dict[str, Any]],
+) -> set[str]:
+    keys: set[str] = set()
+    for name in names:
+        folded = name.casefold()
+        row = inventory_index.get(folded)
+        if isinstance(row, dict):
+            repo_id = _text(row.get("repository_id"))
+            if repo_id:
+                keys.add(f"id:{repo_id}")
+                continue
+            canonical = _text(row.get("name_with_owner")).casefold()
+            if canonical:
+                keys.add(f"name:{canonical}")
+                continue
+        keys.add(f"name:{folded}")
+    return keys
+
+
 def _identity_names(repository: dict[str, Any] | None, repo: str) -> list[str]:
     names = [repo] if repo else []
     if isinstance(repository, dict):
