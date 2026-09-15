@@ -5,6 +5,7 @@ from __future__ import annotations
 from typing import Any
 
 from lib.license_closure import evidence_digest, license_evidence_payload
+from lib.source_inventory_common import sha256_json
 
 SNAPSHOT_SHA256 = "a" * 64
 SOURCE_HASH = "b" * 64
@@ -23,16 +24,23 @@ def repository(
     license_name: str | None = None,
     url: str | None = None,
     custom: dict[str, Any] | None = None,
-    source_hash: str = SOURCE_HASH,
+    source_hash: str | None = None,
 ) -> dict[str, Any]:
     row: dict[str, Any] = {
         "name_with_owner": name,
-        "source_hash": source_hash,
         "license": {"spdx_id": spdx_id, "name": license_name or spdx_id, "url": url},
     }
     if custom is not None:
         row["custom_license"] = custom
+    row["source_hash"] = source_hash or sha256_json(row)
     return row
+
+
+def bind_source_hash(row: dict[str, Any]) -> dict[str, Any]:
+    payload = {key: value for key, value in row.items() if key != "source_hash"}
+    updated = dict(payload)
+    updated["source_hash"] = sha256_json(payload)
+    return updated
 
 
 def record(
