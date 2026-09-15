@@ -633,6 +633,15 @@ def test_hidden_license_heading_is_not_markdown_disclosure():
     assert report["released_positives"] == []
 
 
+def test_void_tag_inside_hidden_html_is_not_markdown_disclosure():
+    bundle = spdx_known_bundle()
+    bundle["markdown"] = "<div hidden>\n<br/>\n## License / provenance\nMIT\n</div>\n"
+    report = _report(bundle)
+    _assert_schema(report)
+    assert "card_disclosure_missing" in report["quarantined"][0]["reason_codes"]
+    assert report["released_positives"] == []
+
+
 def test_script_html_is_not_markdown_disclosure():
     bundle = spdx_known_bundle()
     bundle["markdown"] = "## License / provenance\n\n<script>MIT</script>\n"
@@ -667,3 +676,33 @@ def test_malformed_quarantined_row_cannot_validate_release():
     errors = validate_positive_release(report)
     assert errors
     assert any("objects" in error for error in errors)
+
+
+def test_released_row_missing_record_id_cannot_validate_release():
+    report = _report(spdx_known_bundle())
+    report["released_positives"] = [{}]
+    errors = validate_positive_release(report)
+    assert errors
+    assert any("required fields" in error for error in errors)
+
+
+def test_quarantined_row_missing_reason_cannot_validate_release():
+    report = _report(spdx_known_bundle())
+    report["released_positives"] = []
+    report["quarantined"] = [{"record_id": "rmems-widget-1"}]
+    report["closed"] = False
+    errors = validate_positive_release(report)
+    assert errors
+    assert any("required fields" in error for error in errors)
+
+
+def test_duplicate_record_ids_keep_inventory_license():
+    bundle = spdx_known_bundle()
+    bundle["records"].append(dict(bundle["records"][0]))
+    report = _report(bundle)
+    _assert_schema(report)
+    assert report["released_positives"] == []
+    assert all(
+        row["evidence"]["inventory_license"]["spdx_id"] == "MIT"
+        for row in report["quarantined"]
+    )
