@@ -548,9 +548,29 @@ def _alias_entries(row: dict[str, Any], name: str) -> list[Any]:
     return aliases
 
 
+def _alias_object_invalid(alias: dict[str, Any]) -> bool:
+    name = alias.get("name_with_owner")
+    if not isinstance(name, str) or not name.strip():
+        return True
+    refs = alias.get("evidence_refs")
+    if not isinstance(refs, list) or not refs:
+        return True
+    seen: set[str] = set()
+    for item in refs:
+        if not isinstance(item, str) or not item.strip():
+            return True
+        if item in seen:
+            return True
+        seen.add(item)
+    return False
+
+
 def _alias_name(alias: Any, name: str) -> str:
     if isinstance(alias, dict):
-        alias_name = _text(alias.get("name_with_owner"))
+        if _alias_object_invalid(alias):
+            alias_name = ""
+        else:
+            alias_name = _text(alias.get("name_with_owner"))
     elif isinstance(alias, str):
         alias_name = alias.strip()
     else:
