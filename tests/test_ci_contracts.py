@@ -236,10 +236,8 @@ def test_hf_release_verify_refuses_pull_request_event(monkeypatch, tmp_path):
     result = verify(
         tag="v0.7.0",
         dataset_repo="rmems/operation-prometheus-trajectories",
-        jsonl_dir=jsonl,
-        parquet_dir=tmp_path / "missing-parquet",
-        remote_tags={},
-        downloaded={},
+        dirs=(jsonl, tmp_path / "missing-parquet"),
+        remotes={"tags": {}, "downloaded": {}},
     )
     assert result["ok"]
     assert result["release_manifest"]["jsonl"][0]["path"] == "a.jsonl"
