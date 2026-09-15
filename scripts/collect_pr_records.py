@@ -361,6 +361,22 @@ def _inventory_dry_run(run: InventoryRun) -> int:
     return 0
 
 
+def _complete_shard_matches(resume: ResumeState, item_id: str, target: Path) -> bool | None:
+    """True if hashes match, False if complete-but-mismatch, None if not a complete shard."""
+    if not resume.is_complete(item_id):
+        return None
+    if not target.exists():
+        return None
+    item = resume.get(item_id)
+    if not item:
+        return None
+    stored = item.get("record_sha256")
+    actual = _try_file_sha256(target)
+    if stored and actual == stored:
+        return True
+    return False
+
+
 def _skip_inventory_item(
     resume: ResumeState,
     item_id: str,
@@ -368,11 +384,10 @@ def _skip_inventory_item(
     skip_existing: bool,
 ) -> str | None:
     """Return a skip reason, or None to collect."""
-    if resume.is_complete(item_id) and target.exists() and resume.get(item_id):
-        stored = (resume.get(item_id) or {}).get("record_sha256")
-        actual = _try_file_sha256(target)
-        if stored and actual == stored:
-            return "complete"
+    match = _complete_shard_matches(resume, item_id, target)
+    if match is True:
+        return "complete"
+    if match is False:
         logger.warning(
             "Resume marked complete but shard hash mismatch for %s; re-collecting",
             item_id,

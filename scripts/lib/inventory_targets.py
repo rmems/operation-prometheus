@@ -2,13 +2,12 @@
 
 from __future__ import annotations
 
-import hashlib
-import json
 from pathlib import Path
 from typing import Any
 
 from .eligibility_common import LEDGER_STATES
 from .github_client import parse_repo
+from .inventory_io import inventory_file_sha256, read_jsonl, resolve_inventory_path
 from .source_inventory_common import sha256_json
 
 DEFAULT_STATES = (
@@ -17,39 +16,6 @@ DEFAULT_STATES = (
     "included_negative",
     "watchlist_open",
 )
-
-
-def _read_jsonl(path: Path) -> list[dict[str, Any]]:
-    rows: list[dict[str, Any]] = []
-    for lineno, line in enumerate(path.read_text(encoding="utf-8").splitlines(), start=1):
-        text = line.strip()
-        if not text:
-            continue
-        try:
-            row = json.loads(text)
-        except json.JSONDecodeError as exc:
-            raise ValueError(f"{path}:{lineno} is not valid JSON") from exc
-        if not isinstance(row, dict):
-            raise ValueError(f"{path}:{lineno} is not a JSON object")
-        rows.append(row)
-    return rows
-
-
-def resolve_inventory_path(path: Path) -> Path:
-    """Accept a candidates JSONL file or a ledger directory containing one."""
-    path = Path(path)
-    if path.is_dir():
-        candidate = path / "candidates.jsonl"
-        if not candidate.is_file():
-            raise FileNotFoundError(f"No candidates.jsonl in inventory directory {path}")
-        return candidate
-    if not path.is_file():
-        raise FileNotFoundError(f"Inventory not found: {path}")
-    return path
-
-
-def inventory_file_sha256(path: Path) -> str:
-    return hashlib.sha256(path.read_bytes()).hexdigest()
 
 
 def _work_item(owner: str, name: str, number: int, row: dict[str, Any]) -> dict[str, Any]:
@@ -74,17 +40,23 @@ def _work_item(owner: str, name: str, number: int, row: dict[str, Any]) -> dict[
     }
 
 
+def _ledger_item_id(row: dict[str, Any], owner: str, name: str, number: int) -> str:
+    candidate = str(row.get("candidate_id") or "").strip()
+    if candidate:
+        return candidate
+    return f"github:{owner}/{name}#{number}"
+
+
 def _item_from_ledger(row: dict[str, Any]) -> dict[str, Any]:
     repo = str(row.get("repository_name_with_owner") or "").strip()
     number = row.get("pull_request_number")
-    if not repo or not isinstance(number, int):
+    if not repo:
+        raise ValueError("Ledger row missing repository_name_with_owner or pull_request_number")
+    if not isinstance(number, int):
         raise ValueError("Ledger row missing repository_name_with_owner or pull_request_number")
     owner, name = parse_repo(repo)
     item = _work_item(owner, name, number, row)
-    if not str(row.get("candidate_id") or "").strip():
-        item["item_id"] = f"github:{owner}/{name}#{number}"
-    else:
-        item["item_id"] = str(row.get("candidate_id")).strip()
+    item["item_id"] = _ledger_item_id(row, owner, name, number)
     item["source_state"] = row.get("source_state")
     item["source_hash"] = row.get("source_hash")
     return item
@@ -150,20 +122,29 @@ def _apply_limit(items: list[dict[str, Any]], limit: int | None) -> list[dict[st
     return items[:limit]
 
 
+def _keep_item(
+    item: dict[str, Any],
+    filters: tuple[set[str], set[str]],
+    seen: set[str],
+    is_ledger: bool,
+) -> bool:
+    state_filter, owner_filter = filters
+    if not _passes_state_filter(item, state_filter, is_ledger):
+        return False
+    if not _passes_owner_filter(item, owner_filter):
+        return False
+    return item["item_id"] not in seen
+
+
 def _collect_items(
     rows: list[dict[str, Any]],
     filters: tuple[set[str], set[str]],
 ) -> list[dict[str, Any]]:
-    state_filter, owner_filter = filters
     items: list[dict[str, Any]] = []
     seen: set[str] = set()
     for index, row in enumerate(rows, start=1):
         item, is_ledger = _item_from_row(row, index)
-        if not _passes_state_filter(item, state_filter, is_ledger):
-            continue
-        if not _passes_owner_filter(item, owner_filter):
-            continue
-        if item["item_id"] in seen:
+        if not _keep_item(item, filters, seen, is_ledger):
             continue
         seen.add(item["item_id"])
         items.append(item)
@@ -184,6 +165,6 @@ def load_inventory_targets(
     """
     jsonl_path = resolve_inventory_path(path)
     digest = inventory_file_sha256(jsonl_path)
-    rows = _read_jsonl(jsonl_path)
+    rows = read_jsonl(jsonl_path)
     items = _collect_items(rows, _parse_filters(states, owners))
     return _apply_limit(items, limit), digest

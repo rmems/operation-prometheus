@@ -68,22 +68,31 @@ def required_oids(
     """Stable unique list of git OIDs this trajectory must be able to reproduce."""
     found: list[str] = []
     seen: set[str] = set()
-
-    def add(value: Any) -> None:
-        oid = _valid_oid(value)
-        if oid and oid not in seen:
-            seen.add(oid)
-            found.append(oid)
-
-    add(pull.get("base_sha") or (pull.get("base") or {}).get("sha"))
-    add(pull.get("head_sha") or (pull.get("head") or {}).get("sha"))
-    add(pull.get("merge_commit_sha") or pull.get("merge_commit_oid"))
+    for value in _pull_oid_values(pull):
+        _push_oid(found, seen, value)
     for commit in commits:
-        add(commit.get("sha"))
+        _push_oid(found, seen, commit.get("sha"))
     for comment in review_comments or []:
-        add(comment.get("commit_id"))
-        add(comment.get("original_commit_id"))
+        _push_oid(found, seen, comment.get("commit_id"))
+        _push_oid(found, seen, comment.get("original_commit_id"))
     return found
+
+
+def _push_oid(found: list[str], seen: set[str], value: Any) -> None:
+    oid = _valid_oid(value)
+    if not oid:
+        return
+    if oid in seen:
+        return
+    seen.add(oid)
+    found.append(oid)
+
+
+def _pull_oid_values(pull: dict[str, Any]) -> list[Any]:
+    base = pull.get("base_sha") or (pull.get("base") or {}).get("sha")
+    head = pull.get("head_sha") or (pull.get("head") or {}).get("sha")
+    merge = pull.get("merge_commit_sha") or pull.get("merge_commit_oid")
+    return [base, head, merge]
 
 
 def _present_record(git_oid: str, kind: str, meta: dict[str, Any], store: ContentAddressedStore) -> dict[str, Any]:

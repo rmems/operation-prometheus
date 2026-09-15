@@ -475,20 +475,31 @@ def _maybe_snapshots(
     return snapshots, warnings, ["git_objects"]
 
 
+def _usable_diff_text(diff_text: str | None) -> str | None:
+    if not isinstance(diff_text, str):
+        return None
+    if not diff_text:
+        return None
+    return diff_text
+
+
 def _maybe_diff_artifact(
     store: ContentAddressedStore | None,
     diff_text: str | None,
     full: str,
     pr_number: int,
 ) -> dict[str, Any] | None:
-    if store is None or not isinstance(diff_text, str) or not diff_text:
+    if store is None:
+        return None
+    text = _usable_diff_text(diff_text)
+    if text is None:
         return None
     spec = ArtifactSpec(
         media_type="text/x-diff",
         kind="unified_diff",
         extra={"repo": full, "pr_number": pr_number},
     )
-    diff_meta = store.put_text(diff_text, spec)
+    diff_meta = store.put_text(text, spec)
     return {
         "sha256": diff_meta["sha256"],
         "byte_size": diff_meta["byte_size"],

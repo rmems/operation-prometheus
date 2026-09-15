@@ -73,23 +73,45 @@ def _review_source_id(event: dict[str, Any]) -> Any:
     return None
 
 
+def _timeline_actor(event: dict[str, Any]) -> dict[str, Any] | None:
+    actor = event.get("actor") or event.get("user") or {}
+    if isinstance(actor, dict):
+        return actor
+    return None
+
+
+def _timeline_event_name(event: dict[str, Any]) -> Any:
+    return event.get("event") or event.get("event_type")
+
+
+def _timeline_event_time(event: dict[str, Any]) -> Any:
+    return event.get("created_at") or event.get("submitted_at")
+
+
+def _timeline_commit_id(event: dict[str, Any]) -> Any:
+    return event.get("commit_id") or event.get("sha")
+
+
+def _timeline_body(event: dict[str, Any]) -> str:
+    return event.get("body") or event.get("message") or ""
+
+
 def _slim_timeline_event(event: dict[str, Any]) -> dict[str, Any] | None:
     if not isinstance(event, dict):
         return None
-    actor = event.get("actor") or event.get("user") or {}
-    actor_dict = actor if isinstance(actor, dict) else None
+    actor = _timeline_actor(event)
     return {
         "id": event.get("id"),
-        "event": event.get("event") or event.get("event_type"),
-        "created_at": event.get("created_at") or event.get("submitted_at"),
-        "actor_login": _user_login(actor_dict),
-        "actor_type": (actor_dict or {}).get("type") if actor_dict else None,
-        "commit_id": event.get("commit_id") or event.get("sha"),
+        "event": _timeline_event_name(event),
+        "created_at": _timeline_event_time(event),
+        "actor_login": _user_login(actor),
+        "actor_type": actor.get("type") if actor else None,
+        "commit_id": _timeline_commit_id(event),
         "commit_url": event.get("commit_url"),
         "label": _label_name(event.get("label")),
         "state": event.get("state"),
         "submitted_review_id": _review_source_id(event),
-        "body": event.get("body") or event.get("message") or "",
+        "body": _timeline_body(event),
         "source_path": _timeline_source_path(event),
     }
 

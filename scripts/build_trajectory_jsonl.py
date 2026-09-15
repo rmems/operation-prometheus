@@ -23,7 +23,6 @@ import json
 import logging
 import re
 import sys
-from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
@@ -40,14 +39,9 @@ if str(_SCRIPTS) not in sys.path:
     sys.path.insert(0, str(_SCRIPTS))
 
 from lib.cas import ContentAddressedStore  # noqa: E402
-from lib.normalize import (  # noqa: E402
-    load_card,
-    load_raw_record,
-    normalize_record,
-    resolve_source_license,
-)
-from lib.normalize_v1 import V1NormalizeOptions, normalize_record_v1  # noqa: E402
+from lib.normalize import load_card  # noqa: E402
 from lib.paths import resolve_artifact_store_dir  # noqa: E402
+from lib.trajectory_emit import EmitJob, emit_all, write_jsonl  # noqa: E402
 
 logging.basicConfig(level=logging.INFO, format="%(levelname)s: %(message)s")
 logger = logging.getLogger("build_trajectory_jsonl")
@@ -57,19 +51,6 @@ SCHEMA_V0_PATH = ROOT / "schemas" / "pr_trajectory.schema.json"
 SCHEMA_V1_PATH = ROOT / "schemas" / "trajectory_v1.schema.json"
 V1_ALIASES = {"v1", "1", "1.0"}
 V0_ALIASES = {"v0", "0", "0.1"}
-
-
-@dataclass
-class EmitJob:
-    raw_dir: Path
-    card: dict[str, Any]
-    out_path: Path
-    emit_v1: bool
-    store: ContentAddressedStore | None
-    max_patch_bytes: int
-    pr_filter: set[int] | None
-    validator: Any
-    strict: bool
 
 
 def build_parser() -> argparse.ArgumentParser:
@@ -136,12 +117,6 @@ def _parse_prs(values: list[str] | None) -> set[int] | None:
     return out
 
 
-def _validate(record: dict, validator: Any) -> list[str]:
-    if validator is None:
-        return ["jsonschema not installed"]
-    return [e.message for e in sorted(validator.iter_errors(record), key=lambda e: list(e.path))]
-
-
 def _schema_choice(version: str) -> tuple[bool, Path] | None:
     schema_version = str(version or "v0").strip().lower()
     if schema_version in V1_ALIASES:
@@ -159,10 +134,24 @@ def _load_validator(schema_path: Path) -> Any | None:
     return jsonschema.Draft7Validator(schema)
 
 
-def _derived_out_path(card: dict[str, Any]) -> Path | None:
+def _safe_card_name(card: dict[str, Any]) -> str:
     card_name = card.get("name") if isinstance(card, dict) else None
-    name = str(card_name).strip() if card_name is not None else ""
-    if name and _SAFE_CARD_NAME.fullmatch(name) and ".." not in name:
+    if card_name is None:
+        return ""
+    return str(card_name).strip()
+
+
+def _is_safe_dataset_id(name: str) -> bool:
+    if not name:
+        return False
+    if ".." in name:
+        return False
+    return bool(_SAFE_CARD_NAME.fullmatch(name))
+
+
+def _derived_out_path(card: dict[str, Any]) -> Path | None:
+    name = _safe_card_name(card)
+    if _is_safe_dataset_id(name):
         return ROOT / "datasets" / "jsonl" / f"{name}.jsonl"
     if name:
         logger.error(
@@ -190,98 +179,6 @@ def _load_card_or_fail(path: Path | None) -> dict[str, Any] | None:
         return None
 
 
-def _normalize_one(raw: dict[str, Any], path: Path, job: EmitJob) -> dict[str, Any]:
-    source_license = resolve_source_license(raw.get("source") or {}, job.card)
-    if job.emit_v1:
-        return normalize_record_v1(
-            raw,
-            job.card,
-            V1NormalizeOptions(
-                artifact_store=job.store,
-                max_patch_bytes=job.max_patch_bytes,
-                source_license=source_license,
-                raw_path=path,
-            ),
-        )
-    return normalize_record(
-        raw,
-        job.card,
-        raw_path=path,
-        max_patch_bytes=job.max_patch_bytes,
-        source_license=source_license,
-    )
-
-
-def _dump_trajectory(traj: dict[str, Any], emit_v1: bool) -> str:
-    dump_kwargs: dict = {"ensure_ascii": False, "separators": (",", ":")}
-    if emit_v1:
-        dump_kwargs["sort_keys"] = True
-    return json.dumps(traj, **dump_kwargs)
-
-
-def _log_ok(path_name: str, traj: dict[str, Any], emit_v1: bool) -> None:
-    if emit_v1:
-        logger.info(
-            "OK %s (v1 disposition=%s events=%s)",
-            path_name,
-            traj.get("terminal_disposition"),
-            len(traj.get("events") or []),
-        )
-        return
-    logger.info(
-        "OK %s (quality=%.2f training_use=%s)",
-        path_name,
-        traj.get("quality_score", 0),
-        traj.get("training_use"),
-    )
-
-
-def _emit_one(path: Path, job: EmitJob) -> str | None:
-    raw = load_raw_record(path)
-    pr = int((raw.get("source") or {}).get("pr_number") or 0)
-    if job.pr_filter is not None and pr not in job.pr_filter:
-        return None
-    traj = _normalize_one(raw, path, job)
-    schema_errors = _validate(traj, job.validator)
-    if schema_errors:
-        logger.error("%s schema errors:", path.name)
-        for err in schema_errors:
-            logger.error("  - %s", err)
-        raise ValueError("schema validation failed")
-    _log_ok(path.name, traj, job.emit_v1)
-    return _dump_trajectory(traj, job.emit_v1)
-
-
-def _emit_all(job: EmitJob) -> tuple[list[str], int]:
-    paths = sorted(job.raw_dir.glob("pr-*.json"))
-    if not paths:
-        logger.error("No pr-*.json files in %s", job.raw_dir)
-        return [], 1
-    lines: list[str] = []
-    errors = 0
-    for path in paths:
-        try:
-            line = _emit_one(path, job)
-        except Exception as exc:
-            errors += 1
-            if not isinstance(exc, ValueError) or str(exc) != "schema validation failed":
-                logger.error("Failed %s: %s", path.name, exc)
-            if job.strict:
-                return [], 1
-            continue
-        if line is not None:
-            lines.append(line)
-    return lines, errors
-
-
-def _write_jsonl(out_path: Path, lines: list[str]) -> None:
-    out_path.parent.mkdir(parents=True, exist_ok=True)
-    tmp_path = out_path.with_suffix(out_path.suffix + ".tmp")
-    tmp_path.write_text("\n".join(lines) + "\n", encoding="utf-8")
-    tmp_path.replace(out_path)
-    logger.info("Wrote %s trajectories → %s", len(lines), out_path)
-
-
 def _build_job(args: argparse.Namespace) -> EmitJob | None:
     raw_dir: Path = args.raw_dir
     if not raw_dir.is_dir():
@@ -306,7 +203,9 @@ def _build_job(args: argparse.Namespace) -> EmitJob | None:
     except ValueError as exc:
         logger.error("Invalid --pr value: %s", exc)
         return None
-    store = ContentAddressedStore(resolve_artifact_store_dir(args.artifact_store)) if emit_v1 else None
+    store = None
+    if emit_v1:
+        store = ContentAddressedStore(resolve_artifact_store_dir(args.artifact_store))
     return EmitJob(
         raw_dir=raw_dir,
         card=card,
@@ -325,7 +224,7 @@ def main(argv: list[str] | None = None) -> int:
     job = _build_job(args)
     if job is None:
         return 2
-    lines, errors = _emit_all(job)
+    lines, errors = emit_all(job)
     if errors and not lines:
         return 1
     if not lines:
@@ -338,7 +237,7 @@ def main(argv: list[str] | None = None) -> int:
             job.out_path,
         )
         return 1
-    _write_jsonl(job.out_path, lines)
+    write_jsonl(job.out_path, lines)
     return 0
 
 
