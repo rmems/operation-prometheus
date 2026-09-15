@@ -85,10 +85,12 @@ matching per-repository map. A present non-object plural map such as
 `source_licenses: []` cannot be ignored in favor of a valid singular.
 A present non-array `source_repos` value such as `{}`, or a list that
 contains a non-string or blank element, cannot be ignored in favor of a
-valid singular `source_repo`.
+valid singular `source_repo`. A present non-string or blank singular
+`source_repo` (for example `{}`) cannot be ignored in favor of a valid
+`source_repos` list.
 Card and manifest `license_families` / `unresolved_license_count` must agree
 with closed evidence when they are declared. Non-string family elements such
-as `["spdx", 1]` fail closed as a bundle error instead of raising. When both
+as `["spdx", 1]` or `[{}]` fail closed as a bundle error instead of raising. When both
 artifacts declare `source_repo` / `source_repos`, the complete normalized
 sets must agree after alias resolution; membership of the current record
 alone is not enough. Prior-inventory rows must
@@ -100,9 +102,10 @@ fenced code blocks, link destinations, and reference definitions, so a URL
 that only contains `MIT`, or a fenced `## License / provenance` heading, is
 not disclosure. Disclosure stops the license section at the next
 H1 or H2 heading.
-Released custom rows persist the inventory `license` object alongside
-`custom_license` so publication can recompute the evidence digest; swapping
-`text_sha256` while keeping the stored digest fails closed.
+Released rows persist the inventory `license` object so publication can
+recompute the evidence digest; swapping a custom `text_sha256` or an SPDX
+`spdx_id` / `evidence_digest` while keeping the other bound fields fails
+closed.
 `build_manifest.py` copies license-closure fields from the card when they are
 present.
 
@@ -126,7 +129,9 @@ evidence fails closed. Intermediate event
 those commit OIDs. Pull-request lookup follows inventory aliases, so a
 canonical PR row still matches a trajectory that uses an old name. Conflicting
 PR rows for a repository and one of its aliases at the same number are
-rejected.
+rejected. When both the inventory repository and the PR row declare
+`repository_id`, those immutable ids must match; a reused name with a
+different id cannot close.
 Omitting the pull-request inventory keeps repository-level snapshot checks only.
 Top-level `repo` and `repository.owner`/`name` must agree when both are
 present.
