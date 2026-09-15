@@ -768,3 +768,49 @@ def test_indented_h2_after_license_section_is_not_disclosure():
     _assert_schema(report)
     assert "card_disclosure_missing" in report["quarantined"][0]["reason_codes"]
     assert report["released_positives"] == []
+
+
+def test_omitted_card_source_repo_coverage_cannot_close():
+    bundle = spdx_known_bundle()
+    bundle["card"].pop("source_repo", None)
+    bundle["card"].pop("source_repos", None)
+    report = _report(bundle)
+    _assert_schema(report)
+    assert "declarations_disagree" in report["quarantined"][0]["reason_codes"]
+    assert report["released_positives"] == []
+
+
+def test_omitted_manifest_source_repo_coverage_cannot_close():
+    bundle = spdx_known_bundle()
+    bundle["manifest"].pop("source_repo", None)
+    bundle["manifest"].pop("source_repos", None)
+    report = _report(bundle)
+    _assert_schema(report)
+    assert "declarations_disagree" in report["quarantined"][0]["reason_codes"]
+    assert report["released_positives"] == []
+
+
+def test_empty_source_repos_coverage_cannot_close():
+    bundle = spdx_known_bundle()
+    bundle["card"].pop("source_repo", None)
+    bundle["card"]["source_repos"] = []
+    report = _report(bundle)
+    _assert_schema(report)
+    assert "declarations_disagree" in report["quarantined"][0]["reason_codes"]
+    assert report["released_positives"] == []
+
+
+def test_released_row_missing_license_family_cannot_validate_release():
+    report = _report(spdx_known_bundle())
+    report["released_positives"][0].pop("license_family", None)
+    errors = validate_positive_release(report)
+    assert errors
+    assert any("required fields" in error for error in errors)
+
+
+def test_released_row_missing_evidence_digest_cannot_validate_release():
+    report = _report(spdx_known_bundle())
+    report["released_positives"][0].pop("evidence_digest", None)
+    errors = validate_positive_release(report)
+    assert errors
+    assert any("required fields" in error for error in errors)
