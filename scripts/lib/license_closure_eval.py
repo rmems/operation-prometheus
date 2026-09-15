@@ -162,7 +162,9 @@ def _evaluate_record(
         reasons.append("snapshot_provenance_missing")
     if not _sha256_or_none(snapshot_sha256) or source_hash is None:
         reasons.append("snapshot_provenance_missing")
-    reasons.extend(_pr_inventory_reasons(record, names, pr_number, pull_requests))
+    reasons.extend(
+        _pr_inventory_reasons(record, names, pr_number, pull_requests, repository)
+    )
 
     if declared_card is None:
         reasons.append("card_disclosure_missing")
@@ -242,8 +244,8 @@ def _evaluate_record(
             custom = repository.get("custom_license")
             if isinstance(custom, dict):
                 released["custom_license"] = custom
-            if inventory_license is not None:
-                released["inventory_license"] = inventory_license
+        if inventory_license is not None:
+            released["inventory_license"] = inventory_license
         return released
     return {
         "evidence": evidence,
