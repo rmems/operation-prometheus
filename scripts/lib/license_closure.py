@@ -199,7 +199,10 @@ def inventory_has_custom_evidence(repository: dict[str, Any] | None) -> bool:
         return False
     identifier = normalize_license_id(custom.get("identifier") or custom.get("spdx_id"))
     digest = _sha256_or_none(custom.get("text_sha256") or custom.get("evidence_sha256"))
-    return bool(identifier and LICENSE_REF_RE.fullmatch(identifier) and digest)
+    if not identifier or not LICENSE_REF_RE.fullmatch(identifier) or not digest:
+        return False
+    inventory_id = normalize_license_id(inventory_license_object(repository))
+    return _same_license(identifier, inventory_id)
 
 
 def license_evidence_payload(repository: dict[str, Any]) -> dict[str, Any]:
@@ -256,6 +259,12 @@ def record_license(record: dict[str, Any]) -> str | None:
     return normalize_license_id(record.get("license"))
 
 
+def _folded_mapping(mapped: Any) -> dict[str, Any]:
+    if not isinstance(mapped, dict):
+        return {}
+    return {_text(key).casefold(): value for key, value in mapped.items() if _text(key)}
+
+
 def _mapped_value(
     container: dict[str, Any],
     repo: str,
@@ -263,13 +272,43 @@ def _mapped_value(
     plural: str,
     coerce: Callable[[Any], str | None],
 ) -> str | None:
-    mapped = container.get(plural)
-    if isinstance(mapped, dict):
-        folded = {_text(key).casefold(): value for key, value in mapped.items() if _text(key)}
-        found = coerce(folded.get(repo.casefold()))
-        if found is not None:
-            return found
+    folded = _folded_mapping(container.get(plural))
+    found = coerce(folded.get(repo.casefold()))
+    if found is not None:
+        return found
     return coerce(container.get(singular))
+
+
+def _singular_map_conflict(
+    container: dict[str, Any],
+    repo: str,
+    singular: str,
+    plural: str,
+    coerce: Callable[[Any], str | None],
+) -> bool:
+    folded = _folded_mapping(container.get(plural))
+    if repo.casefold() not in folded:
+        return False
+    mapped_value = coerce(folded.get(repo.casefold()))
+    singular_value = coerce(container.get(singular))
+    if singular_value is None:
+        return False
+    if mapped_value is None:
+        return True
+    return mapped_value.casefold() != singular_value.casefold()
+
+
+def _declaration_map_conflicts(card: dict[str, Any], manifest: dict[str, Any], repo: str) -> bool:
+    checks = (
+        (card, "source_license", "source_licenses", normalize_license_id),
+        (manifest, "source_license", "source_licenses", normalize_license_id),
+        (card, "license_evidence_digest", "license_evidence_digests", _sha256_or_none),
+        (manifest, "license_evidence_digest", "license_evidence_digests", _sha256_or_none),
+    )
+    return any(
+        _singular_map_conflict(container, repo, singular, plural, coerce)
+        for container, singular, plural, coerce in checks
+    )
 
 
 def _mapping_license(container: dict[str, Any], repo: str, singular: str, plural: str) -> str | None:
@@ -388,9 +427,10 @@ def _markdown_discloses(markdown: str | None, identifier: str | None) -> bool:
     if markdown is None:
         return True
     section = _markdown_license_section(markdown)
-    if section is None or identifier is None:
+    if section is None or not identifier:
         return False
-    return identifier.casefold() in section.casefold()
+    pattern = r"(?<![A-Za-z0-9.+-])" + re.escape(identifier) + r"(?![A-Za-z0-9.+-])"
+    return re.search(pattern, section, flags=re.IGNORECASE) is not None
 
 
 def _same_license(left: str | None, right: str | None) -> bool:
@@ -470,6 +510,8 @@ def _evaluate_record(
         item for item in (card_digest, manifest_digest) if item is not None
     }
     if len(declared_digest_values) > 1:
+        reasons.append("declarations_disagree")
+    if _declaration_map_conflicts(card, manifest, repo):
         reasons.append("declarations_disagree")
     prior_digest = None
     prior_id = None
