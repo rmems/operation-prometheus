@@ -69,8 +69,35 @@ def evidence_digest(payload: dict[str, Any]) -> str:
 
 
 def inventory_row_source_hash(repository: dict[str, Any]) -> str:
+    """Hash the eligibility producer payload, not the published wrapper fields.
+
+    ``eligibility_repositories._repository_row`` hashes the incoming GitHub
+    source object before renaming ids and adding aliases. Reconstruct that
+    payload so frozen v0.7 inventory rows authenticate, while a tampered
+    license object still fails the digest.
+    """
     return sha256_json(
-        {key: value for key, value in repository.items() if key != "source_hash"}
+        {
+            "archived": bool(repository.get("archived")),
+            "created_at": repository.get("created_at"),
+            "database_id": repository.get("repository_database_id"),
+            "default_branch": repository.get("default_branch"),
+            "disabled": bool(repository.get("disabled")),
+            "fork": bool(repository.get("fork")),
+            "id": repository.get("repository_id"),
+            "license": repository.get("license") or {},
+            "name": repository.get("name"),
+            "name_with_owner": repository.get("name_with_owner"),
+            "owner_kind": repository.get("owner_kind"),
+            "owner_login": repository.get("owner_login"),
+            "pull_request_total_count": int(
+                repository.get("pull_request_total_count") or 0
+            ),
+            "pushed_at": repository.get("pushed_at"),
+            "updated_at": repository.get("updated_at"),
+            "url": repository.get("url"),
+            "visibility": repository.get("visibility"),
+        }
     )
 
 
@@ -101,14 +128,14 @@ def record_id(record: dict[str, Any]) -> str:
             return value
     repo = record_repo(record)
     pr_number = record.get("pr_number")
-    if repo and isinstance(pr_number, int):
+    if repo and type(pr_number) is int and pr_number >= 1:
         return f"{repo.replace('/', '-')}#{pr_number}"
     return repo or "unknown-record"
 
 
 def record_pr_number(record: dict[str, Any]) -> int | None:
     value = record.get("pr_number")
-    if isinstance(value, int) and value >= 1:
+    if type(value) is int and value >= 1:
         return value
     return None
 
@@ -159,6 +186,19 @@ def _mapped_value(
     return coerce(container.get(singular))
 
 
+def _malformed_present_value(
+    container: dict[str, Any],
+    key: str,
+    coerce: Callable[[Any], str | None],
+) -> bool:
+    if key not in container:
+        return False
+    value = container.get(key)
+    if value is None:
+        return False
+    return coerce(value) is None
+
+
 def _singular_map_conflict(
     container: dict[str, Any],
     repo: str,
@@ -166,6 +206,8 @@ def _singular_map_conflict(
     plural: str,
     coerce: Callable[[Any], str | None],
 ) -> bool:
+    if _malformed_present_value(container, singular, coerce):
+        return True
     folded = _folded_mapping(container.get(plural))
     if repo.casefold() not in folded:
         return False
@@ -250,6 +292,7 @@ def declared_digest_for_repo(container: dict[str, Any], repo: str) -> str | None
 
 def index_repositories(repositories: list[dict[str, Any]]) -> dict[str, dict[str, Any]]:
     index: dict[str, dict[str, Any]] = {}
+    seen_ids: dict[str, str] = {}
     for row in repositories:
         name = _text(row.get("name_with_owner"))
         if not name:
@@ -257,6 +300,12 @@ def index_repositories(repositories: list[dict[str, Any]]) -> dict[str, dict[str
         folded = name.casefold()
         if folded in index:
             raise ValueError(f"Duplicate inventory repository {name}")
+        repo_id = _text(row.get("repository_id"))
+        if repo_id:
+            previous = seen_ids.get(repo_id)
+            if previous is not None and previous != folded:
+                raise ValueError(f"Duplicate inventory repository id {repo_id}")
+            seen_ids[repo_id] = folded
         index[folded] = row
         for alias in row.get("aliases") or []:
             if isinstance(alias, dict):
