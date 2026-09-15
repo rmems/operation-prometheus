@@ -243,7 +243,7 @@ class _VisibleHtmlText(HTMLParser):
 
     def __init__(self) -> None:
         super().__init__(convert_charrefs=True)
-        self._skip_depth = 0
+        self._skip: list[str] = []
         self.parts: list[str] = []
 
     def _hides(self, tag: str, attrs: list[tuple[str, str | None]]) -> bool:
@@ -252,19 +252,21 @@ class _VisibleHtmlText(HTMLParser):
         return any(name.casefold() == "hidden" for name, _value in attrs)
 
     def handle_starttag(self, tag: str, attrs: list[tuple[str, str | None]]) -> None:
-        if self._skip_depth:
+        if self._skip:
             if tag not in _VOID_HTML_TAGS:
-                self._skip_depth += 1
+                self._skip.append(tag)
             return
         if self._hides(tag, attrs) and tag not in _VOID_HTML_TAGS:
-            self._skip_depth = 1
+            self._skip.append(tag)
 
     def handle_endtag(self, tag: str) -> None:
-        if self._skip_depth:
-            self._skip_depth -= 1
+        if not self._skip or tag in _VOID_HTML_TAGS:
+            return
+        if tag == self._skip[-1]:
+            self._skip.pop()
 
     def handle_data(self, data: str) -> None:
-        if not self._skip_depth:
+        if not self._skip:
             self.parts.append(data)
 
 
