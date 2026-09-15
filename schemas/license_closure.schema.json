@@ -1,145 +1,185 @@
 {
-  "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "$id": "https://rmems.github.io/operation-prometheus/schemas/license_closure.schema.json",
-  "title": "LicenseClosureReport",
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "https://github.com/rmems/operation-prometheus/schemas/license_closure.schema.json",
+  "title": "Operation Prometheus license-closure manifest",
+  "description": "Fail-closed report used before positive corpus publication. Source-derived licenses are preserved; this is not a compatibility or relicense verdict.",
   "type": "object",
-  "additionalProperties": false,
   "required": [
     "schema_version",
-    "generated_at",
-    "dataset_id",
-    "inventory_path",
-    "inventory_sha256",
-    "source_count",
-    "released_positive",
-    "quarantined",
+    "snapshot_sha256",
     "license_families",
-    "unresolved_license_count"
+    "evidence_digests",
+    "counts",
+    "released_positives",
+    "quarantined",
+    "closed",
+    "bundle_errors"
   ],
   "properties": {
-    "schema_version": {
-      "const": "license-closure-v1"
+    "schema_version": { "const": "license_closure_manifest_v1" },
+    "snapshot_sha256": { "$ref": "#/definitions/sha256" },
+    "license_families": {
+      "type": "array",
+      "items": { "enum": ["spdx", "custom"] },
+      "uniqueItems": true
     },
-    "generated_at": {
-      "type": "string",
-      "minLength": 1
-    },
-    "dataset_id": {
-      "type": "string",
-      "minLength": 1
-    },
-    "inventory_path": {
-      "type": "string",
-      "minLength": 1
-    },
-    "inventory_sha256": {
-      "type": "string",
-      "pattern": "^[a-f0-9]{64}$"
-    },
-    "source_count": {
-      "type": "integer",
-      "minimum": 0
-    },
-    "released_positive": {
+    "evidence_digests": {
       "type": "array",
       "items": {
         "type": "object",
-        "additionalProperties": false,
-        "required": [
-          "id",
-          "license",
-          "license_family",
-          "evidence"
-        ],
+        "required": ["repository", "digest", "family", "spdx_id"],
         "properties": {
-          "id": {
-            "type": "string",
-            "minLength": 1
-          },
-          "license": {
-            "type": "string",
-            "minLength": 1
-          },
-          "license_family": {
-            "type": "string",
-            "enum": ["permissive", "copyleft", "custom"]
-          },
-          "custom_license": {
-            "type": "object",
-            "additionalProperties": false,
-            "required": ["name", "text_sha256", "attested_by"],
-            "properties": {
-              "name": { "type": "string", "minLength": 1 },
-              "text_sha256": {
-                "type": "string",
-                "pattern": "^[a-f0-9]{64}$"
-              },
-              "attested_by": { "type": "string", "minLength": 1 }
-            }
-          },
-          "evidence": {
-            "type": "array",
-            "minItems": 1,
-            "items": {
-              "type": "string",
-              "enum": [
-                "spdx_identifier",
-                "custom_object",
-                "github_license_api",
-                "markdown_disclosure",
-                "pr_inventory"
-              ]
-            }
-          }
-        }
+          "repository": { "type": "string", "minLength": 3 },
+          "digest": { "$ref": "#/definitions/sha256" },
+          "family": { "enum": ["spdx", "custom"] },
+          "spdx_id": { "type": ["string", "null"], "minLength": 1 }
+        },
+        "additionalProperties": false
       }
+    },
+    "counts": {
+      "type": "object",
+      "required": [
+        "record_count",
+        "released_positive_count",
+        "quarantined_count",
+        "unresolved_count"
+      ],
+      "properties": {
+        "record_count": { "$ref": "#/definitions/count" },
+        "released_positive_count": { "$ref": "#/definitions/count" },
+        "quarantined_count": { "$ref": "#/definitions/count" },
+        "unresolved_count": { "$ref": "#/definitions/count" }
+      },
+      "additionalProperties": false
+    },
+    "released_positives": {
+      "type": "array",
+      "items": { "$ref": "#/definitions/released_positive" }
     },
     "quarantined": {
       "type": "array",
-      "items": {
-        "type": "object",
-        "additionalProperties": false,
-        "required": ["id", "reasons"],
-        "properties": {
-          "id": {
-            "type": "string",
-            "minLength": 1
-          },
-          "reasons": {
-            "type": "array",
-            "minItems": 1,
-            "items": {
-              "type": "string",
-              "enum": [
-                "unlicensed",
-                "unknown_license",
-                "source_license_missing",
-                "source_license_changed",
-                "declarations_disagree",
-                "missing_evidence",
-                "ambiguous_custom",
-                "copyleft_without_disclosure",
-                "pr_inventory_mismatch"
-              ]
-            }
-          }
-        }
-      }
+      "items": { "$ref": "#/definitions/quarantined_row" }
     },
-    "license_families": {
+    "closed": { "type": "boolean" },
+    "bundle_errors": {
+      "type": "array",
+      "items": { "type": "string", "minLength": 1 }
+    }
+  },
+  "additionalProperties": false,
+  "definitions": {
+    "count": { "type": "integer", "minimum": 0 },
+    "sha256": { "type": "string", "pattern": "^[a-f0-9]{64}$" },
+    "license_family": { "enum": ["spdx", "custom", "missing", "unknown"] },
+    "reason_code": {
+      "enum": [
+        "source_license_missing",
+        "source_license_unknown",
+        "source_license_changed",
+        "source_license_conflict",
+        "snapshot_provenance_missing",
+        "card_disclosure_missing",
+        "declarations_disagree",
+        "forge_license_substitution",
+        "source_license_unresolved"
+      ]
+    },
+    "released_positive": {
       "type": "object",
-      "additionalProperties": false,
-      "required": ["permissive", "copyleft", "custom", "unknown"],
+      "required": [
+        "record_id",
+        "repo",
+        "pr_number",
+        "state",
+        "license_family",
+        "spdx_id",
+        "evidence_digest"
+      ],
       "properties": {
-        "permissive": { "type": "integer", "minimum": 0 },
-        "copyleft": { "type": "integer", "minimum": 0 },
-        "custom": { "type": "integer", "minimum": 0 },
-        "unknown": { "type": "integer", "minimum": 0 }
-      }
+        "record_id": { "type": "string", "minLength": 1 },
+        "repo": { "type": "string", "minLength": 3 },
+        "pr_number": { "type": ["integer", "null"], "minimum": 1 },
+        "state": { "const": "released_positive" },
+        "license_family": { "enum": ["spdx", "custom"] },
+        "spdx_id": { "type": "string", "minLength": 1 },
+        "evidence_digest": { "$ref": "#/definitions/sha256" },
+        "custom_license": { "type": "object" }
+      },
+      "additionalProperties": false
     },
-    "unresolved_license_count": {
-      "type": "integer",
-      "minimum": 0
+    "quarantined_row": {
+      "type": "object",
+      "required": [
+        "record_id",
+        "repo",
+        "pr_number",
+        "state",
+        "primary_reason",
+        "reason_codes",
+        "license_family",
+        "evidence"
+      ],
+      "properties": {
+        "record_id": { "type": "string", "minLength": 1 },
+        "repo": { "type": "string" },
+        "pr_number": { "type": ["integer", "null"], "minimum": 1 },
+        "state": { "const": "quarantined" },
+        "primary_reason": { "$ref": "#/definitions/reason_code" },
+        "reason_codes": {
+          "type": "array",
+          "minItems": 1,
+          "items": { "$ref": "#/definitions/reason_code" },
+          "uniqueItems": true
+        },
+        "license_family": { "$ref": "#/definitions/license_family" },
+        "evidence": { "$ref": "#/definitions/evidence" }
+      },
+      "additionalProperties": false
+    },
+    "evidence": {
+      "type": "object",
+      "required": [
+        "record_license",
+        "card_license",
+        "manifest_license",
+        "inventory_license",
+        "evidence_digest",
+        "declared_evidence_digest",
+        "prior_evidence_digest",
+        "snapshot_sha256",
+        "repository_source_hash"
+      ],
+      "properties": {
+        "record_license": { "type": ["string", "null"] },
+        "card_license": { "type": ["string", "null"] },
+        "manifest_license": { "type": ["string", "null"] },
+        "inventory_license": {
+          "type": ["object", "null"],
+          "required": ["spdx_id", "name", "url"],
+          "properties": {
+            "spdx_id": { "type": ["string", "null"] },
+            "name": { "type": ["string", "null"] },
+            "url": { "type": ["string", "null"] }
+          },
+          "additionalProperties": false
+        },
+        "evidence_digest": { "type": ["string", "null"], "pattern": "^[a-f0-9]{64}$" },
+        "declared_evidence_digest": {
+          "type": ["string", "null"],
+          "pattern": "^[a-f0-9]{64}$"
+        },
+        "prior_evidence_digest": {
+          "type": ["string", "null"],
+          "pattern": "^[a-f0-9]{64}$"
+        },
+        "snapshot_sha256": { "type": ["string", "null"], "pattern": "^[a-f0-9]{64}$" },
+        "repository_source_hash": {
+          "type": ["string", "null"],
+          "pattern": "^[a-f0-9]{64}$"
+        }
+      },
+      "additionalProperties": false
     }
   }
 }
