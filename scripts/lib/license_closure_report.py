@@ -141,6 +141,10 @@ def build_license_closure_report(
     if digest is None:
         raise ValueError("snapshot_sha256 must be a 64-character hex digest")
     snapshot_sha256 = digest
+    if not isinstance(card, dict):
+        raise ValueError("card must be an object")
+    if not isinstance(manifest, dict):
+        raise ValueError("manifest must be an object")
     inventory_index = index_repositories(repositories)
     prior_index = (
         index_repositories(prior_repositories)
