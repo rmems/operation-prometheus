@@ -15,6 +15,7 @@ from license_closure_fixtures import (
     conflicting_card_manifest_digest_bundle,
     custom_license_bundle,
     forge_substitution_bundle,
+    license_ref_without_digest_bundle,
     missing_license_bundle,
     mixed_repository_bundle,
     report_kwargs,
@@ -75,6 +76,13 @@ def test_custom_license_closes_with_frozen_evidence():
     assert report["closed"] is True
     assert report["license_families"] == ["custom"]
     assert report["released_positives"][0]["spdx_id"] == "LicenseRef-TemporalFocus"
+
+
+def test_license_ref_without_text_digest_is_quarantined():
+    report = _report(license_ref_without_digest_bundle())
+    _assert_schema(report)
+    assert report["released_positives"] == []
+    assert "source_license_unknown" in report["quarantined"][0]["reason_codes"]
 
 
 def test_missing_license_is_quarantined_with_reason_and_evidence():
@@ -167,6 +175,7 @@ def test_unresolved_record_cannot_appear_in_released_positives():
         changed_license_bundle(),
         conflicting_card_manifest_bundle(),
         conflicting_card_manifest_digest_bundle(),
+        license_ref_without_digest_bundle(),
         unknown_license_bundle(),
         forge_substitution_bundle(),
     ):
@@ -206,7 +215,8 @@ def test_repeated_build_is_byte_identical():
 def test_classify_license_family_is_fail_closed():
     assert classify_license_family("MIT") == "spdx"
     assert classify_license_family("MIT OR Apache-2.0") == "spdx"
-    assert classify_license_family("LicenseRef-TemporalFocus") == "custom"
+    assert classify_license_family("LicenseRef-TemporalFocus") == "unknown"
+    assert classify_license_family("LicenseRef-TemporalFocus", has_custom_evidence=True) == "custom"
     assert classify_license_family("NOASSERTION") == "unknown"
     assert classify_license_family("Not-A-Real-License-1.0") == "unknown"
     assert classify_license_family(None) == "missing"
@@ -336,6 +346,44 @@ def test_module_does_not_import_network_clients():
     assert "github_client" not in dir(module)
     assert "urllib" not in module.__dict__
     assert "requests" not in module.__dict__
+
+
+def test_identifier_outside_license_section_does_not_disclose():
+    bundle = spdx_known_bundle()
+    bundle["markdown"] = (
+        "## License / provenance\n\nUnresolved.\n\n## Dependencies\n\nMIT licensed helper.\n"
+    )
+    report = _report(bundle)
+    assert "card_disclosure_missing" in report["quarantined"][0]["reason_codes"]
+    assert report["released_positives"] == []
+
+
+def test_card_license_map_is_case_insensitive():
+    bundle = mixed_repository_bundle()
+    bundle["records"][1]["repo"] = "limen-neural/axon-encoder"
+    report = _report(bundle)
+    assert report["closed"] is True
+    ids = released_positive_ids(report)
+    assert "Limen-Neural-axon-encoder-37" in ids
+
+
+def test_manifest_must_name_the_record_repository():
+    bundle = spdx_known_bundle()
+    bundle["manifest"]["source_repo"] = "rmems/other"
+    report = _report(bundle)
+    assert "declarations_disagree" in report["quarantined"][0]["reason_codes"]
+    assert report["released_positives"] == []
+
+
+def test_duplicate_record_ids_are_quarantined():
+    bundle = spdx_known_bundle()
+    bundle["records"].append(dict(bundle["records"][0]))
+    report = _report(bundle)
+    _assert_schema(report)
+    assert_released_positives_are_closed(report)
+    assert report["released_positives"] == []
+    assert report["counts"]["quarantined_count"] == 2
+    assert all("source_license_unresolved" in row["reason_codes"] for row in report["quarantined"])
 
 
 def test_missing_markdown_section_blocks_when_card_is_supplied():
