@@ -61,12 +61,17 @@ def build_manifest(
     records = [
         json.loads(line) for line in data.decode("utf-8").splitlines() if line.strip()
     ]
+    source_repo: dict[str, str] = {}
+    if "source_repo" in card:
+        singular = card["source_repo"]
+        if isinstance(singular, str) and singular.strip():
+            source_repo["source_repo"] = singular
     return {
         "name": name,
         "schema_version": str(card.get("schema_version") or "pr_trajectory_v0"),
         "created_at": created_at,
         "created_by": created_by,
-        "source_repo": str(card.get("source_repo") or ""),
+        **source_repo,
         "jsonl_path": jsonl_path.relative_to(ROOT).as_posix()
         if jsonl_path.is_relative_to(ROOT)
         else str(jsonl_path),
