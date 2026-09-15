@@ -18,7 +18,12 @@ evaluation in ``license_closure_eval``, and report assembly in
 from __future__ import annotations
 
 from .license_closure_ids import SCHEMA_VERSION, classify_license_family
-from .license_closure_inventory import evidence_digest, license_evidence_payload
+from .license_closure_inventory import (
+    evidence_digest,
+    inventory_row_source_hash,
+    license_evidence_payload,
+)
+from .license_closure_pr import pr_inventory_row_source_hash
 from .license_closure_report import (
     assert_released_positives_are_closed,
     build_license_closure_report,
@@ -32,7 +37,9 @@ __all__ = [
     "build_license_closure_report",
     "classify_license_family",
     "evidence_digest",
+    "inventory_row_source_hash",
     "license_evidence_payload",
+    "pr_inventory_row_source_hash",
     "released_positive_ids",
     "validate_positive_release",
 ]
