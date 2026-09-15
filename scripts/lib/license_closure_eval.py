@@ -23,6 +23,7 @@ from .license_closure_inventory import (
     _identity_names,
     _inventory_for_repo,
     _prior_repository,
+    _supplied_record_id,
     card_license_for_repo,
     declared_digest_for_repo,
     evidence_digest,
@@ -96,6 +97,8 @@ def _evaluate_record(
     if record_repo_identities_conflict(record):
         reasons.append("declarations_disagree")
     rid = record_id(record)
+    if not _supplied_record_id(record):
+        reasons.append("declarations_disagree")
     pr_number = record_pr_number(record)
     declared_record = record_license(record)
     repository = _inventory_for_repo(inventory_index, repo)
@@ -305,8 +308,8 @@ def _duplicate_id_row(row: dict[str, Any]) -> dict[str, Any]:
             digest=row.get("evidence_digest"),
             declared_digest=None,
             prior_digest=None,
-            snapshot_sha256=None,
-            repository_source_hash=None,
+            snapshot_sha256=row.get("snapshot_sha256"),
+            repository_source_hash=row.get("repository_source_hash"),
             custom_license=frozen_custom,
         )
     reasons = sorted(
