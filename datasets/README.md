@@ -52,3 +52,7 @@ See:
 - `examples/` — tiny synthetic samples for schema demos
 - `inventory/` — thin eligibility rows, policy, drift evidence, and manifests;
   never the frozen raw source snapshot
+- `shards/` / `corpus/` — v0.7 shard outputs and the merged global manifest live
+  outside extract PRs; the merge contract is documented in
+  [docs/corpus-shard-merge.md](../docs/corpus-shard-merge.md) and implemented by
+  `scripts/merge_corpus_shards.py`
