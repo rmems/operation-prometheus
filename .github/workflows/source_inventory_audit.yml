@@ -1,0 +1,38 @@
+name: Source inventory audit
+
+# Weekly read-only audit. Uploads a report of new/renamed/deleted repositories
+# and changed terminal candidates. Does not mutate source repositories and does
+# not create issues in those repositories.
+
+on:
+  schedule:
+    - cron: "17 6 * * 1"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  issues: read
+  pull-requests: read
+
+jobs:
+  source-inventory-audit:
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    env:
+      GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - run: pip install --quiet 'jsonschema[format]==4.25.0'
+      - name: Diff live GitHub inventory against the frozen ledger
+        run: python scripts/source_inventory_audit.py --out reports/source-inventory-audit.json
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: source-inventory-audit
+          path: reports/source-inventory-audit.json
+          if-no-files-found: error

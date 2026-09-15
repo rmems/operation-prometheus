@@ -26,17 +26,31 @@ try:
     import jsonschema
 except ImportError:
     jsonschema = None
-    print("ERROR: jsonschema is required. Install with: pip install jsonschema", file=sys.stderr)
+    print(
+        "ERROR: jsonschema is required. Install with: pip install jsonschema",
+        file=sys.stderr,
+    )
     sys.exit(2)
 
 _SCRIPTS = Path(__file__).resolve().parent
 if str(_SCRIPTS) not in sys.path:
     sys.path.insert(0, str(_SCRIPTS))
 
+from lib.ci_contracts import (  # noqa: E402
+    blank_license_policy_errors,
+    iter_uri_fields,
+    private_reference_errors,
+    record_identity,
+    unique_event_errors,
+)
 from lib.secrets import find_secrets  # noqa: E402
 
-SCHEMA_V0_PATH = Path(__file__).resolve().parent.parent / "schemas" / "pr_trajectory.schema.json"
-SCHEMA_V1_PATH = Path(__file__).resolve().parent.parent / "schemas" / "trajectory_v1.schema.json"
+SCHEMA_V0_PATH = (
+    Path(__file__).resolve().parent.parent / "schemas" / "pr_trajectory.schema.json"
+)
+SCHEMA_V1_PATH = (
+    Path(__file__).resolve().parent.parent / "schemas" / "trajectory_v1.schema.json"
+)
 HOME_PATH_RE = re.compile(
     r"("
     r"/home/[A-Za-z0-9._-]+"
@@ -80,7 +94,6 @@ def _iter_strings(obj: object):
             yield from _iter_strings(value)
 
 
-
 def _is_absolute_uri(value: object) -> bool:
     if not isinstance(value, str) or not value:
         return False
@@ -105,165 +118,229 @@ def _contains_nonfinite(obj: object) -> bool:
     return False
 
 
-def policy_errors(record: dict, lineno: int, filename: str) -> list[str]:
-    """Extra policy checks beyond JSON Schema."""
+def _policy(filename: str, lineno: int, message: str) -> str:
+    return f"  {filename}:{lineno} [policy] - {message}"
+
+
+def _parse_utc_timestamp(ts: str) -> datetime:
+    iso_ts = ts[:-1] + "+00:00" if ts.endswith(("Z", "z")) else ts
+    parsed = datetime.fromisoformat(iso_ts)
+    if parsed.tzinfo is None:
+        return parsed.replace(tzinfo=timezone.utc)
+    return parsed.astimezone(timezone.utc)
+
+
+def _event_timestamp_errors(events: list, filename: str, lineno: int) -> list[str]:
     errors: list[str] = []
-    if not isinstance(record, dict):
-        return errors
-
-    schema_version = record.get("schema_version")
-    if schema_version in ("1", "1.0", "v1"):
-        events = record.get("events")
-        if isinstance(events, list):
-            last_dt: datetime | None = None
-            for e in events:
-                if not isinstance(e, dict):
-                    continue
-                ts = e.get("timestamp")
-                if isinstance(ts, str) and ts:
-                    try:
-                        iso_ts = ts[:-1] + "+00:00" if ts.endswith(("Z", "z")) else ts
-                        dt = datetime.fromisoformat(iso_ts)
-                        if dt.tzinfo is None:
-                            dt = dt.replace(tzinfo=timezone.utc)
-                        else:
-                            dt = dt.astimezone(timezone.utc)
-                        if last_dt is not None and dt < last_dt:
-                            errors.append(
-                                f"  {filename}:{lineno} [policy] - future-event leakage / events not ordered "
-                                f"(timestamp {ts} before previous)"
-                            )
-                        last_dt = dt
-                    except OverflowError:
-                        errors.append(
-                            f"  {filename}:{lineno} [policy] - timestamp UTC normalization overflow"
-                        )
-                    except (ValueError, TypeError):
-                        errors.append(
-                            f"  {filename}:{lineno} [policy] - timestamp is not a parseable UTC instant"
-                        )
-
-                actor = e.get("actor")
-                if isinstance(actor, dict):
-                    if actor.get("type") not in ("human", "bot", "application", "agent"):
-                        errors.append(f"  {filename}:{lineno} [policy] - invented/unsupported actor type")
-
-        traj_type = record.get("trajectory_type")
-        if traj_type == "software" and isinstance(events, list):
-            has_snapshot = False
-            for e in events:
-                if not isinstance(e, dict):
-                    continue
-                code_state = e.get("code_state")
-                if not isinstance(code_state, dict):
-                    continue
-                for key in _SNAPSHOT_KEYS:
-                    value = code_state.get(key)
-                    if not value:
-                        continue
-                    if isinstance(value, str) and _GIT_OID_RE.fullmatch(value):
-                        has_snapshot = True
-                    else:
-                        errors.append(
-                            f"  {filename}:{lineno} [policy] - code snapshot {key} is not a git object id"
-                        )
-            if not has_snapshot:
-                errors.append(f"  {filename}:{lineno} [policy] - missing required code snapshots for software trajectory")
-
-        disp = record.get("terminal_disposition")
-        payload = record.get("software_payload") if traj_type == "software" else record.get("research_payload")
-        success_dispositions = ("successful", "passed")
-        success_outcomes = ("pass", "passed", "success", "successful", "verified", "ok")
-        terminal_enum = {
-            "successful",
-            "failed",
-            "reverted",
-            "falsified",
-            "null",
-            "invalid",
-            "interrupted",
-            "inconclusive",
-        }
-        last_disp = None
-        if isinstance(events, list):
-            for e in reversed(events):
-                if isinstance(e, dict) and "disposition" in e:
-                    last_disp = e.get("disposition")
-                    break
-        outcome = ""
-        if isinstance(payload, dict):
-            outcome = str(payload.get("validation_outcome", "")).strip().lower()
-        if last_disp in success_dispositions:
-            terminal_success = True
-        elif last_disp in (None, "neutral", "null"):
-            terminal_success = (outcome in success_outcomes) if outcome else None
-        else:
-            terminal_success = False
-        if disp == "successful" and terminal_success is False:
+    last_dt: datetime | None = None
+    for event in events:
+        if not isinstance(event, dict):
+            continue
+        ts = event.get("timestamp")
+        if not isinstance(ts, str) or not ts:
+            continue
+        try:
+            current = _parse_utc_timestamp(ts)
+        except OverflowError:
             errors.append(
-                f"  {filename}:{lineno} [policy] - nonterminal record incorrectly represented as positive terminal example"
+                _policy(filename, lineno, "timestamp UTC normalization overflow")
             )
-        elif disp not in (None, "successful") and terminal_success is True:
+            continue
+        except (ValueError, TypeError):
             errors.append(
-                f"  {filename}:{lineno} [policy] - terminal_disposition does not agree with terminal outcome evidence"
+                _policy(filename, lineno, "timestamp is not a parseable UTC instant")
             )
-        elif (
-            isinstance(last_disp, str)
-            and last_disp not in ("neutral", "null")
-            and disp in terminal_enum
-        ):
-            normalized_last = "successful" if last_disp == "passed" else last_disp
-            if normalized_last in terminal_enum and normalized_last != disp:
-                errors.append(
-                    f"  {filename}:{lineno} [policy] - terminal_disposition does not agree with terminal outcome evidence"
+            continue
+        if last_dt is not None and current < last_dt:
+            errors.append(
+                _policy(
+                    filename,
+                    lineno,
+                    f"future-event leakage / events not ordered (timestamp {ts} before previous)",
                 )
+            )
+        last_dt = current
+    return errors
 
-        artifacts = record.get("artifacts")
-        if isinstance(artifacts, list):
-            for art in artifacts:
-                if not isinstance(art, dict):
-                    continue
-                availability = art.get("availability")
-                content = art.get("content")
-                if availability == "inline" and not isinstance(content, str):
-                    errors.append(
-                        f"  {filename}:{lineno} [policy] - inline artifact missing content"
-                    )
-                    continue
-                if availability == "remote" and not _is_absolute_uri(art.get("uri")):
-                    errors.append(
-                        f"  {filename}:{lineno} [policy] - remote artifact uri is not an absolute URI"
-                    )
-                if not isinstance(content, str):
-                    continue
-                try:
-                    raw = content.encode("utf-8")
-                except UnicodeEncodeError:
-                    errors.append(
-                        f"  {filename}:{lineno} [policy] - {'inline artifact' if availability == 'inline' else 'artifact'} content is not UTF-8 encodable"
-                    )
-                    continue
-                digest = hashlib.sha256(raw).hexdigest()
-                declared = str(art.get("sha256") or "").strip().lower()
-                label = "inline artifact" if availability == "inline" else "artifact"
-                if declared != digest:
-                    errors.append(
-                        f"  {filename}:{lineno} [policy] - {label} sha256 does not match content"
-                    )
-                if art.get("byte_size") != len(raw):
-                    errors.append(
-                        f"  {filename}:{lineno} [policy] - {label} byte_size does not match content"
-                    )
 
+def _actor_type_errors(events: list, filename: str, lineno: int) -> list[str]:
+    allowed = ("human", "bot", "application", "agent")
+    errors: list[str] = []
+    for event in events:
+        actor = event.get("actor") if isinstance(event, dict) else None
+        if isinstance(actor, dict) and actor.get("type") not in allowed:
+            errors.append(_policy(filename, lineno, "invented/unsupported actor type"))
+    return errors
+
+
+def _software_snapshot_errors(events: list, filename: str, lineno: int) -> list[str]:
+    errors: list[str] = []
+    has_snapshot = False
+    for event in events:
+        if not isinstance(event, dict):
+            continue
+        code_state = event.get("code_state")
+        if not isinstance(code_state, dict):
+            continue
+        for key in _SNAPSHOT_KEYS:
+            value = code_state.get(key)
+            if not value:
+                continue
+            if isinstance(value, str) and _GIT_OID_RE.fullmatch(value):
+                has_snapshot = True
+            else:
+                errors.append(
+                    _policy(
+                        filename, lineno, f"code snapshot {key} is not a git object id"
+                    )
+                )
+    if not has_snapshot:
+        errors.append(
+            _policy(
+                filename,
+                lineno,
+                "missing required code snapshots for software trajectory",
+            )
+        )
+    return errors
+
+
+def _last_disposition(events: list):
+    for event in reversed(events):
+        if isinstance(event, dict) and "disposition" in event:
+            return event.get("disposition")
+    return None
+
+
+def _terminal_success(last_disp, outcome: str):
+    if last_disp in ("successful", "passed"):
+        return True
+    if last_disp not in (None, "neutral", "null"):
+        return False
+    success_outcomes = ("pass", "passed", "success", "successful", "verified", "ok")
+    return (outcome in success_outcomes) if outcome else None
+
+
+def _terminal_disposition_errors(
+    record: dict, events: list, filename: str, lineno: int
+) -> list[str]:
+    disp = record.get("terminal_disposition")
+    traj_type = record.get("trajectory_type")
+    payload = (
+        record.get("software_payload")
+        if traj_type == "software"
+        else record.get("research_payload")
+    )
+    last_disp = _last_disposition(events)
+    outcome = ""
+    if isinstance(payload, dict):
+        outcome = str(payload.get("validation_outcome", "")).strip().lower()
+    terminal_success = _terminal_success(last_disp, outcome)
+    terminal_enum = {
+        "successful",
+        "failed",
+        "reverted",
+        "falsified",
+        "null",
+        "invalid",
+        "interrupted",
+        "inconclusive",
+    }
+    disagree = "terminal_disposition does not agree with terminal outcome evidence"
+    if disp == "successful" and terminal_success is False:
+        return [
+            _policy(
+                filename,
+                lineno,
+                "nonterminal record incorrectly represented as positive terminal example",
+            )
+        ]
+    if disp not in (None, "successful") and terminal_success is True:
+        return [_policy(filename, lineno, disagree)]
+    if (
+        isinstance(last_disp, str)
+        and last_disp not in ("neutral", "null")
+        and disp in terminal_enum
+    ):
+        normalized_last = "successful" if last_disp == "passed" else last_disp
+        if normalized_last in terminal_enum and normalized_last != disp:
+            return [_policy(filename, lineno, disagree)]
+    return []
+
+
+def _one_artifact_errors(art: dict, filename: str, lineno: int) -> list[str]:
+    errors: list[str] = []
+    availability = art.get("availability")
+    content = art.get("content")
+    label = "inline artifact" if availability == "inline" else "artifact"
+    if availability == "inline" and not isinstance(content, str):
+        return [_policy(filename, lineno, "inline artifact missing content")]
+    if availability == "remote" and not _is_absolute_uri(art.get("uri")):
+        errors.append(
+            _policy(filename, lineno, "remote artifact uri is not an absolute URI")
+        )
+    if not isinstance(content, str):
+        return errors
+    try:
+        raw = content.encode("utf-8")
+    except UnicodeEncodeError:
+        return [_policy(filename, lineno, f"{label} content is not UTF-8 encodable")]
+    digest = hashlib.sha256(raw).hexdigest()
+    declared = str(art.get("sha256") or "").strip().lower()
+    if declared != digest:
+        errors.append(
+            _policy(filename, lineno, f"{label} sha256 does not match content")
+        )
+    if art.get("byte_size") != len(raw):
+        errors.append(
+            _policy(filename, lineno, f"{label} byte_size does not match content")
+        )
+    return errors
+
+
+def _artifact_policy_errors(record: dict, filename: str, lineno: int) -> list[str]:
+    artifacts = record.get("artifacts")
+    if not isinstance(artifacts, list):
+        return []
+    errors: list[str] = []
+    for art in artifacts:
+        if isinstance(art, dict):
+            errors.extend(_one_artifact_errors(art, filename, lineno))
+    return errors
+
+
+def _v1_policy_errors(record: dict, filename: str, lineno: int) -> list[str]:
+    events = record.get("events")
+    if not isinstance(events, list):
+        events = []
+    errors = [
+        *_event_timestamp_errors(events, filename, lineno),
+        *_actor_type_errors(events, filename, lineno),
+    ]
+    if record.get("trajectory_type") == "software" and isinstance(
+        record.get("events"), list
+    ):
+        errors.extend(_software_snapshot_errors(events, filename, lineno))
+    errors.extend(_terminal_disposition_errors(record, events, filename, lineno))
+    errors.extend(_artifact_policy_errors(record, filename, lineno))
+    return errors
+
+
+def _canonical_url_errors(record: dict, filename: str, lineno: int) -> list[str]:
     repo = record.get("repo")
     pr = record.get("pr_number")
     urls = record.get("source_urls") or []
-    if repo and pr:
-        canonical = f"https://github.com/{repo}/pull/{pr}"
-        if canonical not in urls:
-            errors.append(
-                f"  {filename}:{lineno} [source_urls] - missing canonical PR URL {canonical}"
-            )
+    if not (repo and pr):
+        return []
+    canonical = f"https://github.com/{repo}/pull/{pr}"
+    if canonical in urls:
+        return []
+    return [
+        f"  {filename}:{lineno} [source_urls] - missing canonical PR URL {canonical}"
+    ]
+
+
+def _home_secret_errors(record: dict, filename: str, lineno: int) -> list[str]:
     # Scan raw strings so Windows paths (C:\\Users\\...) are not missed via json.dumps escapes.
     home_hit = False
     secret_families: list[str] = []
@@ -275,17 +352,56 @@ def policy_errors(record: dict, lineno: int, filename: str) -> list[str]:
             if family not in seen_families:
                 seen_families.add(family)
                 secret_families.append(family)
+    errors: list[str] = []
     if home_hit:
         errors.append(
-            f"  {filename}:{lineno} [policy] - absolute user-home path present "
-            f"(/home, /Users, /root, or Windows Users)"
+            _policy(
+                filename,
+                lineno,
+                "absolute user-home path present (/home, /Users, /root, or Windows Users)",
+            )
         )
     if secret_families:
-        families = ", ".join(secret_families)
         errors.append(
-            f"  {filename}:{lineno} [policy] - secret-like token pattern present "
-            f"({families})"
+            _policy(
+                filename,
+                lineno,
+                f"secret-like token pattern present ({', '.join(secret_families)})",
+            )
         )
+    return errors
+
+
+def policy_errors(record: dict, lineno: int, filename: str) -> list[str]:
+    """Extra policy checks beyond JSON Schema."""
+    if not isinstance(record, dict):
+        return []
+    errors: list[str] = []
+    if record.get("schema_version") in ("1", "1.0", "v1"):
+        errors.extend(_v1_policy_errors(record, filename, lineno))
+    errors.extend(_canonical_url_errors(record, filename, lineno))
+    errors.extend(_home_secret_errors(record, filename, lineno))
+    return errors
+
+
+def contract_policy_errors(record: dict, lineno: int, filename: str) -> list[str]:
+    errors: list[str] = []
+    private_hits: list[str] = []
+    seen_private: set[str] = set()
+    for text in iter_uri_fields(record):
+        for hit in private_reference_errors(text):
+            if hit not in seen_private:
+                seen_private.add(hit)
+                private_hits.append(hit)
+    if private_hits:
+        errors.append(
+            f"  {filename}:{lineno} [policy] - private reference present "
+            f"({', '.join(private_hits)})"
+        )
+    for message in unique_event_errors(record):
+        errors.append(f"  {filename}:{lineno} [policy] - {message}")
+    for message in blank_license_policy_errors(record):
+        errors.append(f"  {filename}:{lineno} [policy] - {message}")
     return errors
 
 
@@ -299,6 +415,7 @@ def validate_file(
     """Validate a single JSONL file. Returns list of error strings."""
     errors: list[str] = []
     count = 0
+    seen_ids: dict[str, int] = {}
     try:
         with open(filepath) as f:
             for lineno, line in enumerate(f, start=1):
@@ -307,6 +424,7 @@ def validate_file(
                     continue
                 count += 1
                 try:
+
                     def _reject_nonfinite(constant: str):
                         raise json.JSONDecodeError(
                             f"non-finite constant {constant!r}", line, 0
@@ -324,15 +442,39 @@ def validate_file(
 
                 if isinstance(record, dict):
                     version = record.get("schema_version")
-                    validator = v1_validator if version in ("1", "1.0", "v1") else v0_validator
+                    validator = (
+                        v1_validator if version in ("1", "1.0", "v1") else v0_validator
+                    )
                 else:
                     validator = v0_validator
 
-                for error in sorted(validator.iter_errors(record), key=lambda e: list(e.path)):
+                for error in sorted(
+                    validator.iter_errors(record), key=lambda e: list(e.path)
+                ):
                     path = ".".join(str(p) for p in error.absolute_path) or "(root)"
-                    errors.append(f"  {filepath.name}:{lineno} [{path}] - {error.message}")
+                    errors.append(
+                        f"  {filepath.name}:{lineno} [{path}] - {error.message}"
+                    )
                 if strict_policy and isinstance(record, dict):
                     errors.extend(policy_errors(record, lineno, filepath.name))
+                    errors.extend(contract_policy_errors(record, lineno, filepath.name))
+                    identity = record_identity(record)
+                    if identity:
+                        previous = seen_ids.get(identity)
+                        if previous is not None:
+                            errors.append(
+                                f"  {filepath.name}:{lineno} [policy] - duplicate trajectory id "
+                                f"{identity} (first seen on line {previous})"
+                            )
+                        else:
+                            seen_ids[identity] = lineno
+                    elif (
+                        record.get("schema_version") in ("1", "1.0", "v1")
+                        or record.get("id") is not None
+                    ):
+                        errors.append(
+                            f"  {filepath.name}:{lineno} [policy] - trajectory/event record is missing a stable id"
+                        )
     except FileNotFoundError:
         errors.append(f"  ERROR: File not found: {filepath}")
         return errors
