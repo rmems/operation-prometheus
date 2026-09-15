@@ -145,7 +145,9 @@ expressed through inventory aliases does not look like a license change. Prior
 inventory lookup also follows the current row's aliases, so a forward rename
 still sees a license change on the previous name. If both `--snapshot-sha256`
 and `--inventory-manifest` are supplied, they must name the same snapshot
-digest. A supplied inventory manifest must bind `--inventory` through a
+digest. A supplied inventory manifest must itself declare a valid
+`snapshot_sha256`; `--snapshot-sha256` cannot fill a missing manifest digest
+and is only used to confirm that frozen value. A supplied inventory manifest must bind `--inventory` through a
 `files` entry (`repositories.jsonl` or the inventory basename) whose `sha256`
 matches the file bytes. Every publication run requires that inventory-manifest
 file binding; `--snapshot-sha256` without `--inventory-manifest` cannot close,
@@ -223,7 +225,9 @@ non-rendered `script` / `style` / `template` content, link destinations, and
 reference definitions, so a URL that only contains `MIT`, including a
 destination with balanced parentheses such as
 `https://example.test/foo(bar)/MIT`, a nested link label such as
-`[details [nested]](https://example.test/MIT)`, a destination on the line after
+`[details [nested]](https://example.test/MIT)`, a nested image destination
+such as `[![details](https://example.test/MIT)](https://outer.test)`, a
+destination on the line after
 `[source]:`, or a fenced `## License / provenance` heading, is not
 disclosure. A CommonMark reference-definition title on the following line is
 stripped with the definition. Labels parse backslash escapes, so
@@ -232,7 +236,9 @@ than leaving `MIT` in visible text. HTML comments and
 non-rendered HTML are stripped before the license heading is located, so a
 commented-out `## License / provenance` block cannot disclose a later
 visible identifier. A void tag such as `<br/>` inside a hidden block
-cannot close that hidden scope. Visible markup such as
+cannot close that hidden scope. A Markdown code span that only looks like a
+closing `</span>` tag cannot close a hidden HTML span that still contains
+`MIT`. Visible markup such as
 `<p>MIT</p>` still counts; splitting the identifier across block tags
 (`<p>MI</p><p>T</p>`) does not. Disclosure stops the license section at the
 next H1 or H2 heading, including CommonMark ATX headings indented by up to
@@ -284,7 +290,9 @@ alias PR row for the same number declares a different id.
 Omitting the pull-request inventory keeps repository-level snapshot checks only.
 Top-level `repo` and `repository.owner`/`name` must agree when both are
 present. A present non-string or blank top-level `repo` such as `7` cannot
-be erased so the nested identity can close.
+be erased so the nested identity can close. A present malformed or incomplete
+nested identity such as `repository: {"owner": 7, "name": "widget"}` cannot
+be discarded so a valid top-level `repo` can close.
 
 The closure manifest reports license families, per-repository evidence
 digests, and unresolved counts.
