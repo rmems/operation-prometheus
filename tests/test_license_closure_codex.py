@@ -706,3 +706,65 @@ def test_duplicate_record_ids_keep_inventory_license():
         row["evidence"]["inventory_license"]["spdx_id"] == "MIT"
         for row in report["quarantined"]
     )
+
+
+def test_swapped_released_repo_cannot_validate_release():
+    report = _report(spdx_known_bundle())
+    report["released_positives"][0]["repo"] = "evil/other"
+    report["evidence_digests"][0]["repository"] = "evil/other"
+    errors = validate_positive_release(report)
+    assert errors
+    assert any("license family" in error for error in errors)
+
+
+def test_swapped_report_snapshot_cannot_validate_release():
+    report = _report(spdx_known_bundle())
+    report["snapshot_sha256"] = "f" * 64
+    errors = validate_positive_release(report)
+    assert errors
+    assert any("license family" in error for error in errors)
+
+
+def test_boolean_report_counts_cannot_validate_release():
+    report = _report(spdx_known_bundle())
+    report["counts"] = {
+        "quarantined_count": False,
+        "record_count": True,
+        "released_positive_count": True,
+        "unresolved_count": False,
+    }
+    errors = validate_positive_release(report)
+    assert errors
+    assert any("count" in error for error in errors)
+
+
+def test_multiline_reference_title_is_not_markdown_disclosure():
+    bundle = spdx_known_bundle()
+    bundle["markdown"] = (
+        '## License / provenance\n\n[details]: https://example.test/license\n  "MIT"\n'
+    )
+    report = _report(bundle)
+    _assert_schema(report)
+    assert "card_disclosure_missing" in report["quarantined"][0]["reason_codes"]
+    assert report["released_positives"] == []
+
+
+def test_malformed_manifest_record_entry_cannot_close():
+    bundle = spdx_known_bundle()
+    bundle["manifest"]["records"] = [
+        {"id": bundle["records"][0]["id"]},
+        {},
+    ]
+    report = _report(bundle)
+    _assert_schema(report)
+    assert report["closed"] is False
+    assert any("record ids" in error for error in report["bundle_errors"])
+
+
+def test_indented_h2_after_license_section_is_not_disclosure():
+    bundle = spdx_known_bundle()
+    bundle["markdown"] = "## License / provenance\nNo license\n ## Appendix\nMIT\n"
+    report = _report(bundle)
+    _assert_schema(report)
+    assert "card_disclosure_missing" in report["quarantined"][0]["reason_codes"]
+    assert report["released_positives"] == []
