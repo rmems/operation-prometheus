@@ -6,7 +6,12 @@ from collections import Counter
 from typing import Any
 
 from .license_closure_eval import _duplicate_id_row, _evaluate_record
-from .license_closure_ids import SCHEMA_VERSION, _sha256_or_none, _text
+from .license_closure_ids import (
+    SCHEMA_VERSION,
+    _closed_release_family,
+    _sha256_or_none,
+    _text,
+)
 from .license_closure_inventory import index_repositories
 from .license_closure_pr import _index_pull_requests
 
@@ -47,7 +52,6 @@ def _released_evidence_summary(
 def _bundle_declaration_errors(
     report: dict[str, Any], manifest: dict[str, Any]
 ) -> list[str]:
-    """Return bundle-level disagreements between declared and observed closure."""
     errors: list[str] = []
     declared_families = manifest.get("license_families")
     if (
@@ -81,18 +85,22 @@ def _bundle_declaration_errors(
         declared_count = _declared_count(manifest["record_count"])
         if declared_count != report["counts"]["record_count"]:
             errors.append("manifest record_count does not agree with proposed records")
-    listed = manifest.get("records")
-    if isinstance(listed, list) and listed:
-        declared_ids = sorted(
-            _text(row.get("id"))
-            for row in listed
-            if isinstance(row, dict) and _text(row.get("id"))
+    if "records" in manifest:
+        listed = manifest.get("records")
+        declared_ids = (
+            sorted(
+                _text(row.get("id"))
+                for row in listed
+                if isinstance(row, dict) and _text(row.get("id"))
+            )
+            if isinstance(listed, list)
+            else []
         )
         actual_ids = sorted(
             row["record_id"]
             for row in report["released_positives"] + report["quarantined"]
         )
-        if declared_ids and declared_ids != actual_ids:
+        if not isinstance(listed, list) or declared_ids != actual_ids:
             errors.append("manifest record ids do not agree with proposed records")
     return errors
 
@@ -202,6 +210,8 @@ def assert_released_positives_are_closed(report: dict[str, Any]) -> None:
         raise AssertionError(
             "Unresolved records appeared in released positives: " + ", ".join(leaked)
         )
+    if len({row.get("record_id") for row in released}) != len(released):
+        raise AssertionError("Released record IDs are not unique")
     counts = report.get("counts") or {}
     if counts.get("unresolved_count") != len(quarantined):
         raise AssertionError("Unresolved count drifted from quarantined rows")
@@ -222,6 +232,11 @@ def assert_released_positives_are_closed(report: dict[str, Any]) -> None:
         raise AssertionError("license_families do not match released rows")
     if list(report.get("evidence_digests") or []) != evidence:
         raise AssertionError("evidence_digests do not match released rows")
+    if any(
+        not _closed_release_family(row.get("spdx_id"), row.get("license_family"))
+        for row in released
+    ):
+        raise AssertionError("released row license family is not closed")
 
 
 def validate_positive_release(report: dict[str, Any]) -> list[str]:
