@@ -19,6 +19,7 @@ from .license_closure_ids import (
 from .license_closure_inventory import (
     _declaration_map_conflicts,
     _inventory_for_repo,
+    _prior_repository,
     card_license_for_repo,
     declared_digest_for_repo,
     evidence_digest,
@@ -30,8 +31,14 @@ from .license_closure_inventory import (
     record_license,
     record_pr_number,
     record_repo,
+    record_repo_identities_conflict,
 )
-from .license_closure_pr import _declared_repos, _markdown_discloses, _pr_inventory_reasons
+from .license_closure_pr import (
+    _declared_repos,
+    _markdown_discloses,
+    _pr_inventory_reasons,
+)
+
 
 def _primary_reason(reasons: list[str]) -> str:
     for code in UNRESOLVED_REASONS:
@@ -78,6 +85,8 @@ def _evaluate_record(
 ) -> dict[str, Any]:
     reasons: list[str] = []
     repo = record_repo(record)
+    if record_repo_identities_conflict(record):
+        reasons.append("declarations_disagree")
     rid = record_id(record)
     pr_number = record_pr_number(record)
     declared_record = record_license(record)
@@ -112,7 +121,7 @@ def _evaluate_record(
     prior_digest = None
     prior_id = None
     if prior_index is not None:
-        prior_repo = _inventory_for_repo(prior_index, repo)
+        prior_repo = _prior_repository(prior_index, repository, repo)
         if isinstance(prior_repo, dict):
             prior_id = normalize_license_id(inventory_license_object(prior_repo))
             prior_digest = evidence_digest(license_evidence_payload(prior_repo))
@@ -213,7 +222,6 @@ def _evaluate_record(
         "repo": repo,
         "state": "quarantined",
     }
-
 
 
 def _duplicate_id_row(row: dict[str, Any]) -> dict[str, Any]:
