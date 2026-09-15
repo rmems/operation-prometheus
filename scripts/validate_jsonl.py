@@ -95,6 +95,29 @@ def _is_absolute_uri(value: object) -> bool:
     return True
 
 
+def _is_git_oid(value: object) -> bool:
+    return isinstance(value, str) and bool(_GIT_OID_RE.fullmatch(value))
+
+
+def _code_state_has_git_oid(code_state: object) -> bool:
+    if not isinstance(code_state, dict):
+        return False
+    return any(_is_git_oid(code_state.get(key)) for key in _SNAPSHOT_KEYS)
+
+
+def _event_has_evidence_url(event: dict) -> bool:
+    refs = event.get("evidence_references")
+    if not isinstance(refs, list):
+        return False
+    return any(_is_absolute_uri(ref) for ref in refs)
+
+
+def _event_has_auditable_anchor(event: dict) -> bool:
+    return _event_has_evidence_url(event) or _code_state_has_git_oid(
+        event.get("code_state")
+    )
+
+
 def _contains_nonfinite(obj: object) -> bool:
     if isinstance(obj, float) and not math.isfinite(obj):
         return True
@@ -148,6 +171,12 @@ def policy_errors(record: dict, lineno: int, filename: str) -> list[str]:
                     if actor.get("type") not in ("human", "bot", "application", "agent"):
                         errors.append(f"  {filename}:{lineno} [policy] - invented/unsupported actor type")
 
+                if not _event_has_auditable_anchor(e):
+                    errors.append(
+                        f"  {filename}:{lineno} [policy] - event missing auditable evidence anchor "
+                        f"(evidence_references URL or code_state git object id)"
+                    )
+
         traj_type = record.get("trajectory_type")
         if traj_type == "software" and isinstance(events, list):
             has_snapshot = False
@@ -161,7 +190,7 @@ def policy_errors(record: dict, lineno: int, filename: str) -> list[str]:
                     value = code_state.get(key)
                     if not value:
                         continue
-                    if isinstance(value, str) and _GIT_OID_RE.fullmatch(value):
+                    if _is_git_oid(value):
                         has_snapshot = True
                     else:
                         errors.append(
