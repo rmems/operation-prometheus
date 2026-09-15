@@ -14,6 +14,7 @@ from .license_closure_ids import (
 )
 from .source_inventory_common import sha256_json
 
+
 def inventory_license_object(
     repository: dict[str, Any] | None,
 ) -> dict[str, Any] | None:
@@ -164,9 +165,25 @@ def _singular_map_conflict(
     return mapped_value.casefold() != singular_value.casefold()
 
 
+def _digest_declaration_invalid(container: dict[str, Any], repo: str) -> bool:
+    folded = _folded_mapping(container.get("license_evidence_digests"))
+    candidates: list[Any] = []
+    if repo.casefold() in folded:
+        candidates.append(folded[repo.casefold()])
+    if "license_evidence_digest" in container:
+        candidates.append(container.get("license_evidence_digest"))
+    return any(
+        value is not None and _sha256_or_none(value) is None for value in candidates
+    )
+
+
 def _declaration_map_conflicts(
     card: dict[str, Any], manifest: dict[str, Any], repo: str
 ) -> bool:
+    if _digest_declaration_invalid(card, repo) or _digest_declaration_invalid(
+        manifest, repo
+    ):
+        return True
     checks = (
         (card, "source_license", "source_licenses", normalize_license_id),
         (manifest, "source_license", "source_licenses", normalize_license_id),
