@@ -151,6 +151,11 @@ def _evaluate_record(
         reasons.append("declarations_disagree")
     if manifest_repos and not folded_names.intersection(manifest_repos):
         reasons.append("declarations_disagree")
+    declared_repos = card_repos | manifest_repos
+    if any(
+        _inventory_for_repo(inventory_index, repo) is None for repo in declared_repos
+    ):
+        reasons.append("declarations_disagree")
     if (
         card_repos
         and manifest_repos
