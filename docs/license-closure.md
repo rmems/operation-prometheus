@@ -34,9 +34,11 @@ every evaluated row.
 This check does **not** decide license compatibility, relicense source-derived
 material under Operation Prometheus's Apache-2.0 terms, or guess a license
 when GitHub reports `NOASSERTION` / `OTHER`. Unbalanced SPDX parentheses,
-empty expression operands (`MIT OR ()`), misplaced parentheses
-(`MIT ( AND Apache-2.0)`), and non-`LicenseRef-*` identifiers stay unknown
-even if custom text evidence is present. `WITH` expressions whose right
+empty expression operands (`MIT OR ()`), and non-`LicenseRef-*` identifiers
+stay unknown even if custom text evidence is present. Grouped SPDX
+expressions such as `(MIT OR Apache-2.0) AND BSD-3-Clause` remain SPDX;
+misplaced parentheses (`MIT ( AND Apache-2.0)`) stay unknown. `WITH`
+expressions whose right
 operand is a license identifier (`MIT WITH Apache-2.0`) stay unknown. A
 source repository that is itself Apache-2.0 can still close; using this
 forge's Apache-2.0 license to fill a missing source license cannot.
@@ -76,7 +78,12 @@ or malformed digest fails closed. Duplicate inventory aliases that point at
 different repositories are rejected. Duplicate immutable `repository_id`
 values that point at different names are rejected. A present but unparseable
 singular `source_license` (for example `{}`) cannot be ignored in favor of a
-matching per-repository map. `build_manifest.py` copies license-closure
+matching per-repository map. A present non-object plural map such as
+`source_licenses: []` cannot be ignored in favor of a valid singular.
+Card and manifest `license_families` / `unresolved_license_count` must agree
+with closed evidence when they are declared. Prior-inventory rows must
+authenticate `source_hash` before their license is trusted. Markdown
+disclosure ignores HTML comments. `build_manifest.py` copies license-closure
 fields from the card when they are present.
 
 When a caller supplies a frozen pull-request inventory, every proposed record
@@ -91,9 +98,11 @@ repository state are compared to the matching PR roles; a correct base OID
 does not mask an incorrect head. A record merge/commit OID is not compared
 to the PR head; missing merge evidence fails closed. Intermediate event
 `code_state` commits and trajectory `tree_oid` values are not compared to
-those commit OIDs. Omitting the pull-request inventory keeps
-repository-level snapshot checks only. Top-level `repo` and
-`repository.owner`/`name` must agree when both are present.
+those commit OIDs. Pull-request lookup follows inventory aliases, so a
+canonical PR row still matches a trajectory that uses an old name. Omitting
+the pull-request inventory keeps repository-level snapshot checks only.
+Top-level `repo` and `repository.owner`/`name` must agree when both are
+present.
 
 The closure manifest reports license families, per-repository evidence
 digests, and unresolved counts.
