@@ -31,8 +31,8 @@ Every released positive trajectory must resolve through all three of:
 Card, manifest, and inventory declarations must agree. Singular and
 per-repository maps in the same artifact must not disagree, including the same
 repository named twice under different casing. A `license_evidence_digest` that
-is present but not a valid SHA-256 quarantines as `declarations_disagree`;
-omitting the digest remains optional. Missing, unknown, conflicting, or changed
+is present but not a valid SHA-256, including JSON `null`, quarantines as
+`declarations_disagree`; omitting the digest remains optional. Missing, unknown, conflicting, or changed
 evidence quarantines the row. Quarantined rows keep the evidence they have,
 including a frozen `custom_license` object when the inventory row carried
 one, and an explicit reason code. Quarantined evidence always includes
@@ -50,6 +50,10 @@ as non-empty strings, they must be identical; conflicting `id` /
 silently preferring `id`.
 A trajectory `license` must be a non-empty string; an object such as
 `{"spdx_id": "MIT"}` cannot close by unwrapping `spdx_id`.
+Card and manifest `source_license` / `source_licenses` values must also be
+non-empty strings; `{"spdx_id": "MIT"}` cannot close by unwrapping.
+Inventory `license` must be an object; a scalar `"MIT"` cannot be wrapped into
+`{"spdx_id": "MIT"}` and close.
 Publication consumers must treat a report as closed
 only when the quarantined array is empty, counts match those array lengths
 (including `record_count` equal to released plus quarantined), `counts` is a
@@ -78,6 +82,9 @@ Released rows persist `snapshot_sha256`, `repository_source_hash`, and a
 repository name, `evidence_digest`, and those hashes; swapping the published
 `repo`, `record_id`, `pr_number`, `evidence_digest` / inventory license, or
 the report snapshot without that binding fails closed.
+A report-level `snapshot_sha256` must be a 64-character hex digest even when
+`released_positives` and `quarantined` are both empty; an invalid digest cannot
+close by skipping released-row binding.
 Released identity, family, and digest fields must be non-empty strings;
 `pr_number` must be `null` or an integer `>= 1` (`type is int`, so `true`
 cannot stand in for `1`, and `0` / `-1` cannot close after rebuilding
@@ -188,7 +195,10 @@ entry must be a non-empty name string or an object with both `name_with_owner`
 and a non-empty `evidence_refs` array of unique strings;
 `{"name_with_owner":"rmems/other"}` without provenance cannot resolve another
 repository's license. `{}` or `7` cannot be skipped. Duplicate immutable `repository_id`
-values that point at different names are rejected. Every supplied repository
+values that point at different names are rejected. A present `repository_id`
+that is not a non-empty string (for example `7`) cannot be erased so duplicate-id
+and prior-id lookup are skipped; indexing and `source_hash` authentication both
+reject that row. Every supplied repository
 inventory row must be an object with a non-empty canonical `name_with_owner`;
 a valid matching row plus a malformed `{}` entry is rejected instead of
 skipped. A present but unparseable
@@ -232,6 +242,7 @@ destination with balanced parentheses such as
 such as `[![details](https://example.test/MIT)](https://outer.test)`, an
 angle-bracket destination with an escaped closer such as
 `[details](<https://example.test/\> foo MIT>)`, a
+code span inside a label such as `[details \`]`](https://example.test/MIT)`, a
 destination on the line after
 `[source]:`, or a fenced `## License / provenance` heading, is not
 disclosure. A CommonMark reference-definition title on the following line is
@@ -242,7 +253,9 @@ raw HTML is parsed, so an escaped `>` inside an angle-bracket destination
 cannot leak `MIT` into visible text. HTML comments and
 non-rendered HTML are stripped before the license heading is located, so a
 commented-out `## License / provenance` block cannot disclose a later
-visible identifier. A void tag such as `<br/>` inside a hidden block
+visible identifier. Link-label text is not scanned as ATX headings, so
+`[## License / provenance](url)` followed by a visible identifier cannot
+invent a license section. A void tag such as `<br/>` inside a hidden block
 cannot close that hidden scope. A Markdown code span that only looks like a
 closing `</span>` tag cannot close a hidden HTML span that still contains
 `MIT`. Visible markup such as
