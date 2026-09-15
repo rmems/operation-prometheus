@@ -21,8 +21,10 @@ omitting the digest remains optional. Missing, unknown, conflicting, or changed
 evidence quarantines the row. Quarantined rows keep the evidence they have and
 an explicit reason code. Publication consumers must treat a report as closed
 only when the quarantined array is empty, counts match those array lengths
-(including `record_count` equal to released plus quarantined), and
-`bundle_errors` is empty.
+(including `record_count` equal to released plus quarantined), `bundle_errors`
+is empty, and every released row's repository, digest, family, and identifier
+appear in `evidence_digests` / `license_families`. Manifest count fields must
+be actual integers; fractional values such as `0.5` fail closed.
 
 This check does **not** decide license compatibility, relicense source-derived
 material under Operation Prometheus's Apache-2.0 terms, or guess a license
@@ -59,8 +61,12 @@ expressed through inventory aliases does not look like a license change. Prior
 inventory lookup also follows the current row's aliases, so a forward rename
 still sees a license change on the previous name. If both `--snapshot-sha256`
 and `--inventory-manifest` are supplied, they must name the same snapshot
-digest. The dataset manifest must declare a valid `sha256` of `--records`; a
-missing or malformed digest fails closed.
+digest. A supplied inventory manifest must bind `--inventory` through a
+`files` entry (`repositories.jsonl` or the inventory basename) whose `sha256`
+matches the file bytes. Accepted snapshot digests are stored as lowercase hex.
+The dataset manifest must declare a valid `sha256` of `--records`; a missing
+or malformed digest fails closed. Duplicate inventory aliases that point at
+different repositories are rejected.
 
 When a caller supplies a frozen pull-request inventory, every proposed record
 must appear in that list. Duplicate repository+PR keys in that inventory are
