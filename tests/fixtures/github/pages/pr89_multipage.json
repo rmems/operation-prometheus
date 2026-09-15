@@ -1,0 +1,677 @@
+{
+  "page_count": 11,
+  "pages": [
+    {
+      "body": {
+        "additions": 362,
+        "base": {
+          "sha": "abc"
+        },
+        "body": "## Summary\nFix CUDA teardown and document Tier 0-5 ladder.\n\nCloses #74\n\n## Validation\n- cargo test --no-default-features passed\n- compute-sanitizer memcheck: ERROR SUMMARY: 0 errors\n",
+        "changed_files": 3,
+        "comments": 2,
+        "commits": 3,
+        "deletions": 143,
+        "draft": false,
+        "head": {
+          "sha": "def"
+        },
+        "html_url": "https://github.com/rmems/corinth-canal/pull/89",
+        "labels": [
+          {
+            "name": "CUDA"
+          },
+          {
+            "name": "testing"
+          }
+        ],
+        "merge_commit_sha": "ghi",
+        "merged": true,
+        "merged_at": "2026-05-27T06:13:36Z",
+        "review_comments": 1,
+        "state": "closed",
+        "title": "feat(gpu): add CUDA validation ladder",
+        "user": {
+          "login": "rmems",
+          "type": "User"
+        }
+      },
+      "body_text": null,
+      "duplicate": false,
+      "duplicate_of": null,
+      "etag": "W/\"stable-etag\"",
+      "headers": {
+        "content-type": "application/json; charset=utf-8",
+        "etag": "W/\"stable-etag\"",
+        "x-ratelimit-limit": "5000",
+        "x-ratelimit-remaining": "4999",
+        "x-ratelimit-reset": "1770000000",
+        "x-ratelimit-resource": "core"
+      },
+      "identity": {
+        "body_sha256": "b9cbba32c1f267ec205ebb420ef1f5d28d1ae5fb2751cd2787cabcb4dcdf330f",
+        "etag": "W/\"stable-etag\"",
+        "status": 200
+      },
+      "kind": "pull",
+      "malformed_json": false,
+      "method": "GET",
+      "pagination": {
+        "cursor": null,
+        "link": null,
+        "next": null,
+        "page": null,
+        "per_page": null
+      },
+      "rate_limit": {
+        "limit": 5000,
+        "remaining": 4999,
+        "reset": 1770000000,
+        "resource": "core",
+        "retry_after": null,
+        "used": null
+      },
+      "request": {
+        "accept": "application/vnd.github+json",
+        "query": {}
+      },
+      "seq": 0,
+      "status": 200,
+      "truncated": false,
+      "url": "https://api.github.com/repos/rmems/corinth-canal/pulls/89"
+    },
+    {
+      "body": [
+        {
+          "author_association": "NONE",
+          "body": "Usage guide spam",
+          "created_at": "2026-05-27T01:00:00Z",
+          "id": 100,
+          "user": {
+            "login": "codeant-ai[bot]",
+            "type": "Bot"
+          }
+        }
+      ],
+      "body_text": null,
+      "duplicate": false,
+      "duplicate_of": null,
+      "etag": "W/\"stable-etag\"",
+      "headers": {
+        "content-type": "application/json; charset=utf-8",
+        "etag": "W/\"stable-etag\"",
+        "link": "<https://api.github.com/repos/rmems/corinth-canal/issues/89/comments?page=2&per_page=100> ; rel=\"next\"",
+        "x-ratelimit-limit": "5000",
+        "x-ratelimit-remaining": "4999",
+        "x-ratelimit-reset": "1770000000",
+        "x-ratelimit-resource": "core"
+      },
+      "identity": {
+        "body_sha256": "abb53dc360d724630f8dc122081e5363d03a64cb6e0a68ba6333267a7d548521",
+        "etag": "W/\"stable-etag\"",
+        "status": 200
+      },
+      "kind": "comment",
+      "malformed_json": false,
+      "method": "GET",
+      "pagination": {
+        "cursor": null,
+        "link": "<https://api.github.com/repos/rmems/corinth-canal/issues/89/comments?page=2&per_page=100> ; rel=\"next\"",
+        "next": "https://api.github.com/repos/rmems/corinth-canal/issues/89/comments?page=2&per_page=100",
+        "page": null,
+        "per_page": 100
+      },
+      "rate_limit": {
+        "limit": 5000,
+        "remaining": 4999,
+        "reset": 1770000000,
+        "resource": "core",
+        "retry_after": null,
+        "used": null
+      },
+      "request": {
+        "accept": "application/vnd.github+json",
+        "query": {
+          "per_page": "100"
+        }
+      },
+      "seq": 1,
+      "status": 200,
+      "truncated": false,
+      "url": "https://api.github.com/repos/rmems/corinth-canal/issues/89/comments?per_page=100"
+    },
+    {
+      "body": [
+        {
+          "author_association": "OWNER",
+          "body": "Follow-up on page two.",
+          "created_at": "2026-05-27T01:10:00Z",
+          "id": 101,
+          "user": {
+            "login": "rmems",
+            "type": "User"
+          }
+        }
+      ],
+      "body_text": null,
+      "duplicate": false,
+      "duplicate_of": null,
+      "etag": "W/\"stable-etag\"",
+      "headers": {
+        "content-type": "application/json; charset=utf-8",
+        "etag": "W/\"stable-etag\"",
+        "x-ratelimit-limit": "5000",
+        "x-ratelimit-remaining": "4999",
+        "x-ratelimit-reset": "1770000000",
+        "x-ratelimit-resource": "core"
+      },
+      "identity": {
+        "body_sha256": "54642daa95c7157e8715544a3cc42d2ebab6a385b91d7c12b7953ea3eda98845",
+        "etag": "W/\"stable-etag\"",
+        "status": 200
+      },
+      "kind": "comment",
+      "malformed_json": false,
+      "method": "GET",
+      "pagination": {
+        "cursor": null,
+        "link": null,
+        "next": null,
+        "page": 2,
+        "per_page": 100
+      },
+      "rate_limit": {
+        "limit": 5000,
+        "remaining": 4999,
+        "reset": 1770000000,
+        "resource": "core",
+        "retry_after": null,
+        "used": null
+      },
+      "request": {
+        "accept": "application/vnd.github+json",
+        "query": {
+          "page": "2",
+          "per_page": "100"
+        }
+      },
+      "seq": 2,
+      "status": 200,
+      "truncated": false,
+      "url": "https://api.github.com/repos/rmems/corinth-canal/issues/89/comments?page=2&per_page=100"
+    },
+    {
+      "body": [
+        {
+          "body": "bot noise",
+          "created_at": "2026-05-27T01:00:00Z",
+          "id": 1,
+          "line": 1,
+          "path": "docs/CUDA_VALIDATION.md",
+          "user": {
+            "login": "gemini-code-assist[bot]",
+            "type": "Bot"
+          }
+        },
+        {
+          "body": "Document GGUF_CHECKPOINT_PATH in the Tier 1 commands.",
+          "created_at": "2026-05-27T01:05:00Z",
+          "id": 2,
+          "line": 12,
+          "path": "docs/CUDA_VALIDATION.md",
+          "user": {
+            "login": "reviewer-x",
+            "type": "User"
+          }
+        }
+      ],
+      "body_text": null,
+      "duplicate": false,
+      "duplicate_of": null,
+      "etag": "W/\"stable-etag\"",
+      "headers": {
+        "content-type": "application/json; charset=utf-8",
+        "etag": "W/\"stable-etag\"",
+        "x-ratelimit-limit": "5000",
+        "x-ratelimit-remaining": "4999",
+        "x-ratelimit-reset": "1770000000",
+        "x-ratelimit-resource": "core"
+      },
+      "identity": {
+        "body_sha256": "46ab84cdd55227c57a96bdde518a1d6a2e2d5d6462a517daf8094b5c1b851c61",
+        "etag": "W/\"stable-etag\"",
+        "status": 200
+      },
+      "kind": "comment",
+      "malformed_json": false,
+      "method": "GET",
+      "pagination": {
+        "cursor": null,
+        "link": null,
+        "next": null,
+        "page": null,
+        "per_page": 100
+      },
+      "rate_limit": {
+        "limit": 5000,
+        "remaining": 4999,
+        "reset": 1770000000,
+        "resource": "core",
+        "retry_after": null,
+        "used": null
+      },
+      "request": {
+        "accept": "application/vnd.github+json",
+        "query": {
+          "per_page": "100"
+        }
+      },
+      "seq": 3,
+      "status": 200,
+      "truncated": false,
+      "url": "https://api.github.com/repos/rmems/corinth-canal/pulls/89/comments?per_page=100"
+    },
+    {
+      "body": [
+        {
+          "body": "Looks good after the observability quieting fix.",
+          "id": 10,
+          "state": "COMMENTED",
+          "submitted_at": "2026-05-27T02:00:00Z",
+          "user": {
+            "login": "reviewer-x",
+            "type": "User"
+          }
+        }
+      ],
+      "body_text": null,
+      "duplicate": false,
+      "duplicate_of": null,
+      "etag": "W/\"stable-etag\"",
+      "headers": {
+        "content-type": "application/json; charset=utf-8",
+        "etag": "W/\"stable-etag\"",
+        "x-ratelimit-limit": "5000",
+        "x-ratelimit-remaining": "4999",
+        "x-ratelimit-reset": "1770000000",
+        "x-ratelimit-resource": "core"
+      },
+      "identity": {
+        "body_sha256": "b6db31a352e26da796f6367144d0051d038c9e72e5f521e3fb389c60f1e2a577",
+        "etag": "W/\"stable-etag\"",
+        "status": 200
+      },
+      "kind": "review",
+      "malformed_json": false,
+      "method": "GET",
+      "pagination": {
+        "cursor": null,
+        "link": null,
+        "next": null,
+        "page": null,
+        "per_page": 100
+      },
+      "rate_limit": {
+        "limit": 5000,
+        "remaining": 4999,
+        "reset": 1770000000,
+        "resource": "core",
+        "retry_after": null,
+        "used": null
+      },
+      "request": {
+        "accept": "application/vnd.github+json",
+        "query": {
+          "per_page": "100"
+        }
+      },
+      "seq": 4,
+      "status": 200,
+      "truncated": false,
+      "url": "https://api.github.com/repos/rmems/corinth-canal/pulls/89/reviews?per_page=100"
+    },
+    {
+      "body": [
+        {
+          "author": {
+            "login": "rmems"
+          },
+          "commit": {
+            "author": {
+              "date": "2026-05-27T00:00:00Z"
+            },
+            "message": "feat: cuda ladder"
+          },
+          "sha": "c1"
+        }
+      ],
+      "body_text": null,
+      "duplicate": false,
+      "duplicate_of": null,
+      "etag": "W/\"stable-etag\"",
+      "headers": {
+        "content-type": "application/json; charset=utf-8",
+        "etag": "W/\"stable-etag\"",
+        "x-ratelimit-limit": "5000",
+        "x-ratelimit-remaining": "4999",
+        "x-ratelimit-reset": "1770000000",
+        "x-ratelimit-resource": "core"
+      },
+      "identity": {
+        "body_sha256": "75033f73299794f5fae50b8a4de9baad77062ca5aea1286f2839cff4b3522682",
+        "etag": "W/\"stable-etag\"",
+        "status": 200
+      },
+      "kind": "commit",
+      "malformed_json": false,
+      "method": "GET",
+      "pagination": {
+        "cursor": null,
+        "link": null,
+        "next": null,
+        "page": null,
+        "per_page": 100
+      },
+      "rate_limit": {
+        "limit": 5000,
+        "remaining": 4999,
+        "reset": 1770000000,
+        "resource": "core",
+        "retry_after": null,
+        "used": null
+      },
+      "request": {
+        "accept": "application/vnd.github+json",
+        "query": {
+          "per_page": "100"
+        }
+      },
+      "seq": 5,
+      "status": 200,
+      "truncated": false,
+      "url": "https://api.github.com/repos/rmems/corinth-canal/pulls/89/commits?per_page=100"
+    },
+    {
+      "body": [
+        {
+          "additions": 100,
+          "changes": 100,
+          "deletions": 0,
+          "filename": "docs/CUDA_VALIDATION.md",
+          "patch": "@@ -0,0 +1,3 @@\n+# CUDA Validation\n+Tier 0-5 ladder\n+",
+          "status": "added"
+        },
+        {
+          "additions": 20,
+          "changes": 25,
+          "deletions": 5,
+          "filename": "src/gpu/accelerator.rs",
+          "patch": "@@ -10,6 +10,8 @@\n-// drop ctx first\n+// drop buffers before ctx\n",
+          "status": "modified"
+        }
+      ],
+      "body_text": null,
+      "duplicate": false,
+      "duplicate_of": null,
+      "etag": "W/\"stable-etag\"",
+      "headers": {
+        "content-type": "application/json; charset=utf-8",
+        "etag": "W/\"stable-etag\"",
+        "x-ratelimit-limit": "5000",
+        "x-ratelimit-remaining": "4999",
+        "x-ratelimit-reset": "1770000000",
+        "x-ratelimit-resource": "core"
+      },
+      "identity": {
+        "body_sha256": "0ab189076e71b3eaa818a4f2e515cf04a6e909a8f770c20199224de7cb71df80",
+        "etag": "W/\"stable-etag\"",
+        "status": 200
+      },
+      "kind": "file",
+      "malformed_json": false,
+      "method": "GET",
+      "pagination": {
+        "cursor": null,
+        "link": null,
+        "next": null,
+        "page": null,
+        "per_page": 100
+      },
+      "rate_limit": {
+        "limit": 5000,
+        "remaining": 4999,
+        "reset": 1770000000,
+        "resource": "core",
+        "retry_after": null,
+        "used": null
+      },
+      "request": {
+        "accept": "application/vnd.github+json",
+        "query": {
+          "per_page": "100"
+        }
+      },
+      "seq": 6,
+      "status": 200,
+      "truncated": false,
+      "url": "https://api.github.com/repos/rmems/corinth-canal/pulls/89/files?per_page=100"
+    },
+    {
+      "body": null,
+      "body_text": "diff --git a/docs/CUDA_VALIDATION.md b/docs/CUDA_VALIDATION.md\n--- a/docs/CUDA_VALIDATION.md\n+++ b/docs/CUDA_VALIDATION.md\n@@ -0,0 +1,3 @@\n+# CUDA Validation\n+Tier 0-5 ladder\n+",
+      "duplicate": false,
+      "duplicate_of": null,
+      "etag": "W/\"stable-etag\"",
+      "headers": {
+        "content-type": "text/plain; charset=utf-8",
+        "etag": "W/\"stable-etag\"",
+        "x-ratelimit-limit": "5000",
+        "x-ratelimit-remaining": "4999",
+        "x-ratelimit-reset": "1770000000",
+        "x-ratelimit-resource": "core"
+      },
+      "identity": {
+        "body_sha256": "02c52e5fae1719f6cfd54498bc065e138d1b2bca767f1bad8193cd39568c1b12",
+        "etag": "W/\"stable-etag\"",
+        "status": 200
+      },
+      "kind": "diff",
+      "malformed_json": false,
+      "method": "GET",
+      "pagination": {
+        "cursor": null,
+        "link": null,
+        "next": null,
+        "page": null,
+        "per_page": null
+      },
+      "rate_limit": {
+        "limit": 5000,
+        "remaining": 4999,
+        "reset": 1770000000,
+        "resource": "core",
+        "retry_after": null,
+        "used": null
+      },
+      "request": {
+        "accept": "application/vnd.github.v3.diff",
+        "query": {}
+      },
+      "seq": 7,
+      "status": 200,
+      "truncated": false,
+      "url": "https://api.github.com/repos/rmems/corinth-canal/pulls/89"
+    },
+    {
+      "body": {
+        "check_runs": [
+          {
+            "conclusion": "success",
+            "html_url": "https://github.com/rmems/corinth-canal/actions",
+            "name": "CUDA Build",
+            "status": "completed"
+          },
+          {
+            "conclusion": "success",
+            "html_url": "https://github.com/rmems/corinth-canal/actions",
+            "name": "CPU tests",
+            "status": "completed"
+          }
+        ]
+      },
+      "body_text": null,
+      "duplicate": false,
+      "duplicate_of": null,
+      "etag": "W/\"stable-etag\"",
+      "headers": {
+        "content-type": "application/json; charset=utf-8",
+        "etag": "W/\"stable-etag\"",
+        "x-ratelimit-limit": "5000",
+        "x-ratelimit-remaining": "4999",
+        "x-ratelimit-reset": "1770000000",
+        "x-ratelimit-resource": "core"
+      },
+      "identity": {
+        "body_sha256": "a9dd09ae9158ee0d853f9087a5ccba5e560be7fb2113c7b97412fdfdab00ecb1",
+        "etag": "W/\"stable-etag\"",
+        "status": 200
+      },
+      "kind": "checks",
+      "malformed_json": false,
+      "method": "GET",
+      "pagination": {
+        "cursor": null,
+        "link": null,
+        "next": null,
+        "page": null,
+        "per_page": 100
+      },
+      "rate_limit": {
+        "limit": 5000,
+        "remaining": 4999,
+        "reset": 1770000000,
+        "resource": "core",
+        "retry_after": null,
+        "used": null
+      },
+      "request": {
+        "accept": "application/vnd.github+json",
+        "query": {
+          "per_page": "100"
+        }
+      },
+      "seq": 8,
+      "status": 200,
+      "truncated": false,
+      "url": "https://api.github.com/repos/rmems/corinth-canal/commits/def/check-runs?per_page=100"
+    },
+    {
+      "body": {
+        "state": "success",
+        "statuses": [
+          {
+            "context": "ci",
+            "description": "ok",
+            "state": "success"
+          }
+        ]
+      },
+      "body_text": null,
+      "duplicate": false,
+      "duplicate_of": null,
+      "etag": "W/\"stable-etag\"",
+      "headers": {
+        "content-type": "application/json; charset=utf-8",
+        "etag": "W/\"stable-etag\"",
+        "x-ratelimit-limit": "5000",
+        "x-ratelimit-remaining": "4999",
+        "x-ratelimit-reset": "1770000000",
+        "x-ratelimit-resource": "core"
+      },
+      "identity": {
+        "body_sha256": "c96938b6af0457b43cae8f9daea17cab22f192e20dd93f6babe5a5b3d85e48d8",
+        "etag": "W/\"stable-etag\"",
+        "status": 200
+      },
+      "kind": "status",
+      "malformed_json": false,
+      "method": "GET",
+      "pagination": {
+        "cursor": null,
+        "link": null,
+        "next": null,
+        "page": null,
+        "per_page": null
+      },
+      "rate_limit": {
+        "limit": 5000,
+        "remaining": 4999,
+        "reset": 1770000000,
+        "resource": "core",
+        "retry_after": null,
+        "used": null
+      },
+      "request": {
+        "accept": "application/vnd.github+json",
+        "query": {}
+      },
+      "seq": 9,
+      "status": 200,
+      "truncated": false,
+      "url": "https://api.github.com/repos/rmems/corinth-canal/commits/def/status"
+    },
+    {
+      "body": {
+        "body": "Need a documented CUDA validation ladder.",
+        "html_url": "https://github.com/rmems/corinth-canal/issues/74",
+        "number": 74,
+        "state": "closed",
+        "title": "Verify CUDA kernel validation path for SAAQ runs"
+      },
+      "body_text": null,
+      "duplicate": false,
+      "duplicate_of": null,
+      "etag": "W/\"stable-etag\"",
+      "headers": {
+        "content-type": "application/json; charset=utf-8",
+        "etag": "W/\"stable-etag\"",
+        "x-ratelimit-limit": "5000",
+        "x-ratelimit-remaining": "4999",
+        "x-ratelimit-reset": "1770000000",
+        "x-ratelimit-resource": "core"
+      },
+      "identity": {
+        "body_sha256": "a5cb26bf6768ceb2dbefefe35caf5a574b1e19ced26042ec31ecec0193efe20e",
+        "etag": "W/\"stable-etag\"",
+        "status": 200
+      },
+      "kind": "issue",
+      "malformed_json": false,
+      "method": "GET",
+      "pagination": {
+        "cursor": null,
+        "link": null,
+        "next": null,
+        "page": null,
+        "per_page": null
+      },
+      "rate_limit": {
+        "limit": 5000,
+        "remaining": 4999,
+        "reset": 1770000000,
+        "resource": "core",
+        "retry_after": null,
+        "used": null
+      },
+      "request": {
+        "accept": "application/vnd.github+json",
+        "query": {}
+      },
+      "seq": 10,
+      "status": 200,
+      "truncated": false,
+      "url": "https://api.github.com/repos/rmems/corinth-canal/issues/74"
+    }
+  ],
+  "schema_version": "github_page_cassette_v1"
+}
