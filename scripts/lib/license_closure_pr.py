@@ -14,6 +14,13 @@ from .license_closure_ids import (
 from .source_inventory_common import sha256_json
 
 HTML_COMMENT_RE = re.compile(r"<!--.*?-->", re.DOTALL)
+HTML_TAG_RE = re.compile(r"</?[^>]+>")
+MARKDOWN_REFERENCE_DEFINITION_RE = re.compile(
+    r"^\s*\[[^\]\n]+\]:\s+\S.*$",
+    re.MULTILINE,
+)
+MARKDOWN_INLINE_LINK_RE = re.compile(r"!?\[([^\]\n]*)\]\((?:[^)\\]|\\.)*\)")
+MARKDOWN_REFERENCE_LINK_RE = re.compile(r"!?\[([^\]\n]*)\]\[[^\]\n]*\]")
 
 
 def pr_inventory_row_source_hash(row: dict[str, Any]) -> str:
@@ -31,7 +38,7 @@ def pr_inventory_row_source_hash(row: dict[str, Any]) -> str:
 def _valid_oid(value: Any) -> str | None:
     text = _text(value)
     if GIT_OID_RE.fullmatch(text):
-        return text
+        return text.lower()
     return None
 
 
@@ -157,12 +164,20 @@ def _markdown_license_section(markdown: str) -> str | None:
     return rest[: next_heading.start()]
 
 
+def _visible_markdown_text(markdown: str) -> str:
+    visible = HTML_COMMENT_RE.sub("", markdown)
+    visible = MARKDOWN_REFERENCE_DEFINITION_RE.sub("", visible)
+    visible = MARKDOWN_INLINE_LINK_RE.sub(r"\1", visible)
+    visible = MARKDOWN_REFERENCE_LINK_RE.sub(r"\1", visible)
+    return HTML_TAG_RE.sub("", visible)
+
+
 def _markdown_discloses(markdown: str | None, identifier: str | None) -> bool:
     if markdown is None:
         return True
     section = _markdown_license_section(markdown)
     if section is None or not identifier:
         return False
-    visible = HTML_COMMENT_RE.sub("", section)
+    visible = _visible_markdown_text(section)
     pattern = r"(?<![A-Za-z0-9.+-])" + re.escape(identifier) + r"(?![A-Za-z0-9.+-])"
     return re.search(pattern, visible, flags=re.IGNORECASE) is not None
