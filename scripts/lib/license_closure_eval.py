@@ -17,6 +17,7 @@ from .license_closure_ids import (
     normalize_license_id,
 )
 from .license_closure_inventory import (
+    _canonical_declared_repos,
     _declaration_map_conflicts,
     _identity_names,
     _inventory_for_repo,
@@ -132,9 +133,8 @@ def _evaluate_record(
         prior_repo = _prior_repository(prior_index, repository, repo)
         if isinstance(prior_repo, dict):
             declared_prior = _sha256_or_none(prior_repo.get("source_hash"))
-            if (
-                declared_prior is None
-                or declared_prior != inventory_row_source_hash(prior_repo)
+            if declared_prior is None or declared_prior != inventory_row_source_hash(
+                prior_repo
             ):
                 reasons.append("source_license_changed")
             else:
@@ -147,6 +147,13 @@ def _evaluate_record(
     if card_repos and not folded_names.intersection(card_repos):
         reasons.append("declarations_disagree")
     if manifest_repos and not folded_names.intersection(manifest_repos):
+        reasons.append("declarations_disagree")
+    if (
+        card_repos
+        and manifest_repos
+        and _canonical_declared_repos(card_repos, inventory_index)
+        != _canonical_declared_repos(manifest_repos, inventory_index)
+    ):
         reasons.append("declarations_disagree")
     if not repo or repository is None:
         reasons.append("snapshot_provenance_missing")
