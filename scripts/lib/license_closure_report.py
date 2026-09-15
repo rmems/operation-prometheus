@@ -11,6 +11,39 @@ from .license_closure_inventory import index_repositories
 from .license_closure_pr import _index_pull_requests
 
 
+def _declared_count(value: Any) -> int | None:
+    if isinstance(value, bool) or not isinstance(value, int):
+        return None
+    return value
+
+
+def _released_evidence_summary(
+    released: list[dict[str, Any]],
+) -> tuple[list[str], list[dict[str, Any]]]:
+    families = sorted({row["license_family"] for row in released})
+    keys = sorted(
+        {
+            (
+                row["repo"],
+                row["evidence_digest"],
+                row["license_family"],
+                row.get("spdx_id") or "",
+            )
+            for row in released
+        }
+    )
+    evidence = [
+        {
+            "digest": digest,
+            "family": family,
+            "repository": repo,
+            "spdx_id": spdx_id or None,
+        }
+        for repo, digest, family, spdx_id in keys
+    ]
+    return families, evidence
+
+
 def _bundle_declaration_errors(
     report: dict[str, Any], manifest: dict[str, Any]
 ) -> list[str]:
@@ -27,7 +60,7 @@ def _bundle_declaration_errors(
     unresolved = manifest.get("unresolved_license_count")
     if (
         unresolved is not None
-        and int(unresolved) != report["counts"]["unresolved_count"]
+        and _declared_count(unresolved) != report["counts"]["unresolved_count"]
     ):
         errors.append(
             "manifest unresolved_license_count does not agree with closure result"
@@ -45,10 +78,7 @@ def _bundle_declaration_errors(
                     f"manifest evidence digest for {repo} does not agree with inventory"
                 )
     if "record_count" in manifest:
-        try:
-            declared_count = int(manifest["record_count"])
-        except (TypeError, ValueError):
-            declared_count = -1
+        declared_count = _declared_count(manifest["record_count"])
         if declared_count != report["counts"]["record_count"]:
             errors.append("manifest record_count does not agree with proposed records")
     listed = manifest.get("records")
@@ -79,8 +109,10 @@ def build_license_closure_report(
     markdown_card: str | None = None,
 ) -> dict[str, Any]:
     """Build a deterministic license-closure manifest from frozen evidence."""
-    if not _sha256_or_none(snapshot_sha256):
-        raise ValueError("snapshot_sha256 must be a lowercase 64-character hex digest")
+    digest = _sha256_or_none(snapshot_sha256)
+    if digest is None:
+        raise ValueError("snapshot_sha256 must be a 64-character hex digest")
+    snapshot_sha256 = digest
     inventory_index = index_repositories(repositories)
     prior_index = (
         index_repositories(prior_repositories)
@@ -118,18 +150,7 @@ def build_license_closure_report(
     released_ids = {row["record_id"] for row in released}
     if any(row["record_id"] in released_ids for row in quarantined):
         raise AssertionError("Unresolved record leaked into released positives")
-    families = sorted({row["license_family"] for row in released})
-    digests = sorted(
-        {
-            (
-                row["repo"],
-                row["evidence_digest"],
-                row["license_family"],
-                row.get("spdx_id") or "",
-            )
-            for row in released
-        }
-    )
+    families, evidence = _released_evidence_summary(released)
     report = {
         "closed": not quarantined,
         "counts": {
@@ -138,15 +159,7 @@ def build_license_closure_report(
             "released_positive_count": len(released),
             "unresolved_count": len(quarantined),
         },
-        "evidence_digests": [
-            {
-                "digest": digest,
-                "family": family,
-                "repository": repo,
-                "spdx_id": spdx_id or None,
-            }
-            for repo, digest, family, spdx_id in digests
-        ],
+        "evidence_digests": evidence,
         "license_families": families,
         "quarantined": quarantined,
         "released_positives": released,
@@ -204,6 +217,11 @@ def assert_released_positives_are_closed(report: dict[str, Any]) -> None:
         raise AssertionError("Non-positive row listed as released")
     if bool(report.get("closed")) != _derived_closed(report, quarantined):
         raise AssertionError("closed does not match quarantined rows and bundle errors")
+    families, evidence = _released_evidence_summary(released)
+    if list(report.get("license_families") or []) != families:
+        raise AssertionError("license_families do not match released rows")
+    if list(report.get("evidence_digests") or []) != evidence:
+        raise AssertionError("evidence_digests do not match released rows")
 
 
 def validate_positive_release(report: dict[str, Any]) -> list[str]:
