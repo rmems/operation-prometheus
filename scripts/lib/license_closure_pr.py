@@ -495,6 +495,28 @@ def _inline_link_close(markdown: str, start: int) -> int | None:
     return None
 
 
+def _skip_inline_code_span(markdown: str, index: int) -> int | None:
+    length = len(markdown)
+    tick_len = 1
+    while index + tick_len < length and markdown[index + tick_len] == "`":
+        tick_len += 1
+    scan = index + tick_len
+    while scan < length:
+        char = markdown[scan]
+        if char == "\n":
+            return None
+        if char != "`":
+            scan += 1
+            continue
+        run = 1
+        while scan + run < length and markdown[scan + run] == "`":
+            run += 1
+        if run == tick_len:
+            return scan + run
+        scan += run
+    return None
+
+
 def _markdown_label_close(markdown: str, text_start: int) -> int | None:
     depth = 1
     index = text_start
@@ -506,6 +528,13 @@ def _markdown_label_close(markdown: str, text_start: int) -> int | None:
             continue
         if char == "\n":
             return None
+        if char == "`":
+            skipped = _skip_inline_code_span(markdown, index)
+            if skipped is None:
+                index += 1
+                continue
+            index = skipped
+            continue
         if char == "[":
             depth += 1
         elif char == "]":
@@ -516,7 +545,7 @@ def _markdown_label_close(markdown: str, text_start: int) -> int | None:
     return None
 
 
-def _strip_inline_links(markdown: str) -> str:
+def _strip_inline_links(markdown: str, *, keep_openers: bool = False) -> str:
     result: list[str] = []
     index = 0
     length = len(markdown)
@@ -530,7 +559,13 @@ def _strip_inline_links(markdown: str) -> str:
             if close is not None and close + 1 < length and markdown[close + 1] == "(":
                 dest_close = _inline_link_close(markdown, close + 2)
                 if dest_close is not None:
-                    result.append(_strip_inline_links(markdown[text_start:close]))
+                    if keep_openers:
+                        result.append("[")
+                    result.append(
+                        _strip_inline_links(
+                            markdown[text_start:close], keep_openers=keep_openers
+                        )
+                    )
                     index = dest_close + 1
                     continue
         result.append(markdown[index])
@@ -549,7 +584,7 @@ def _visible_markdown_text(markdown: str) -> str:
 
 def _strip_hidden_markup(markdown: str) -> str:
     visible = HTML_COMMENT_RE.sub("", markdown)
-    visible = _strip_inline_links(visible)
+    visible = _strip_inline_links(visible, keep_openers=True)
     return _strip_non_rendered_html(visible)
 
 
