@@ -7,6 +7,7 @@ from typing import Any
 
 from .license_closure_ids import GIT_OID_RE, MARKDOWN_LICENSE_SECTION_RE, _text
 
+
 def _valid_oid(value: Any) -> str | None:
     text = _text(value)
     if GIT_OID_RE.fullmatch(text):
@@ -59,12 +60,6 @@ def _code_state_matches_inventory_pr(
         if expected is None and pr_key == "merge_commit_oid":
             expected = pr_oids["head_oid"]
         if expected is None or any(oid != expected for oid in record_oids):
-            return False
-    tree_oids = _record_role_oids(record, "tree_oid")
-    if tree_oids:
-        saw_record_oid = True
-        allowed = {oid for oid in pr_oids.values() if oid is not None}
-        if any(oid not in allowed for oid in tree_oids):
             return False
     return saw_record_oid
 
