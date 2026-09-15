@@ -14,11 +14,9 @@ _SCRIPTS = Path(__file__).resolve().parent
 if str(_SCRIPTS) not in sys.path:
     sys.path.insert(0, str(_SCRIPTS))
 
-from build_manifest import build_manifest, render  # noqa: E402
 from lib.ci_contracts import (  # noqa: E402
     INVENTORY_DIR,
     JSONL_DIR,
-    MANIFEST_DIR,
     MUTABLE_SOURCE_STATES,
     MUTABLE_STATES,
     PARQUET_DIR,
@@ -31,54 +29,14 @@ from lib.ci_contracts import (  # noqa: E402
     load_inventory_candidates,
     load_jsonl,
     parquet_hash_errors,
-    sha256_file,
     silent_truncation_errors,
     validation_evidence_errors,
 )
+from lib.ci_manifests import manifest_errors  # noqa: E402
 from lib.eligibility_common import LEDGER_STATES  # noqa: E402
 from lib.eligibility_existing import _load_existing_rows  # noqa: E402
 
 REPORT_SCHEMA = "corpus_integrity_report_v1"
-
-
-def _manifest_errors() -> list[str]:
-    errors: list[str] = []
-    jsonl_stems = {path.stem for path in JSONL_DIR.glob("*.jsonl")}
-    card_stems = {path.stem for path in (ROOT / "datasets" / "cards").glob("*.json")}
-    manifest_stems = {
-        path.name.removesuffix(".manifest.json")
-        for path in MANIFEST_DIR.glob("*.manifest.json")
-    }
-    for stem in sorted(jsonl_stems | card_stems):
-        if stem not in manifest_stems:
-            errors.append(f"dataset {stem} is missing its manifest")
-    for path in sorted(MANIFEST_DIR.glob("*.manifest.json")):
-        errors.extend(_one_manifest_error(path))
-    return errors
-
-
-def _one_manifest_error(path: Path) -> list[str]:
-    committed = json.loads(path.read_text(encoding="utf-8"))
-    name = path.name.removesuffix(".manifest.json")
-    card_path = ROOT / "datasets" / "cards" / f"{name}.json"
-    jsonl_path = JSONL_DIR / f"{name}.jsonl"
-    if not card_path.is_file() or not jsonl_path.is_file():
-        return [f"manifest {path.name} is missing its JSONL or card"]
-    card = json.loads(card_path.read_text(encoding="utf-8"))
-    generated = build_manifest(
-        jsonl_path,
-        card,
-        created_at=str(committed.get("created_at") or ""),
-        created_by=str(committed.get("created_by") or ""),
-        name=name,
-    )
-    errors: list[str] = []
-    if render(generated) != path.read_text(encoding="utf-8"):
-        errors.append(f"{path.name} is stale versus {jsonl_path.name}")
-    declared = str(committed.get("sha256") or "")
-    if declared and declared != sha256_file(jsonl_path):
-        errors.append(f"{path.name} sha256 does not match {jsonl_path.name}")
-    return errors
 
 
 def _duplicate_report(inventory_dir: Path) -> dict[str, Any]:
@@ -229,7 +187,7 @@ def build_report(
     resolve_errors, resolved_states, resolved, unresolved = _resolve_records(candidates)
     errors = [
         *inventory_file_hash_errors(inventory_dir),
-        *_manifest_errors(),
+        *manifest_errors(),
         *parquet_hash_errors(RELEASE_MANIFEST, PARQUET_DIR),
         *resolve_errors,
         *_candidate_reason_errors(candidates),
