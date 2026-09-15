@@ -69,6 +69,34 @@ def production_files() -> list[Path]:
     return sorted((ROOT / "datasets" / "jsonl").glob("*.jsonl"))
 
 
+def _v0_example_errors(v0) -> list[str]:
+    if not V0_EXAMPLE.is_file():
+        return [f"{V0_EXAMPLE.name} is missing"]
+    errors: list[str] = []
+    record = json.loads(V0_EXAMPLE.read_text(encoding="utf-8"))
+    if json.loads(json.dumps(record, ensure_ascii=False)) != record:
+        errors.append(f"{V0_EXAMPLE.name} v0 example round-trip mutated content")
+    for error in sorted(v0.iter_errors(record), key=lambda item: list(item.path)):
+        path = ".".join(str(part) for part in error.absolute_path) or "(root)"
+        errors.append(f"{V0_EXAMPLE.name} [{path}] - {error.message}")
+    return errors
+
+
+def _file_contract_errors(filepath: Path, v0, v1) -> list[str]:
+    file_errors = validate_file(filepath, v0, v1, strict_policy=True)
+    errors = [*file_errors, *round_trip_errors(filepath)]
+    relative = (
+        filepath.name
+        if not filepath.is_relative_to(ROOT)
+        else filepath.relative_to(ROOT)
+    )
+    if not file_errors:
+        print(f"  ✓ {relative}")
+    else:
+        print(f"  ✗ {relative} ({len(file_errors)} error(s))")
+    return errors
+
+
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument(
@@ -76,33 +104,13 @@ def main(argv: list[str] | None = None) -> int:
     )
     args = parser.parse_args(argv)
     v0, v1 = _validators()
-    errors: list[str] = []
-
-    if V0_EXAMPLE.is_file():
-        record = json.loads(V0_EXAMPLE.read_text(encoding="utf-8"))
-        if json.loads(json.dumps(record, ensure_ascii=False)) != record:
-            errors.append(f"{V0_EXAMPLE.name} v0 example round-trip mutated content")
-        for error in sorted(v0.iter_errors(record), key=lambda item: list(item.path)):
-            path = ".".join(str(part) for part in error.absolute_path) or "(root)"
-            errors.append(f"{V0_EXAMPLE.name} [{path}] - {error.message}")
+    errors = _v0_example_errors(v0)
 
     targets = production_files()
     targets.extend(FIXTURE_DIR / name for name in KNOWN_GOOD_FIXTURES)
     targets.extend(args.files)
-
     for filepath in targets:
-        file_errors = validate_file(filepath, v0, v1, strict_policy=True)
-        errors.extend(file_errors)
-        errors.extend(round_trip_errors(filepath))
-        relative = (
-            filepath.name
-            if not filepath.is_relative_to(ROOT)
-            else filepath.relative_to(ROOT)
-        )
-        if not file_errors:
-            print(f"  ✓ {relative}")
-        else:
-            print(f"  ✗ {relative} ({len(file_errors)} error(s))")
+        errors.extend(_file_contract_errors(filepath, v0, v1))
 
     if errors:
         print("\ntrajectory-contract FAILED:")
