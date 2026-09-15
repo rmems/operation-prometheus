@@ -40,42 +40,20 @@ def _repo_name(row: dict[str, Any]) -> str:
     )
 
 
-def _new_repositories(
-    frozen_by_id: dict[str, dict[str, Any]],
-    frozen_by_name: dict[str, dict[str, Any]],
-    live_by_id: dict[str, dict[str, Any]],
+def _id_only_in(
+    primary_by_id: dict[str, dict[str, Any]],
+    other_by_id: dict[str, dict[str, Any]],
+    other_by_name: dict[str, dict[str, Any]],
 ) -> list[dict[str, str]]:
-    new_repos: list[dict[str, str]] = []
-    for repo_id, live_row in live_by_id.items():
-        if repo_id in frozen_by_id:
+    rows: list[dict[str, str]] = []
+    for repo_id, row in primary_by_id.items():
+        if repo_id in other_by_id:
             continue
-        name = _repo_name(live_row)
-        frozen = frozen_by_name.get(name.casefold())
-        if frozen is not None and _repo_key(frozen) == repo_id:
+        peer = other_by_name.get(_repo_name(row).casefold())
+        if peer is not None and _repo_key(peer) == repo_id:
             continue
-        new_repos.append(
-            {"repository_id": repo_id, "name_with_owner": _repo_name(live_row)}
-        )
-    return new_repos
-
-
-def _deleted_repositories(
-    frozen_by_id: dict[str, dict[str, Any]],
-    live_by_id: dict[str, dict[str, Any]],
-    live_by_name: dict[str, dict[str, Any]],
-) -> list[dict[str, str]]:
-    deleted: list[dict[str, str]] = []
-    for repo_id, frozen_row in frozen_by_id.items():
-        if repo_id in live_by_id:
-            continue
-        name = _repo_name(frozen_row)
-        live = live_by_name.get(name.casefold())
-        if live is not None and _repo_key(live) == repo_id:
-            continue
-        deleted.append(
-            {"repository_id": repo_id, "name_with_owner": _repo_name(frozen_row)}
-        )
-    return deleted
+        rows.append({"repository_id": repo_id, "name_with_owner": _repo_name(row)})
+    return rows
 
 
 def _renamed_repositories(
@@ -91,11 +69,7 @@ def _renamed_repositories(
         live_name = _repo_name(live_row)
         if frozen_name and live_name and frozen_name.casefold() != live_name.casefold():
             renamed.append(
-                {
-                    "repository_id": repo_id,
-                    "from": frozen_name,
-                    "to": live_name,
-                }
+                {"repository_id": repo_id, "from": frozen_name, "to": live_name}
             )
     return renamed
 
@@ -111,8 +85,8 @@ def diff_repositories(
     }
     live_by_name = {_repo_name(row).casefold(): row for row in live if _repo_name(row)}
     return {
-        "new": _new_repositories(frozen_by_id, frozen_by_name, live_by_id),
-        "deleted": _deleted_repositories(frozen_by_id, live_by_id, live_by_name),
+        "new": _id_only_in(live_by_id, frozen_by_id, frozen_by_name),
+        "deleted": _id_only_in(frozen_by_id, live_by_id, live_by_name),
         "renamed": _renamed_repositories(frozen_by_id, live_by_id),
     }
 
@@ -134,6 +108,48 @@ def _live_source_state(pr: dict[str, Any]) -> str:
     return state
 
 
+def _missing_terminal(
+    candidate_id: str, frozen_row: dict[str, Any]
+) -> dict[str, Any] | None:
+    if frozen_row.get("source_state") not in TERMINAL_SOURCE_STATES:
+        return None
+    return {
+        "candidate_id": candidate_id,
+        "kind": "terminal_candidate_missing_from_live",
+        "frozen_source_state": frozen_row.get("source_state"),
+    }
+
+
+def _state_change(
+    candidate_id: str, frozen_row: dict[str, Any], live: dict[str, Any]
+) -> dict[str, Any] | None:
+    live_state = _live_source_state(live)
+    frozen_state = str(frozen_row.get("source_state") or "")
+    if frozen_state == live_state:
+        return None
+    return {
+        "candidate_id": candidate_id,
+        "kind": "source_state_changed",
+        "from": frozen_state,
+        "to": live_state,
+    }
+
+
+def _new_terminal(candidate_id: str, live: dict[str, Any]) -> dict[str, Any] | None:
+    live_state = _live_source_state(live)
+    if live_state not in TERMINAL_SOURCE_STATES:
+        return None
+    return {
+        "candidate_id": candidate_id,
+        "kind": "new_terminal_candidate",
+        "source_state": live_state,
+        "repository": str(
+            live.get("repository_name_with_owner") or live.get("name_with_owner") or ""
+        ),
+        "number": live.get("number") or live.get("pull_request_number"),
+    }
+
+
 def diff_terminal_candidates(
     frozen: list[dict[str, Any]],
     live_prs: list[dict[str, Any]],
@@ -146,44 +162,19 @@ def diff_terminal_candidates(
     for candidate_id, frozen_row in frozen_by_id.items():
         live = live_by_id.get(candidate_id)
         if live is None:
-            if frozen_row.get("source_state") in TERMINAL_SOURCE_STATES:
-                changed.append(
-                    {
-                        "candidate_id": candidate_id,
-                        "kind": "terminal_candidate_missing_from_live",
-                        "frozen_source_state": frozen_row.get("source_state"),
-                    }
-                )
+            missing = _missing_terminal(candidate_id, frozen_row)
+            if missing is not None:
+                changed.append(missing)
             continue
-        live_state = _live_source_state(live)
-        frozen_state = str(frozen_row.get("source_state") or "")
-        if frozen_state != live_state:
-            changed.append(
-                {
-                    "candidate_id": candidate_id,
-                    "kind": "source_state_changed",
-                    "from": frozen_state,
-                    "to": live_state,
-                }
-            )
+        change = _state_change(candidate_id, frozen_row, live)
+        if change is not None:
+            changed.append(change)
     for candidate_id, live in live_by_id.items():
         if candidate_id in frozen_by_id:
             continue
-        live_state = _live_source_state(live)
-        if live_state in TERMINAL_SOURCE_STATES:
-            changed.append(
-                {
-                    "candidate_id": candidate_id,
-                    "kind": "new_terminal_candidate",
-                    "source_state": live_state,
-                    "repository": str(
-                        live.get("repository_name_with_owner")
-                        or live.get("name_with_owner")
-                        or ""
-                    ),
-                    "number": live.get("number") or live.get("pull_request_number"),
-                }
-            )
+        added = _new_terminal(candidate_id, live)
+        if added is not None:
+            changed.append(added)
     changed.sort(key=lambda row: str(row.get("candidate_id")))
     return changed
 
