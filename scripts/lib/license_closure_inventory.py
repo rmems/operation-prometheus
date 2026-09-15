@@ -477,7 +477,7 @@ def index_repositories(repositories: list[dict[str, Any]]) -> dict[str, dict[str
                 raise ValueError(f"Duplicate inventory repository id {repo_id}")
             seen_ids[repo_id] = folded
         index[folded] = row
-        for alias in row.get("aliases") or []:
+        for alias in _alias_entries(row, name):
             if isinstance(alias, dict):
                 alias_name = _text(alias.get("name_with_owner")).casefold()
             else:
@@ -498,9 +498,18 @@ def _inventory_for_repo(
     return index.get(repo.casefold()) if repo else None
 
 
+def _alias_entries(row: dict[str, Any], name: str) -> list[Any]:
+    aliases = row.get("aliases")
+    if aliases is None:
+        return []
+    if not isinstance(aliases, list):
+        raise ValueError(f"inventory aliases for {name} must be an array")
+    return aliases
+
+
 def _repository_names(row: dict[str, Any]) -> list[str]:
     names = [_text(row.get("name_with_owner"))]
-    for alias in row.get("aliases") or []:
+    for alias in _alias_entries(row, names[0] if names else ""):
         if isinstance(alias, dict):
             names.append(_text(alias.get("name_with_owner")))
         else:
