@@ -86,16 +86,32 @@ def _pr_inventory_reasons(
     if not names or pr_number is None:
         return ["snapshot_provenance_missing"]
     seen: set[str] = set()
+    matched: list[dict[str, Any]] = []
+    seen_evidence: set[str] = set()
     for name in names:
         folded = name.casefold()
         if folded in seen:
             continue
         seen.add(folded)
         inventory_pr = pull_requests.get((folded, pr_number))
-        if inventory_pr is not None and _code_state_matches_inventory_pr(
-            record, inventory_pr
-        ):
-            return []
+        if inventory_pr is None:
+            continue
+        evidence = sha256_json(
+            {
+                "base_oid": inventory_pr.get("base_oid"),
+                "head_oid": inventory_pr.get("head_oid"),
+                "merge_commit_oid": inventory_pr.get("merge_commit_oid"),
+                "number": inventory_pr.get("number"),
+            }
+        )
+        if evidence in seen_evidence:
+            continue
+        seen_evidence.add(evidence)
+        matched.append(inventory_pr)
+    if len(matched) > 1:
+        raise ValueError(f"Duplicate inventory pull request {names[0]}#{pr_number}")
+    if matched and _code_state_matches_inventory_pr(record, matched[0]):
+        return []
     return ["snapshot_provenance_missing"]
 
 
@@ -132,7 +148,7 @@ def _markdown_license_section(markdown: str) -> str | None:
     if match is None:
         return None
     rest = markdown[match.end() :]
-    next_heading = re.search(r"^##\s+", rest, re.MULTILINE)
+    next_heading = re.search(r"^#{1,2}\\s+", rest, re.MULTILINE)
     if next_heading is None:
         return rest
     return rest[: next_heading.start()]
