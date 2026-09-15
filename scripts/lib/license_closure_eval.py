@@ -18,9 +18,9 @@ from .license_closure_ids import (
 )
 from .license_closure_inventory import (
     _declaration_map_conflicts,
+    _identity_names,
     _inventory_for_repo,
     _prior_repository,
-    _repository_names,
     card_license_for_repo,
     declared_digest_for_repo,
     evidence_digest,
@@ -92,9 +92,10 @@ def _evaluate_record(
     rid = record_id(record)
     pr_number = record_pr_number(record)
     declared_record = record_license(record)
-    declared_card = card_license_for_repo(card, repo)
-    declared_manifest = manifest_license_for_repo(manifest, repo)
     repository = _inventory_for_repo(inventory_index, repo)
+    names = _identity_names(repository, repo)
+    declared_card = card_license_for_repo(card, names)
+    declared_manifest = manifest_license_for_repo(manifest, names)
     inventory_license = inventory_license_object(repository)
     inventory_id = normalize_license_id(inventory_license)
     has_custom = inventory_has_custom_evidence(repository)
@@ -115,15 +116,15 @@ def _evaluate_record(
         )
         digest = evidence_digest(license_evidence_payload(repository))
 
-    card_digest = declared_digest_for_repo(card, repo)
-    manifest_digest = declared_digest_for_repo(manifest, repo)
+    card_digest = declared_digest_for_repo(card, names)
+    manifest_digest = declared_digest_for_repo(manifest, names)
     declared_digest = card_digest or manifest_digest
     declared_digest_values = {
         item for item in (card_digest, manifest_digest) if item is not None
     }
     if len(declared_digest_values) > 1:
         reasons.append("declarations_disagree")
-    if _declaration_map_conflicts(card, manifest, repo):
+    if _declaration_map_conflicts(card, manifest, names):
         reasons.append("declarations_disagree")
     prior_digest = None
     prior_id = None
@@ -142,18 +143,16 @@ def _evaluate_record(
 
     card_repos = _declared_repos(card)
     manifest_repos = _declared_repos(manifest)
-    if card_repos and repo.casefold() not in card_repos:
+    folded_names = {name.casefold() for name in names}
+    if card_repos and not folded_names.intersection(card_repos):
         reasons.append("declarations_disagree")
-    if manifest_repos and repo.casefold() not in manifest_repos:
+    if manifest_repos and not folded_names.intersection(manifest_repos):
         reasons.append("declarations_disagree")
     if not repo or repository is None:
         reasons.append("snapshot_provenance_missing")
     if not _sha256_or_none(snapshot_sha256) or source_hash is None:
         reasons.append("snapshot_provenance_missing")
-    pr_names = [repo]
-    if isinstance(repository, dict):
-        pr_names.extend(_repository_names(repository))
-    reasons.extend(_pr_inventory_reasons(record, pr_names, pr_number, pull_requests))
+    reasons.extend(_pr_inventory_reasons(record, names, pr_number, pull_requests))
 
     if declared_card is None:
         reasons.append("card_disclosure_missing")
