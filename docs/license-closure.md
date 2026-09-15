@@ -7,7 +7,8 @@ Every released positive trajectory must resolve through all three of:
 1. Frozen source-inventory license evidence (SPDX id or `LicenseRef-*` plus a
    content digest);
 2. Snapshot provenance (`snapshot_sha256` and a repository `source_hash` that
-   matches the canonical hash of that inventory row excluding `source_hash`);
+   matches the eligibility producer payload for that row: GitHub source fields
+   such as license, ids, and timestamps, not aliases or `schema_version`);
 3. Dataset-card disclosure (`source_license` / `source_licenses`, and a
    `License / provenance` section when a markdown card is supplied). Markdown
    disclosure must name the complete identifier; a prefix such as `MIT` does
@@ -33,9 +34,10 @@ every evaluated row.
 This check does **not** decide license compatibility, relicense source-derived
 material under Operation Prometheus's Apache-2.0 terms, or guess a license
 when GitHub reports `NOASSERTION` / `OTHER`. Unbalanced SPDX parentheses,
-empty expression operands (`MIT OR ()`), and non-`LicenseRef-*` identifiers
-stay unknown even if custom text evidence is present. `WITH` expressions whose
-right operand is a license identifier (`MIT WITH Apache-2.0`) stay unknown. A
+empty expression operands (`MIT OR ()`), misplaced parentheses
+(`MIT ( AND Apache-2.0)`), and non-`LicenseRef-*` identifiers stay unknown
+even if custom text evidence is present. `WITH` expressions whose right
+operand is a license identifier (`MIT WITH Apache-2.0`) stay unknown. A
 source repository that is itself Apache-2.0 can still close; using this
 forge's Apache-2.0 license to fill a missing source license cannot.
 
@@ -55,9 +57,9 @@ python scripts/validate_license_closure.py \
   --out /tmp/license-closure.json
 ```
 
-Exit status 0 means every proposed positive closed. Exit status 1 means at
-least one unresolved row would otherwise have entered the released-positive
-set; those rows appear only under `quarantined`.
+Exit status 0 means the report is closed. Exit status 1 means validation
+completed but closure failed because records were quarantined or bundle
+declarations were invalid.
 
 Pass `--prior-inventory` to compare a previous frozen repositories JSONL and
 treat a digest or SPDX change as `source_license_changed`. Evidence digests
@@ -71,17 +73,27 @@ digest. A supplied inventory manifest must bind `--inventory` through a
 matches the file bytes. Accepted snapshot digests are stored as lowercase hex.
 The dataset manifest must declare a valid `sha256` of `--records`; a missing
 or malformed digest fails closed. Duplicate inventory aliases that point at
-different repositories are rejected.
+different repositories are rejected. Duplicate immutable `repository_id`
+values that point at different names are rejected. A present but unparseable
+singular `source_license` (for example `{}`) cannot be ignored in favor of a
+matching per-repository map. `build_manifest.py` copies license-closure
+fields from the card when they are present.
 
 When a caller supplies a frozen pull-request inventory, every proposed record
-must appear in that list. Duplicate repository+PR keys in that inventory are
-rejected. Record `base_oid` / `head_oid` / merge `commit_oid` values on the
-record's repository state are compared to the matching PR roles; a correct
-base OID does not mask an incorrect head. Intermediate event `code_state`
-commits and trajectory `tree_oid` values are not compared to those commit
-OIDs. Omitting the pull-request inventory keeps repository-level snapshot
-checks only. Top-level `repo` and `repository.owner`/`name` must agree when
-both are present.
+must appear in that list. Each row must include a `source_hash` bound to the
+published object (canonical JSON of the row without `source_hash`). That
+digest authenticates the OIDs used for code-state matching; it is not the
+eligibility producer hash, which binds unsanitized GraphQL title/body the
+published row does not keep. Missing or stale PR hashes are rejected.
+Duplicate repository+PR keys in that inventory are rejected. Record
+`base_oid` / `head_oid` / merge `commit_oid` values on the record's
+repository state are compared to the matching PR roles; a correct base OID
+does not mask an incorrect head. A record merge/commit OID is not compared
+to the PR head; missing merge evidence fails closed. Intermediate event
+`code_state` commits and trajectory `tree_oid` values are not compared to
+those commit OIDs. Omitting the pull-request inventory keeps
+repository-level snapshot checks only. Top-level `repo` and
+`repository.owner`/`name` must agree when both are present.
 
 The closure manifest reports license families, per-repository evidence
 digests, and unresolved counts.
