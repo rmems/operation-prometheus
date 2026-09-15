@@ -10,7 +10,7 @@ FORGE_LICENSE = "Apache-2.0"
 SHA256_RE = re.compile(r"^[a-f0-9]{64}$")
 GIT_OID_RE = re.compile(r"^[0-9a-fA-F]{3,64}$")
 LICENSE_REF_RE = re.compile(r"^LicenseRef-[A-Za-z0-9.-]+$")
-EXPRESSION_SPLIT_RE = re.compile(r"\s+(?:AND|OR|WITH)\s+", re.IGNORECASE)
+EXPRESSION_SPLIT_RE = re.compile(r"\s+(AND|OR|WITH)\s+", re.IGNORECASE)
 MARKDOWN_LICENSE_SECTION_RE = re.compile(
     r"^##\s+License\s*/\s*provenance\s*$",
     re.IGNORECASE | re.MULTILINE,
@@ -142,10 +142,20 @@ def _expression_tokens(identifier: str) -> list[str] | None:
         return []
     if not _parentheses_balanced(stripped):
         return None
+    pieces = EXPRESSION_SPLIT_RE.split(stripped)
     tokens: list[str] = []
-    for part in EXPRESSION_SPLIT_RE.split(stripped):
-        token = part.strip("() ")
+    for index, piece in enumerate(pieces):
+        if index % 2 == 1:
+            continue
+        token = piece.strip("() ")
         if not token:
+            return None
+        operator = pieces[index - 1].upper() if index else ""
+        if operator == "WITH" and (
+            token in SPDX_LICENSE_IDS
+            or LICENSE_REF_RE.fullmatch(token)
+            or token.upper() in UNKNOWN_LICENSE_IDS
+        ):
             return None
         tokens.append(token)
     return tokens
@@ -181,3 +191,10 @@ def _same_license(left: str | None, right: str | None) -> bool:
     if left is None or right is None:
         return False
     return left.casefold() == right.casefold()
+
+
+def _closed_release_family(identifier: Any, declared_family: Any) -> bool:
+    family = classify_license_family(
+        identifier, has_custom_evidence=declared_family == "custom"
+    )
+    return family in CLOSED_FAMILIES and family == declared_family
