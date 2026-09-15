@@ -78,8 +78,6 @@ _HIDDEN_STYLE_RE = re.compile(
     r"(?:^|;)\s*(?:display\s*:\s*none|visibility\s*:\s*hidden)\b",
     re.IGNORECASE,
 )
-MARKDOWN_REFERENCE_DEFINITION_RE = re.compile(r"^\s*\[[^\]\n]+\]:\s+\S")
-MARKDOWN_REFERENCE_LABEL_ONLY_RE = re.compile(r"^\s*\[[^\]\n]+\]:\s*$")
 MARKDOWN_REFERENCE_DESTINATION_RE = re.compile(r"""^[ \t]*(?:<[^>\n]*>|\S+)\s*$""")
 MARKDOWN_REFERENCE_TITLE_RE = re.compile(
     r"""^[ \t]+(?:"(?:\\.|[^"\\])*"|'(?:\\.|[^'\\])*'|\((?:\\.|[^)\\])*\))\s*$"""
@@ -341,17 +339,33 @@ def _strip_non_rendered_html(markdown: str) -> str:
     return "".join(parser.parts)
 
 
+def _reference_definition_kind(line: str) -> str | None:
+    index = 0
+    while index < len(line) and line[index] in " \t":
+        index += 1
+    if index >= len(line) or line[index] != "[":
+        return None
+    close = _markdown_label_close(line, index + 1)
+    if close is None or close + 1 >= len(line) or line[close + 1] != ":":
+        return None
+    rest = line[close + 2 :]
+    if not rest.strip():
+        return "label_only"
+    return "full"
+
+
 def _strip_reference_definitions(markdown: str) -> str:
     lines = markdown.split("\n")
     kept: list[str] = []
     index = 0
     while index < len(lines):
-        if MARKDOWN_REFERENCE_DEFINITION_RE.match(lines[index]):
+        kind = _reference_definition_kind(lines[index])
+        if kind == "full":
             index += 1
             if index < len(lines) and MARKDOWN_REFERENCE_TITLE_RE.match(lines[index]):
                 index += 1
             continue
-        if MARKDOWN_REFERENCE_LABEL_ONLY_RE.match(lines[index]):
+        if kind == "label_only":
             nxt = index + 1
             if nxt < len(lines) and MARKDOWN_REFERENCE_DESTINATION_RE.match(lines[nxt]):
                 index = nxt + 1
