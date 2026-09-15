@@ -36,6 +36,7 @@ from .license_closure_inventory import (
     record_id,
     record_license,
     record_pr_number,
+    record_pr_number_invalid,
     record_repo,
     record_repo_identities_conflict,
 )
@@ -100,6 +101,8 @@ def _evaluate_record(
     if not _supplied_record_id(record):
         reasons.append("declarations_disagree")
     pr_number = record_pr_number(record)
+    if record_pr_number_invalid(record):
+        reasons.append("declarations_disagree")
     declared_record = record_license(record)
     repository = _inventory_for_repo(inventory_index, repo)
     names = _identity_names(repository, repo)
