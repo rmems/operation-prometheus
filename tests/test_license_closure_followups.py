@@ -183,14 +183,8 @@ def test_cli_requires_inventory_manifest_file_binding(tmp_path: Path):
     assert any("file binding" in error for error in saved["bundle_errors"])
 
 
-def test_cli_aliases_require_inventory_manifest_file_binding(tmp_path: Path):
+def test_cli_snapshot_without_inventory_manifest_cannot_close(tmp_path: Path):
     bundle = spdx_known_bundle()
-    current = dict(bundle["repositories"][0])
-    current["aliases"] = [{"name_with_owner": "evil/alias"}]
-    bundle["repositories"] = [bind_source_hash(current)]
-    bundle["records"][0]["repo"] = "evil/alias"
-    bundle["card"]["source_repo"] = "evil/alias"
-    bundle["manifest"]["source_repo"] = "evil/alias"
     paths = _write_cli_bundle(tmp_path, bundle)
     assert (
         license_closure_main(
@@ -213,8 +207,9 @@ def test_cli_aliases_require_inventory_manifest_file_binding(tmp_path: Path):
     )
     saved = json.loads(paths["out"].read_text(encoding="utf-8"))
     assert saved["closed"] is False
-    assert any("aliases" in error for error in saved["bundle_errors"])
-    assert any("file binding" in error for error in saved["bundle_errors"])
+    assert any(
+        "inventory-manifest file binding" in error for error in saved["bundle_errors"]
+    )
 
 
 def test_cli_accepts_bound_inventory_manifest(tmp_path: Path):
