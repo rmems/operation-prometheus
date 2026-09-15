@@ -182,6 +182,23 @@ def _nested_record_repo(record: dict[str, Any]) -> str:
     return ""
 
 
+def _nested_identity_invalid(record: dict[str, Any]) -> bool:
+    if "repository" not in record:
+        return False
+    repository = record["repository"]
+    if not isinstance(repository, dict):
+        return True
+    present = [key for key in ("owner", "name") if key in repository]
+    if not present:
+        return False
+    if len(present) != 2:
+        return True
+    return any(
+        not isinstance(repository[key], str) or not repository[key].strip()
+        for key in ("owner", "name")
+    )
+
+
 def record_repo(record: dict[str, Any]) -> str:
     return _text(record.get("repo")) or _nested_record_repo(record)
 
@@ -191,6 +208,8 @@ def record_repo_identities_conflict(record: dict[str, Any]) -> bool:
         value = record["repo"]
         if not isinstance(value, str) or not value.strip():
             return True
+    if _nested_identity_invalid(record):
+        return True
     top = _text(record.get("repo"))
     nested = _nested_record_repo(record)
     return bool(top and nested and top.casefold() != nested.casefold())
