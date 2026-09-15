@@ -44,14 +44,11 @@ def _state_counts(records: list[dict[str, Any]]) -> dict[str, int]:
     return counts
 
 
-def _record(
-    *,
-    candidate_id: str,
-    repository_id: str,
-    state: str,
-    reason: str,
-    canonical: bool = True,
-) -> bytes:
+def _record(spec: dict[str, Any]) -> bytes:
+    candidate_id = spec["candidate_id"]
+    repository_id = spec["repository_id"]
+    state = spec["state"]
+    reason = spec["reason"]
     payload = {
         "schema_version": RECORD_SCHEMA_VERSION,
         "candidate_id": candidate_id,
@@ -59,10 +56,10 @@ def _record(
         "state": state,
         "reason_codes": [reason],
     }
-    if canonical:
-        return json.dumps(payload, ensure_ascii=False, sort_keys=True, separators=(",", ":")).encode(
-            "utf-8"
-        )
+    if spec.get("canonical", True):
+        return json.dumps(
+            payload, ensure_ascii=False, sort_keys=True, separators=(",", ":")
+        ).encode("utf-8")
     # Non-canonical on purpose: spaces and insertion order must survive the merge.
     ordered = {
         "state": state,
@@ -78,39 +75,49 @@ def valid_records() -> dict[int, list[bytes]]:
     return {
         0: [
             _record(
-                candidate_id="github:repository:R_test_4:pull:PR_a",
-                repository_id=REPOSITORY_IDS[0],
-                state="included_positive",
-                reason="explicit_override",
-                canonical=False,
+                {
+                    "candidate_id": "github:repository:R_test_4:pull:PR_a",
+                    "repository_id": REPOSITORY_IDS[0],
+                    "state": "included_positive",
+                    "reason": "explicit_override",
+                    "canonical": False,
+                }
             ),
             _record(
-                candidate_id="github:repository:R_test_4:pull:PR_z",
-                repository_id=REPOSITORY_IDS[0],
-                state="excluded",
-                reason="dependency_only",
+                {
+                    "candidate_id": "github:repository:R_test_4:pull:PR_z",
+                    "repository_id": REPOSITORY_IDS[0],
+                    "state": "excluded",
+                    "reason": "dependency_only",
+                }
             ),
         ],
         1: [
             _record(
-                candidate_id="github:repository:R_test_0:pull:PR_m",
-                repository_id=REPOSITORY_IDS[1],
-                state="quarantined",
-                reason="missing_code_state",
+                {
+                    "candidate_id": "github:repository:R_test_0:pull:PR_m",
+                    "repository_id": REPOSITORY_IDS[1],
+                    "state": "quarantined",
+                    "reason": "missing_code_state",
+                }
             ),
             _record(
-                candidate_id="github:repository:R_test_0:pull:PR_w",
-                repository_id=REPOSITORY_IDS[1],
-                state="watchlist_open",
-                reason="mutable_open_work",
+                {
+                    "candidate_id": "github:repository:R_test_0:pull:PR_w",
+                    "repository_id": REPOSITORY_IDS[1],
+                    "state": "watchlist_open",
+                    "reason": "mutable_open_work",
+                }
             ),
         ],
         2: [
             _record(
-                candidate_id="github:repository:R_test_2:pull:PR_n",
-                repository_id=REPOSITORY_IDS[2],
-                state="included_negative",
-                reason="explicit_negative_override",
+                {
+                    "candidate_id": "github:repository:R_test_2:pull:PR_n",
+                    "repository_id": REPOSITORY_IDS[2],
+                    "state": "included_negative",
+                    "reason": "explicit_negative_override",
+                }
             ),
         ],
     }
@@ -136,8 +143,12 @@ def write_jsonl(path: Path, lines: list[bytes]) -> bytes:
     return data
 
 
-def write_inventory(path: Path, records_by_shard: dict[int, list[bytes]] | None = None) -> dict[str, Any]:
-    records_by_shard = records_by_shard if records_by_shard is not None else valid_records()
+def write_inventory(
+    path: Path, records_by_shard: dict[int, list[bytes]] | None = None
+) -> dict[str, Any]:
+    records_by_shard = (
+        records_by_shard if records_by_shard is not None else valid_records()
+    )
     repositories = [
         _repository_row(REPOSITORY_IDS[number], REPOSITORY_NAMES[number])
         for number in range(SHARD_COUNT)
@@ -148,11 +159,15 @@ def write_inventory(path: Path, records_by_shard: dict[int, list[bytes]] | None 
         for raw in records_by_shard[number]
     ]
     repo_lines = [
-        json.dumps(row, ensure_ascii=False, sort_keys=True, separators=(",", ":")).encode("utf-8")
+        json.dumps(
+            row, ensure_ascii=False, sort_keys=True, separators=(",", ":")
+        ).encode("utf-8")
         for row in repositories
     ]
     candidate_lines = [
-        json.dumps(row, ensure_ascii=False, sort_keys=True, separators=(",", ":")).encode("utf-8")
+        json.dumps(
+            row, ensure_ascii=False, sort_keys=True, separators=(",", ":")
+        ).encode("utf-8")
         for row in candidates
     ]
     path.mkdir(parents=True, exist_ok=True)
@@ -178,21 +193,19 @@ def write_inventory(path: Path, records_by_shard: dict[int, list[bytes]] | None 
     return manifest
 
 
-def write_shard(
-    path: Path,
-    *,
-    number: int,
-    inventory_revision: str,
-    records: list[bytes],
-    repositories: list[str] | None = None,
-    schema_version: str = SHARD_MANIFEST_SCHEMA_VERSION,
-    assignment_rule: str = ASSIGNMENT_RULE,
-    trajectory_schema_version: str = TRAJECTORY_SCHEMA_VERSION,
-    inventory_policy_version: str = INVENTORY_POLICY_VERSION,
-) -> dict[str, Any]:
+def _shard_repositories(
+    spec: dict[str, Any], parsed: list[dict[str, Any]]
+) -> list[str]:
+    if "repositories" in spec:
+        return spec["repositories"]
+    return sorted({row["repository_id"] for row in parsed})
+
+
+def write_shard(path: Path, spec: dict[str, Any]) -> dict[str, Any]:
+    number = int(spec["number"])
+    records: list[bytes] = spec["records"]
     parsed = [json.loads(line.decode("utf-8")) for line in records]
-    if repositories is None:
-        repositories = sorted({row["repository_id"] for row in parsed})
+    repositories = _shard_repositories(spec, parsed)
     records_bytes = write_jsonl(path / "records.jsonl", records)
     counts = {
         "repository_count": len(repositories),
@@ -200,16 +213,20 @@ def write_shard(
         **_state_counts(parsed),
     }
     manifest = {
-        "assignment_rule": assignment_rule,
+        "assignment_rule": spec.get("assignment_rule", ASSIGNMENT_RULE),
         "counts": counts,
         "files": {"records.jsonl": _file_info(records_bytes)},
-        "inventory_policy_version": inventory_policy_version,
-        "inventory_revision": inventory_revision,
+        "inventory_policy_version": spec.get(
+            "inventory_policy_version", INVENTORY_POLICY_VERSION
+        ),
+        "inventory_revision": spec["inventory_revision"],
         "repositories": repositories,
-        "schema_version": schema_version,
+        "schema_version": spec.get("schema_version", SHARD_MANIFEST_SCHEMA_VERSION),
         "shard_count": SHARD_COUNT,
         "shard_number": number,
-        "trajectory_schema_version": trajectory_schema_version,
+        "trajectory_schema_version": spec.get(
+            "trajectory_schema_version", TRAJECTORY_SCHEMA_VERSION
+        ),
     }
     manifest["manifest_sha256"] = digest_manifest(manifest)
     (path / "manifest.json").write_bytes(render_json(manifest))
@@ -227,8 +244,10 @@ def build_valid_tree(root: Path) -> tuple[Path, Path]:
     for number in range(SHARD_COUNT):
         write_shard(
             shards_dir / f"shard-{number}",
-            number=number,
-            inventory_revision=inventory_manifest["snapshot_sha256"],
-            records=records_by_shard[number],
+            {
+                "number": number,
+                "inventory_revision": inventory_manifest["snapshot_sha256"],
+                "records": records_by_shard[number],
+            },
         )
     return inventory_dir, shards_dir
