@@ -153,6 +153,7 @@
       "required": [
         "record_license",
         "card_license",
+        "custom_license",
         "manifest_license",
         "inventory_license",
         "evidence_digest",
