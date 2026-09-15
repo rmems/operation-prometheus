@@ -9,6 +9,7 @@ from typing import Any
 from .license_closure_ids import (
     GIT_OID_RE,
     MARKDOWN_LICENSE_SECTION_RE,
+    MARKDOWN_SECTION_BOUNDARY_RE,
     _sha256_or_none,
     _text,
 )
@@ -281,7 +282,7 @@ def _markdown_license_section(markdown: str) -> str | None:
     if match is None:
         return None
     rest = markdown[match.end() :]
-    next_heading = re.search(r"^ {0,3}#{1,2}(?:\s|$)", rest, re.MULTILINE)
+    next_heading = MARKDOWN_SECTION_BOUNDARY_RE.search(rest)
     if next_heading is None:
         return rest
     return rest[: next_heading.start()]
@@ -403,7 +404,7 @@ def _inline_link_close(markdown: str, start: int) -> int | None:
             char = markdown[index]
             if char == "\\":
                 index += 2
-                continue
+            continue
             if char == "\n":
                 return None
             if char in " \t" and depth == 0:
