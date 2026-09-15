@@ -174,6 +174,10 @@ def record_repo(record: dict[str, Any]) -> str:
 
 
 def record_repo_identities_conflict(record: dict[str, Any]) -> bool:
+    if "repo" in record:
+        value = record["repo"]
+        if not isinstance(value, str) or not value.strip():
+            return True
     top = _text(record.get("repo"))
     nested = _nested_record_repo(record)
     return bool(top and nested and top.casefold() != nested.casefold())
