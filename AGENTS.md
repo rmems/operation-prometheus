@@ -61,4 +61,11 @@ if ls datasets/jsonl/*.jsonl 1>/dev/null 2>&1; then
 else
   echo "No JSONL files found; skipping schema validation."
 fi
+python scripts/trajectory_contract.py
+python scripts/corpus_integrity.py --out-dir /tmp/corpus-integrity
 ```
+
+PR CI also runs `trajectory-contract`, `corpus-integrity`, and
+`consumer-contract`. PRs never receive `HF_TOKEN`. Hugging Face publish checks
+live in the protected `release` environment; the weekly source-inventory audit
+is read-only. See [docs/ci-contracts.md](docs/ci-contracts.md).

@@ -85,3 +85,6 @@ Thumbs.db
 # Local agent scratch state (already filtered out of curated patches by
 # _NOISE_PATCH_DIRS in scripts/lib/normalize.py).
 .kilo/
+
+# Generated CI reports (uploaded as Actions artifacts)
+reports/
