@@ -26,17 +26,31 @@ try:
     import jsonschema
 except ImportError:
     jsonschema = None
-    print("ERROR: jsonschema is required. Install with: pip install jsonschema", file=sys.stderr)
+    print(
+        "ERROR: jsonschema is required. Install with: pip install jsonschema",
+        file=sys.stderr,
+    )
     sys.exit(2)
 
 _SCRIPTS = Path(__file__).resolve().parent
 if str(_SCRIPTS) not in sys.path:
     sys.path.insert(0, str(_SCRIPTS))
 
+from lib.ci_contracts import (  # noqa: E402
+    blank_license_policy_errors,
+    iter_uri_fields,
+    private_reference_errors,
+    record_identity,
+    unique_event_errors,
+)
 from lib.secrets import find_secrets  # noqa: E402
 
-SCHEMA_V0_PATH = Path(__file__).resolve().parent.parent / "schemas" / "pr_trajectory.schema.json"
-SCHEMA_V1_PATH = Path(__file__).resolve().parent.parent / "schemas" / "trajectory_v1.schema.json"
+SCHEMA_V0_PATH = (
+    Path(__file__).resolve().parent.parent / "schemas" / "pr_trajectory.schema.json"
+)
+SCHEMA_V1_PATH = (
+    Path(__file__).resolve().parent.parent / "schemas" / "trajectory_v1.schema.json"
+)
 HOME_PATH_RE = re.compile(
     r"("
     r"/home/[A-Za-z0-9._-]+"
@@ -78,7 +92,6 @@ def _iter_strings(obj: object):
     elif isinstance(obj, list):
         for value in obj:
             yield from _iter_strings(value)
-
 
 
 def _is_absolute_uri(value: object) -> bool:
@@ -145,8 +158,15 @@ def policy_errors(record: dict, lineno: int, filename: str) -> list[str]:
 
                 actor = e.get("actor")
                 if isinstance(actor, dict):
-                    if actor.get("type") not in ("human", "bot", "application", "agent"):
-                        errors.append(f"  {filename}:{lineno} [policy] - invented/unsupported actor type")
+                    if actor.get("type") not in (
+                        "human",
+                        "bot",
+                        "application",
+                        "agent",
+                    ):
+                        errors.append(
+                            f"  {filename}:{lineno} [policy] - invented/unsupported actor type"
+                        )
 
         traj_type = record.get("trajectory_type")
         if traj_type == "software" and isinstance(events, list):
@@ -168,10 +188,16 @@ def policy_errors(record: dict, lineno: int, filename: str) -> list[str]:
                             f"  {filename}:{lineno} [policy] - code snapshot {key} is not a git object id"
                         )
             if not has_snapshot:
-                errors.append(f"  {filename}:{lineno} [policy] - missing required code snapshots for software trajectory")
+                errors.append(
+                    f"  {filename}:{lineno} [policy] - missing required code snapshots for software trajectory"
+                )
 
         disp = record.get("terminal_disposition")
-        payload = record.get("software_payload") if traj_type == "software" else record.get("research_payload")
+        payload = (
+            record.get("software_payload")
+            if traj_type == "software"
+            else record.get("research_payload")
+        )
         success_dispositions = ("successful", "passed")
         success_outcomes = ("pass", "passed", "success", "successful", "verified", "ok")
         terminal_enum = {
@@ -286,6 +312,22 @@ def policy_errors(record: dict, lineno: int, filename: str) -> list[str]:
             f"  {filename}:{lineno} [policy] - secret-like token pattern present "
             f"({families})"
         )
+    private_hits: list[str] = []
+    seen_private: set[str] = set()
+    for text in iter_uri_fields(record):
+        for hit in private_reference_errors(text):
+            if hit not in seen_private:
+                seen_private.add(hit)
+                private_hits.append(hit)
+    if private_hits:
+        errors.append(
+            f"  {filename}:{lineno} [policy] - private reference present "
+            f"({', '.join(private_hits)})"
+        )
+    for message in unique_event_errors(record):
+        errors.append(f"  {filename}:{lineno} [policy] - {message}")
+    for message in blank_license_policy_errors(record):
+        errors.append(f"  {filename}:{lineno} [policy] - {message}")
     return errors
 
 
@@ -299,6 +341,7 @@ def validate_file(
     """Validate a single JSONL file. Returns list of error strings."""
     errors: list[str] = []
     count = 0
+    seen_ids: dict[str, int] = {}
     try:
         with open(filepath) as f:
             for lineno, line in enumerate(f, start=1):
@@ -307,6 +350,7 @@ def validate_file(
                     continue
                 count += 1
                 try:
+
                     def _reject_nonfinite(constant: str):
                         raise json.JSONDecodeError(
                             f"non-finite constant {constant!r}", line, 0
@@ -324,15 +368,38 @@ def validate_file(
 
                 if isinstance(record, dict):
                     version = record.get("schema_version")
-                    validator = v1_validator if version in ("1", "1.0", "v1") else v0_validator
+                    validator = (
+                        v1_validator if version in ("1", "1.0", "v1") else v0_validator
+                    )
                 else:
                     validator = v0_validator
 
-                for error in sorted(validator.iter_errors(record), key=lambda e: list(e.path)):
+                for error in sorted(
+                    validator.iter_errors(record), key=lambda e: list(e.path)
+                ):
                     path = ".".join(str(p) for p in error.absolute_path) or "(root)"
-                    errors.append(f"  {filepath.name}:{lineno} [{path}] - {error.message}")
+                    errors.append(
+                        f"  {filepath.name}:{lineno} [{path}] - {error.message}"
+                    )
                 if strict_policy and isinstance(record, dict):
                     errors.extend(policy_errors(record, lineno, filepath.name))
+                    identity = record_identity(record)
+                    if identity:
+                        previous = seen_ids.get(identity)
+                        if previous is not None:
+                            errors.append(
+                                f"  {filepath.name}:{lineno} [policy] - duplicate trajectory id "
+                                f"{identity} (first seen on line {previous})"
+                            )
+                        else:
+                            seen_ids[identity] = lineno
+                    elif (
+                        record.get("schema_version") in ("1", "1.0", "v1")
+                        or record.get("id") is not None
+                    ):
+                        errors.append(
+                            f"  {filepath.name}:{lineno} [policy] - trajectory/event record is missing a stable id"
+                        )
     except FileNotFoundError:
         errors.append(f"  ERROR: File not found: {filepath}")
         return errors
