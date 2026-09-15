@@ -148,7 +148,7 @@ def _markdown_license_section(markdown: str) -> str | None:
     if match is None:
         return None
     rest = markdown[match.end() :]
-    next_heading = re.search(r"^#{1,2}\\s+", rest, re.MULTILINE)
+    next_heading = re.search(r"^#{1,2}\s+", rest, re.MULTILINE)
     if next_heading is None:
         return rest
     return rest[: next_heading.start()]
