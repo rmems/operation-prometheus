@@ -24,19 +24,11 @@ _RECORD_TO_PR_ROLE = (
 
 
 def _record_role_oids(record: dict[str, Any], key: str) -> set[str]:
-    containers: list[Any] = [record.get("repository")]
-    events = record.get("events") if isinstance(record.get("events"), list) else []
-    containers.extend(
-        event.get("code_state") for event in events if isinstance(event, dict)
-    )
-    oids: set[str] = set()
-    for container in containers:
-        if not isinstance(container, dict):
-            continue
-        oid = _valid_oid(container.get(key))
-        if oid is not None:
-            oids.add(oid)
-    return oids
+    container = record.get("repository")
+    if not isinstance(container, dict):
+        return set()
+    oid = _valid_oid(container.get(key))
+    return {oid} if oid is not None else set()
 
 
 def _code_state_matches_inventory_pr(
@@ -90,7 +82,10 @@ def _index_pull_requests(
         repo = _text(row.get("repository_name_with_owner")).casefold()
         number = row.get("number")
         if repo and isinstance(number, int):
-            index[(repo, number)] = row
+            key = (repo, number)
+            if key in index:
+                raise ValueError(f"Duplicate inventory pull request {repo}#{number}")
+            index[key] = row
     return index
 
 
