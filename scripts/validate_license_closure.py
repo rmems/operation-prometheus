@@ -117,27 +117,34 @@ def _publication_binding_errors(
     if mismatch:
         errors.append(mismatch)
     if "record_count" in dataset_manifest:
-        try:
-            declared = int(dataset_manifest["record_count"])
-        except (TypeError, ValueError):
-            declared = -1
-        if declared != record_count:
+        declared = dataset_manifest["record_count"]
+        if (
+            isinstance(declared, bool)
+            or not isinstance(declared, int)
+            or declared != record_count
+        ):
             errors.append(f"{args.manifest} record_count does not match {args.records}")
     if not args.inventory_manifest:
         return errors
     inventory_manifest = _load_json(args.inventory_manifest)
     files = inventory_manifest.get("files")
-    listed = None
-    if isinstance(files, dict):
-        listed = files.get(args.inventory.name) or files.get("repositories.jsonl")
-    if isinstance(listed, dict):
-        mismatch = _require_matching_digest(
-            listed.get("sha256"),
-            args.inventory,
-            f"{args.inventory_manifest} repositories",
+    listed = (
+        files.get(args.inventory.name) or files.get("repositories.jsonl")
+        if isinstance(files, dict)
+        else None
+    )
+    if not isinstance(listed, dict):
+        errors.append(
+            f"{args.inventory_manifest} is missing a repositories.jsonl file binding"
         )
-        if mismatch:
-            errors.append(mismatch)
+        return errors
+    mismatch = _require_matching_digest(
+        listed.get("sha256"),
+        args.inventory,
+        f"{args.inventory_manifest} repositories",
+    )
+    if mismatch:
+        errors.append(mismatch)
     return errors
 
 
