@@ -17,6 +17,7 @@ from license_closure_fixtures import (
     bind_pr_source_hash,
     bind_source_hash,
     custom_license_bundle,
+    inventory_alias,
     inventory_pr,
     repository,
     spdx_known_bundle,
@@ -258,7 +259,7 @@ def test_pr_inventory_follows_repository_aliases():
     bundle = spdx_known_bundle()
     current = dict(bundle["repositories"][0])
     current["name_with_owner"] = "rmems/widget-renamed"
-    current["aliases"] = [{"name_with_owner": "rmems/widget"}]
+    current["aliases"] = [inventory_alias("rmems/widget")]
     bundle["repositories"] = [bind_source_hash(current)]
     bundle["records"][0] = with_code_state(bundle["records"][0])
     bundle["records"][0]["repo"] = "rmems/widget-renamed"
@@ -334,7 +335,7 @@ def test_prior_inventory_matches_repository_id_not_reused_name():
 def test_conflicting_pr_rows_across_aliases_are_rejected():
     bundle = spdx_known_bundle()
     current = dict(bundle["repositories"][0])
-    current["aliases"] = [{"name_with_owner": "rmems/widget-old"}]
+    current["aliases"] = [inventory_alias("rmems/widget-old")]
     bundle["repositories"] = [bind_source_hash(current)]
     bundle["records"][0] = with_code_state(bundle["records"][0])
     bundle["pull_requests"] = [
@@ -358,7 +359,7 @@ def test_card_declaration_follows_inventory_aliases():
     bundle = spdx_known_bundle()
     current = dict(bundle["repositories"][0])
     current["name_with_owner"] = "rmems/widget-renamed"
-    current["aliases"] = [{"name_with_owner": "rmems/widget"}]
+    current["aliases"] = [inventory_alias("rmems/widget")]
     bundle["repositories"] = [bind_source_hash(current)]
     digest = bundle["card"]["license_evidence_digest"]
     bundle["card"] = {
@@ -533,7 +534,7 @@ def test_blank_source_repos_elements_cannot_close():
 def test_card_and_manifest_source_repos_follow_aliases():
     bundle = spdx_known_bundle()
     current = dict(bundle["repositories"][0])
-    current["aliases"] = [{"name_with_owner": "rmems/widget-old"}]
+    current["aliases"] = [inventory_alias("rmems/widget-old")]
     bundle["repositories"] = [bind_source_hash(current)]
     bundle["card"]["source_repo"] = "rmems/widget"
     bundle["manifest"]["source_repo"] = "rmems/widget-old"
@@ -573,7 +574,7 @@ def test_pr_inventory_alias_repository_id_mismatch_cannot_close():
     bundle = spdx_known_bundle()
     current = dict(bundle["repositories"][0])
     current["repository_id"] = "R_kgDOwidget"
-    current["aliases"] = [{"name_with_owner": "rmems/widget-old"}]
+    current["aliases"] = [inventory_alias("rmems/widget-old")]
     bundle["repositories"] = [bind_source_hash(current)]
     bundle["records"][0] = with_code_state(bundle["records"][0])
     canonical = inventory_pr("rmems/widget", 1)
