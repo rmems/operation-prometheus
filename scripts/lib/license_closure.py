@@ -124,3 +124,55 @@ def _sha256_or_none(value: Any) -> str | None:
     if SHA256_RE.fullmatch(text):
         return text
     return None
+
+
+def normalize_license_id(value: Any) -> str | None:
+    """Return a trimmed license identifier, or None when absent/non-string."""
+    if isinstance(value, dict):
+        for key in ("spdx_id", "id", "license"):
+            found = normalize_license_id(value.get(key))
+            if found is not None:
+                return found
+        return None
+    text = _text(value)
+    return text or None
+
+
+def _expression_tokens(identifier: str) -> list[str]:
+    stripped = identifier.strip()
+    if not stripped:
+        return []
+    tokens = [
+        token.strip("() ")
+        for token in EXPRESSION_SPLIT_RE.split(stripped)
+        if token.strip("() ")
+    ]
+    return tokens or [stripped]
+
+
+def classify_license_family(
+    identifier: str | None, *, has_custom_evidence: bool = False
+) -> str:
+    """Classify a declared identifier without guessing a replacement license."""
+    if identifier is None:
+        return "missing"
+    tokens = _expression_tokens(identifier)
+    if not tokens:
+        return "missing"
+    upper_tokens = [token.upper() for token in tokens]
+    if any(token in UNKNOWN_LICENSE_IDS for token in upper_tokens):
+        if has_custom_evidence:
+            return "custom"
+        return "unknown"
+    if any(LICENSE_REF_RE.fullmatch(token) for token in tokens):
+        if has_custom_evidence and all(
+            token in SPDX_LICENSE_IDS or LICENSE_REF_RE.fullmatch(token)
+            for token in tokens
+        ):
+            return "custom"
+        return "unknown"
+    if all(token in SPDX_LICENSE_IDS for token in tokens):
+        return "spdx"
+    if has_custom_evidence:
+        return "custom"
+    return "unknown"
