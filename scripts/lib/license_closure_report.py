@@ -385,6 +385,8 @@ def assert_released_positives_are_closed(report: dict[str, Any]) -> None:
     if not isinstance(declared_evidence, list) or declared_evidence != evidence:
         raise AssertionError("evidence_digests do not match released rows")
     report_snapshot = _sha256_or_none(report.get("snapshot_sha256"))
+    if report_snapshot is None:
+        raise AssertionError("snapshot_sha256 must be a 64-character hex digest")
     if any(
         not _closed_release_family(
             row.get("spdx_id"),
