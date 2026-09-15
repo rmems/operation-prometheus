@@ -242,6 +242,8 @@ def _object_rows(value: Any, field: str) -> list[dict[str, Any]]:
 _RELEASED_ROW_KEYS = (
     "record_id",
     "repo",
+    "license_family",
+    "evidence_digest",
     "repository_source_hash",
     "snapshot_sha256",
     "source_provenance_digest",
