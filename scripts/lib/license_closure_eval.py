@@ -273,17 +273,21 @@ def _evaluate_record(
 def _duplicate_id_row(row: dict[str, Any]) -> dict[str, Any]:
     custom = row.get("custom_license")
     frozen_custom = custom if isinstance(custom, dict) else None
+    inventory = row.get("inventory_license")
+    frozen_inventory = inventory if isinstance(inventory, dict) else None
     existing = row.get("evidence")
     if isinstance(existing, dict):
         evidence = dict(existing)
         if "custom_license" not in evidence:
             evidence["custom_license"] = frozen_custom
+        if "inventory_license" not in evidence:
+            evidence["inventory_license"] = frozen_inventory
     else:
         evidence = _evidence_blob(
             record_license=None,
             card_license=None,
             manifest_license=None,
-            inventory_license=None,
+            inventory_license=frozen_inventory,
             digest=row.get("evidence_digest"),
             declared_digest=None,
             prior_digest=None,
