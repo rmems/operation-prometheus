@@ -43,33 +43,53 @@ def _load_json(path: Path) -> Any:
     return json.loads(path.read_text(encoding="utf-8"))
 
 
-def _load_jsonl(path: Path) -> list[dict[str, Any]]:
+def _decode_utf8(raw: bytes, path: Path) -> str:
+    try:
+        return raw.decode("utf-8")
+    except UnicodeDecodeError as exc:
+        raise ValueError(f"{path} is not valid UTF-8") from exc
+
+
+def _parse_json(raw: bytes, path: Path) -> Any:
+    try:
+        return json.loads(_decode_utf8(raw, path))
+    except json.JSONDecodeError as exc:
+        raise ValueError(f"{path}: {exc}") from exc
+
+
+def _parse_jsonl(raw: bytes, path: Path) -> list[dict[str, Any]]:
     rows: list[dict[str, Any]] = []
-    for line in path.read_text(encoding="utf-8").splitlines():
+    for line in _decode_utf8(raw, path).splitlines():
         if not line.strip():
             continue
-        record = json.loads(line)
+        try:
+            record = json.loads(line)
+        except json.JSONDecodeError as exc:
+            raise ValueError(f"{path}: {exc}") from exc
         if not isinstance(record, dict):
             raise ValueError(f"{path} contains a non-object JSONL row")
         rows.append(record)
     return rows
 
 
-def _snapshot_sha256(args: argparse.Namespace) -> str:
-    explicit = str(args.snapshot_sha256 or "").strip().lower()
+def _snapshot_sha256(
+    explicit: str | None,
+    inventory_manifest: dict[str, Any] | None,
+    inventory_manifest_path: Path | None,
+) -> str:
+    explicit_digest = str(explicit or "").strip().lower()
     declared = ""
-    if args.inventory_manifest is not None:
-        manifest = _load_json(args.inventory_manifest)
-        declared = str(manifest.get("snapshot_sha256") or "").strip().lower()
-    if explicit and declared and explicit != declared:
+    if inventory_manifest is not None:
+        declared = str(inventory_manifest.get("snapshot_sha256") or "").strip().lower()
+    if explicit_digest and declared and explicit_digest != declared:
         raise ValueError(
             "--snapshot-sha256 disagrees with inventory-manifest snapshot_sha256"
         )
-    digest = explicit or declared
+    digest = explicit_digest or declared
     if not digest:
         source = (
-            args.inventory_manifest
-            if args.inventory_manifest is not None
+            inventory_manifest_path
+            if inventory_manifest_path is not None
             else "snapshot_sha256"
         )
         raise ValueError(f"{source} is missing snapshot_sha256")
@@ -84,8 +104,8 @@ def _schema_validator():
     )
 
 
-def _sha256_file(path: Path) -> str:
-    return hashlib.sha256(path.read_bytes()).hexdigest()
+def _sha256_bytes(raw: bytes) -> str:
+    return hashlib.sha256(raw).hexdigest()
 
 
 def _hex_digest(value: Any) -> str | None:
@@ -95,54 +115,71 @@ def _hex_digest(value: Any) -> str | None:
     return None
 
 
-def _require_matching_digest(declared: Any, path: Path, label: str) -> str | None:
-    digest = _hex_digest(declared)
-    if digest is None:
+def _require_matching_digest(
+    declared: Any, digest: str, path: Path, label: str
+) -> str | None:
+    expected = _hex_digest(declared)
+    if expected is None:
         return f"{label} sha256 is missing or malformed"
-    if digest != _sha256_file(path):
+    if expected != digest:
         return f"{label} sha256 does not match {path}"
     return None
 
 
 def _publication_binding_errors(
-    args: argparse.Namespace, record_count: int
+    *,
+    records_path: Path,
+    records_digest: str,
+    record_count: int,
+    dataset_manifest: Any,
+    dataset_manifest_path: Path,
+    inventory_path: Path,
+    inventory_digest: str,
+    inventory_manifest: Any | None,
+    inventory_manifest_path: Path | None,
 ) -> list[str]:
     errors: list[str] = []
-    dataset_manifest = _load_json(args.manifest)
     mismatch = _require_matching_digest(
-        dataset_manifest.get("sha256"),
-        args.records,
-        str(args.manifest),
+        dataset_manifest.get("sha256") if isinstance(dataset_manifest, dict) else None,
+        records_digest,
+        records_path,
+        str(dataset_manifest_path),
     )
     if mismatch:
         errors.append(mismatch)
-    if "record_count" in dataset_manifest:
+    if isinstance(dataset_manifest, dict) and "record_count" in dataset_manifest:
         declared = dataset_manifest["record_count"]
         if (
             isinstance(declared, bool)
             or not isinstance(declared, int)
             or declared != record_count
         ):
-            errors.append(f"{args.manifest} record_count does not match {args.records}")
-    if args.inventory_manifest is None:
-        errors.append(f"{args.inventory} requires an inventory-manifest file binding")
+            errors.append(
+                f"{dataset_manifest_path} record_count does not match {records_path}"
+            )
+    if inventory_manifest_path is None or inventory_manifest is None:
+        errors.append(f"{inventory_path} requires an inventory-manifest file binding")
         return errors
-    inventory_manifest = _load_json(args.inventory_manifest)
-    files = inventory_manifest.get("files")
+    files = (
+        inventory_manifest.get("files")
+        if isinstance(inventory_manifest, dict)
+        else None
+    )
     listed = (
-        files.get(args.inventory.name) or files.get("repositories.jsonl")
+        files.get(inventory_path.name) or files.get("repositories.jsonl")
         if isinstance(files, dict)
         else None
     )
     if not isinstance(listed, dict):
         errors.append(
-            f"{args.inventory_manifest} is missing a repositories.jsonl file binding"
+            f"{inventory_manifest_path} is missing a repositories.jsonl file binding"
         )
         return errors
     mismatch = _require_matching_digest(
         listed.get("sha256"),
-        args.inventory,
-        f"{args.inventory_manifest} repositories",
+        inventory_digest,
+        inventory_path,
+        f"{inventory_manifest_path} repositories",
     )
     if mismatch:
         errors.append(mismatch)
@@ -201,27 +238,63 @@ def main(argv: list[str] | None = None) -> int:
         return 2
 
     try:
-        snapshot_sha256 = _snapshot_sha256(args)
+        records_raw = args.records.read_bytes()
+        card_raw = args.card.read_bytes()
+        manifest_raw = args.manifest.read_bytes()
+        inventory_raw = args.inventory.read_bytes()
+        inventory_manifest_raw = (
+            args.inventory_manifest.read_bytes()
+            if args.inventory_manifest is not None
+            else None
+        )
+        prior_raw = args.prior_inventory.read_bytes() if args.prior_inventory else None
+        markdown_raw = args.markdown_card.read_bytes() if args.markdown_card else None
+        records = _parse_jsonl(records_raw, args.records)
+        card = _parse_json(card_raw, args.card)
+        manifest = _parse_json(manifest_raw, args.manifest)
+        inventory = _parse_jsonl(inventory_raw, args.inventory)
+        inventory_manifest = (
+            _parse_json(inventory_manifest_raw, args.inventory_manifest)
+            if inventory_manifest_raw is not None
+            else None
+        )
+        snapshot_sha256 = _snapshot_sha256(
+            args.snapshot_sha256,
+            inventory_manifest if isinstance(inventory_manifest, dict) else None,
+            args.inventory_manifest,
+        )
         report = build_license_closure_report(
-            _load_jsonl(args.records),
-            _load_json(args.card),
-            _load_json(args.manifest),
-            _load_jsonl(args.inventory),
+            records,
+            card,
+            manifest,
+            inventory,
             snapshot_sha256=snapshot_sha256,
             prior_repositories=(
-                _load_jsonl(args.prior_inventory) if args.prior_inventory else None
+                _parse_jsonl(prior_raw, args.prior_inventory)
+                if prior_raw is not None
+                else None
             ),
             markdown_card=(
-                args.markdown_card.read_text(encoding="utf-8")
-                if args.markdown_card
+                _decode_utf8(markdown_raw, args.markdown_card)
+                if markdown_raw is not None
                 else None
             ),
         )
-    except (OSError, ValueError, json.JSONDecodeError) as exc:
+    except (OSError, UnicodeDecodeError, ValueError, json.JSONDecodeError) as exc:
         print(f"ERROR: {exc}", file=sys.stderr)
         return 2
 
-    binding_errors = _publication_binding_errors(args, report["counts"]["record_count"])
+    binding_errors = _publication_binding_errors(
+        records_path=args.records,
+        records_digest=_sha256_bytes(records_raw),
+        record_count=report["counts"]["record_count"],
+        dataset_manifest=manifest,
+        dataset_manifest_path=args.manifest,
+        inventory_path=args.inventory,
+        inventory_digest=_sha256_bytes(inventory_raw),
+        inventory_manifest=inventory_manifest,
+        inventory_manifest_path=args.inventory_manifest,
+    )
     if binding_errors:
         report["bundle_errors"] = (
             list(report.get("bundle_errors") or []) + binding_errors
