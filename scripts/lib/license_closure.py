@@ -453,9 +453,14 @@ def _evaluate_record(
             license_evidence_payload(repository, snapshot_sha256=snapshot_sha256)
         )
 
-    declared_digest = declared_digest_for_repo(card, repo) or declared_digest_for_repo(
-        manifest, repo
-    )
+    card_digest = declared_digest_for_repo(card, repo)
+    manifest_digest = declared_digest_for_repo(manifest, repo)
+    declared_digest = card_digest or manifest_digest
+    declared_digest_values = {
+        item for item in (card_digest, manifest_digest) if item is not None
+    }
+    if len(declared_digest_values) > 1:
+        reasons.append("declarations_disagree")
     prior_digest = None
     prior_id = None
     if prior_index is not None:
@@ -517,7 +522,10 @@ def _evaluate_record(
     ) and any(_text(item).casefold() == FORGE_LICENSE.casefold() for item in present):
         reasons.append("forge_license_substitution")
 
-    if declared_digest is not None and digest is not None and declared_digest != digest:
+    if digest is not None and any(
+        declared is not None and declared != digest
+        for declared in (card_digest, manifest_digest)
+    ):
         reasons.append("source_license_changed")
     if prior_digest is not None and digest is not None and prior_digest != digest:
         reasons.append("source_license_changed")

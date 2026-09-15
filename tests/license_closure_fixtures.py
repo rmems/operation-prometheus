@@ -200,6 +200,20 @@ def stale_digest_bundle() -> dict[str, Any]:
     }
 
 
+def conflicting_card_manifest_digest_bundle() -> dict[str, Any]:
+    repo = repository("rmems/widget", spdx_id="MIT", license_name="MIT License")
+    digest = digest_for(repo)
+    return {
+        "card": card("rmems/widget", "MIT", digest=digest),
+        "manifest": manifest("rmems/widget", "MIT", digest=STALE_DIGEST),
+        "markdown": None,
+        "prior_repositories": None,
+        "records": [record("rmems/widget", 1, "MIT")],
+        "repositories": [repo],
+        "snapshot_sha256": SNAPSHOT_SHA256,
+    }
+
+
 def conflicting_card_manifest_bundle() -> dict[str, Any]:
     repo = repository("rmems/widget", spdx_id="MIT", license_name="MIT License")
     digest = digest_for(repo)

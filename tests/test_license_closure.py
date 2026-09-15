@@ -12,6 +12,7 @@ from license_closure_fixtures import (
     apache_source_bundle,
     changed_license_bundle,
     conflicting_card_manifest_bundle,
+    conflicting_card_manifest_digest_bundle,
     custom_license_bundle,
     forge_substitution_bundle,
     missing_license_bundle,
@@ -105,6 +106,16 @@ def test_stale_declared_digest_is_a_changed_license():
     assert report["counts"]["unresolved_count"] == 1
 
 
+def test_conflicting_card_and_manifest_digests_block_release():
+    report = _report(conflicting_card_manifest_digest_bundle())
+    _assert_schema(report)
+    reasons = report["quarantined"][0]["reason_codes"]
+    assert "declarations_disagree" in reasons
+    assert "source_license_changed" in reasons
+    assert report["released_positives"] == []
+    assert report["quarantined"][0]["record_id"] not in released_positive_ids(report)
+
+
 def test_conflicting_card_and_manifest_block_release():
     report = _report(conflicting_card_manifest_bundle())
     _assert_schema(report)
@@ -155,6 +166,7 @@ def test_unresolved_record_cannot_appear_in_released_positives():
         missing_license_bundle(),
         changed_license_bundle(),
         conflicting_card_manifest_bundle(),
+        conflicting_card_manifest_digest_bundle(),
         unknown_license_bundle(),
         forge_substitution_bundle(),
     ):
