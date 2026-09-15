@@ -41,6 +41,7 @@ def _write_cli_bundle(tmp_path: Path, bundle: dict) -> dict[str, Path]:
         "card": tmp_path / "card.json",
         "manifest": tmp_path / "manifest.json",
         "inventory": tmp_path / "inventory.jsonl",
+        "inventory_manifest": tmp_path / "inventory-manifest.json",
         "out": tmp_path / "closure.json",
     }
     paths["records"].write_text(
@@ -54,4 +55,35 @@ def _write_cli_bundle(tmp_path: Path, bundle: dict) -> dict[str, Path]:
     paths["inventory"].write_text(
         json.dumps(bundle["repositories"][0]) + "\n", encoding="utf-8"
     )
+    paths["inventory_manifest"].write_text(
+        json.dumps(
+            {
+                "files": {
+                    paths["inventory"].name: {
+                        "sha256": hashlib.sha256(
+                            paths["inventory"].read_bytes()
+                        ).hexdigest()
+                    }
+                },
+                "snapshot_sha256": bundle["snapshot_sha256"],
+            }
+        ),
+        encoding="utf-8",
+    )
     return paths
+
+
+def _cli_argv(paths: dict[str, Path], *extra: str) -> list[str]:
+    return [
+        "--records",
+        str(paths["records"]),
+        "--card",
+        str(paths["card"]),
+        "--manifest",
+        str(paths["manifest"]),
+        "--inventory",
+        str(paths["inventory"]),
+        "--inventory-manifest",
+        str(paths["inventory_manifest"]),
+        *extra,
+    ]
