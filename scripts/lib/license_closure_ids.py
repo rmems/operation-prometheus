@@ -136,19 +136,32 @@ def _parentheses_balanced(identifier: str) -> bool:
     return depth == 0
 
 
+def _unwrap_outer_parens(identifier: str) -> str | None:
+    stripped = identifier.strip()
+    if not stripped or not _parentheses_balanced(stripped):
+        return None
+    while stripped.startswith("(") and stripped.endswith(")"):
+        inner = stripped[1:-1].strip()
+        if not inner or not _parentheses_balanced(inner):
+            return None
+        stripped = inner
+    return stripped
+
+
 def _expression_tokens(identifier: str) -> list[str] | None:
     stripped = identifier.strip()
     if not stripped:
         return []
-    if not _parentheses_balanced(stripped):
+    unwrapped = _unwrap_outer_parens(stripped)
+    if unwrapped is None:
         return None
-    pieces = EXPRESSION_SPLIT_RE.split(stripped)
+    pieces = EXPRESSION_SPLIT_RE.split(unwrapped)
     tokens: list[str] = []
     for index, piece in enumerate(pieces):
         if index % 2 == 1:
             continue
-        token = piece.strip("() ")
-        if not token:
+        token = piece.strip()
+        if not token or "(" in token or ")" in token:
             return None
         operator = pieces[index - 1].upper() if index else ""
         if operator == "WITH" and (
