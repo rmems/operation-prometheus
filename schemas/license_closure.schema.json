@@ -164,6 +164,7 @@
       "properties": {
         "record_license": { "type": ["string", "null"] },
         "card_license": { "type": ["string", "null"] },
+        "custom_license": { "type": ["object", "null"] },
         "manifest_license": { "type": ["string", "null"] },
         "inventory_license": {
           "anyOf": [
