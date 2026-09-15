@@ -36,7 +36,7 @@ except ImportError:
     hf_hub_download = None
 
 DEFAULT_REPO = "rmems/operation-prometheus-trajectories"
-IMMUTABLE_TAG_RE = r"^v\\d+\\.\\d+\\.\\d+$"
+IMMUTABLE_TAG_RE = r"^v\d+\.\d+\.\d+$"
 RELEASE_EVENT_ENV = "GITHUB_EVENT_NAME"
 
 
@@ -310,13 +310,13 @@ def main(argv: list[str] | None = None) -> int:
     if args.write_manifest:
         RELEASE_MANIFEST.parent.mkdir(parents=True, exist_ok=True)
         RELEASE_MANIFEST.write_text(
-            json.dumps(result["release_manifest"], indent=2, ensure_ascii=False) + "\\n",
+            json.dumps(result["release_manifest"], indent=2, ensure_ascii=False) + "\n",
             encoding="utf-8",
         )
         result["wrote_local_manifest"] = True
     args.out.parent.mkdir(parents=True, exist_ok=True)
     args.out.write_text(
-        json.dumps(result, indent=2, ensure_ascii=False) + "\\n", encoding="utf-8"
+        json.dumps(result, indent=2, ensure_ascii=False) + "\n", encoding="utf-8"
     )
     print(f"hf-release-verify passed for {args.dataset_repo}@{args.tag}")
     return 0
