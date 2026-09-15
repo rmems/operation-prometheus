@@ -367,7 +367,8 @@ def assert_released_positives_are_closed(report: dict[str, Any]) -> None:
     if type(closed) is not bool or closed != _derived_closed(report, quarantined):
         raise AssertionError("closed does not match quarantined rows and bundle errors")
     families, evidence = _released_evidence_summary(released)
-    if list(report.get("license_families") or []) != families:
+    declared_families = report.get("license_families")
+    if not isinstance(declared_families, list) or declared_families != families:
         raise AssertionError("license_families do not match released rows")
     if list(report.get("evidence_digests") or []) != evidence:
         raise AssertionError("evidence_digests do not match released rows")
