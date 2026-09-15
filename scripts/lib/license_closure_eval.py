@@ -34,6 +34,7 @@ from .license_closure_inventory import (
     manifest_license_for_repo,
     source_provenance_digest,
     record_id,
+    record_ids_conflict,
     record_license,
     record_pr_number,
     record_pr_number_invalid,
@@ -99,6 +100,8 @@ def _evaluate_record(
         reasons.append("declarations_disagree")
     rid = record_id(record)
     if not _supplied_record_id(record):
+        reasons.append("declarations_disagree")
+    if record_ids_conflict(record):
         reasons.append("declarations_disagree")
     pr_number = record_pr_number(record)
     if record_pr_number_invalid(record):
