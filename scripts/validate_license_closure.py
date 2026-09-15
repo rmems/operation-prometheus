@@ -34,6 +34,7 @@ from lib.license_closure import (  # noqa: E402
     build_license_closure_report,
     validate_positive_release,
 )
+from lib.license_closure_ids import _sha256_or_none  # noqa: E402
 
 ROOT = Path(__file__).resolve().parent.parent
 SCHEMA_PATH = ROOT / "schemas" / "license_closure.schema.json"
@@ -107,15 +108,22 @@ def _snapshot_sha256(
     inventory_manifest: dict[str, Any] | None,
     inventory_manifest_path: Path | None,
 ) -> str:
-    explicit_digest = str(explicit or "").strip().lower()
+    explicit_digest = _sha256_or_none(explicit) or ""
     declared = ""
     if inventory_manifest is not None:
-        declared = str(inventory_manifest.get("snapshot_sha256") or "").strip().lower()
+        declared = _sha256_or_none(inventory_manifest.get("snapshot_sha256")) or ""
+        if not declared:
+            source = (
+                inventory_manifest_path
+                if inventory_manifest_path is not None
+                else "inventory-manifest"
+            )
+            raise ValueError(f"{source} is missing snapshot_sha256")
     if explicit_digest and declared and explicit_digest != declared:
         raise ValueError(
             "--snapshot-sha256 disagrees with inventory-manifest snapshot_sha256"
         )
-    digest = explicit_digest or declared
+    digest = declared or explicit_digest
     if not digest:
         source = (
             inventory_manifest_path
