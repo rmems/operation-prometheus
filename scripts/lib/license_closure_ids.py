@@ -8,7 +8,7 @@ from typing import Any
 SCHEMA_VERSION = "license_closure_manifest_v1"
 FORGE_LICENSE = "Apache-2.0"
 SHA256_RE = re.compile(r"^[a-f0-9]{64}$")
-GIT_OID_RE = re.compile(r"^[0-9a-fA-F]{3,64}$")
+GIT_OID_RE = re.compile(r"^(?:[0-9a-fA-F]{40}|[0-9a-fA-F]{64})$")
 LICENSE_REF_RE = re.compile(r"^LicenseRef-[A-Za-z0-9.-]+$")
 EXPRESSION_SPLIT_RE = re.compile(r"\s+(AND|OR|WITH)\s+", re.IGNORECASE)
 MARKDOWN_LICENSE_SECTION_RE = re.compile(
@@ -220,6 +220,8 @@ def _expression_tokens(identifier: str) -> list[str] | None:
         if not token:
             return None
         operator = parts[index - 1].upper() if index else ""
+        if operator == "WITH":
+            return None
         if "(" in token or ")" in token:
             if not (token.startswith("(") and token.endswith(")")):
                 return None
@@ -231,12 +233,6 @@ def _expression_tokens(identifier: str) -> list[str] | None:
                 return None
             tokens.extend(nested)
             continue
-        if operator == "WITH" and (
-            token in SPDX_LICENSE_IDS
-            or LICENSE_REF_RE.fullmatch(token)
-            or token.upper() in UNKNOWN_LICENSE_IDS
-        ):
-            return None
         tokens.append(token)
     return tokens
 
