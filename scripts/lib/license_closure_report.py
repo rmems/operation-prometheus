@@ -14,8 +14,10 @@ from .license_closure_ids import (
     _text,
 )
 from .license_closure_inventory import (
+    evidence_digest,
     index_repositories,
     inventory_has_custom_evidence,
+    license_evidence_payload,
 )
 from .license_closure_pr import _index_pull_requests
 
@@ -197,6 +199,19 @@ def released_positive_ids(report: dict[str, Any]) -> list[str]:
     return [row["record_id"] for row in report.get("released_positives") or []]
 
 
+def _released_custom_bound(row: dict[str, Any]) -> bool:
+    if row.get("license_family") != "custom":
+        return True
+    reconstructed = {
+        "custom_license": row.get("custom_license"),
+        "license": row.get("inventory_license"),
+    }
+    if not inventory_has_custom_evidence(reconstructed):
+        return False
+    digest = _sha256_or_none(row.get("evidence_digest"))
+    return digest == evidence_digest(license_evidence_payload(reconstructed))
+
+
 def _report_rows(
     report: dict[str, Any],
 ) -> tuple[list[dict[str, Any]], list[dict[str, Any]]]:
@@ -252,10 +267,12 @@ def assert_released_positives_are_closed(report: dict[str, Any]) -> None:
             has_custom_evidence=inventory_has_custom_evidence(
                 {
                     "custom_license": row.get("custom_license"),
-                    "license": {"spdx_id": row.get("spdx_id")},
+                    "license": row.get("inventory_license")
+                    or {"spdx_id": row.get("spdx_id")},
                 }
             ),
         )
+        or not _released_custom_bound(row)
         for row in released
     ):
         raise AssertionError("released row license family is not closed")
