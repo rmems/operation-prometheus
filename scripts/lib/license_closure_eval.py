@@ -19,6 +19,7 @@ from .license_closure_ids import (
 from .license_closure_inventory import (
     _canonical_declared_repos,
     _declaration_map_conflicts,
+    _declared_source_maps_conflict,
     _identity_names,
     _inventory_for_repo,
     _prior_repository,
@@ -160,6 +161,8 @@ def _evaluate_record(
     if manifest_repos and not folded_names.intersection(manifest_repos):
         reasons.append("declarations_disagree")
     declared_repos = card_repos | manifest_repos
+    if _declared_source_maps_conflict(card, manifest, declared_repos, inventory_index):
+        reasons.append("declarations_disagree")
     if any(
         _inventory_for_repo(inventory_index, repo) is None for repo in declared_repos
     ):
@@ -262,7 +265,11 @@ def _evaluate_record(
         released["repository_source_hash"] = source_hash
         released["snapshot_sha256"] = snapshot_sha256
         released["source_provenance_digest"] = source_provenance_digest(
-            repo, source_hash, snapshot_sha256
+            repo,
+            source_hash,
+            snapshot_sha256,
+            record_id=rid,
+            pr_number=pr_number,
         )
         return released
     return {
