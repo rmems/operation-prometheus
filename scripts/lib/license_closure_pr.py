@@ -21,6 +21,7 @@ MARKDOWN_REFERENCE_DEFINITION_RE = re.compile(
 )
 MARKDOWN_INLINE_LINK_RE = re.compile(r"!?\[([^\]\n]*)\]\((?:[^)\\]|\\.)*\)")
 MARKDOWN_REFERENCE_LINK_RE = re.compile(r"!?\[([^\]\n]*)\]\[[^\]\n]*\]")
+FENCE_OPEN_RE = re.compile(r"^( {0,3})(`{3,}|~{3,})")
 
 
 def pr_inventory_row_source_hash(row: dict[str, Any]) -> str:
@@ -149,8 +150,43 @@ def _declared_repos(container: dict[str, Any]) -> set[str]:
     names = [_text(container.get("source_repo"))]
     extra = container.get("source_repos")
     if isinstance(extra, list):
-        names.extend(_text(item) for item in extra)
+        names.extend(_text(item) for item in extra if isinstance(item, str))
     return {name.casefold() for name in names if name}
+
+
+def _source_coverage_invalid(container: dict[str, Any]) -> bool:
+    if "source_repos" not in container:
+        return False
+    extra = container.get("source_repos")
+    if not isinstance(extra, list):
+        return True
+    return any(not isinstance(item, str) or not item.strip() for item in extra)
+
+
+def _strip_fenced_code(markdown: str) -> str:
+    kept: list[str] = []
+    fence_char: str | None = None
+    fence_len = 0
+    for line in markdown.splitlines(keepends=True):
+        if fence_char is None:
+            match = FENCE_OPEN_RE.match(line)
+            if match is not None:
+                marker = match.group(2)
+                fence_char = marker[0]
+                fence_len = len(marker)
+                continue
+            kept.append(line)
+            continue
+        stripped = line.rstrip("\n")
+        leading = len(stripped) - len(stripped.lstrip(" "))
+        rest = stripped.lstrip(" ")
+        if leading <= 3 and rest.startswith(fence_char * fence_len):
+            after = rest[fence_len:].lstrip(fence_char)
+            if after.strip() == "":
+                fence_char = None
+                fence_len = 0
+                continue
+    return "".join(kept)
 
 
 def _markdown_license_section(markdown: str) -> str | None:
@@ -175,7 +211,7 @@ def _visible_markdown_text(markdown: str) -> str:
 def _markdown_discloses(markdown: str | None, identifier: str | None) -> bool:
     if markdown is None:
         return True
-    section = _markdown_license_section(markdown)
+    section = _markdown_license_section(_strip_fenced_code(markdown))
     if section is None or not identifier:
         return False
     visible = _visible_markdown_text(section)
