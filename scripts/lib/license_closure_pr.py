@@ -49,8 +49,6 @@ def _code_state_matches_inventory_pr(
             continue
         saw_record_oid = True
         expected = pr_oids[pr_key]
-        if expected is None and pr_key == "merge_commit_oid":
-            expected = pr_oids["head_oid"]
         if expected is None or any(oid != expected for oid in record_oids):
             return False
     return saw_record_oid
@@ -81,7 +79,7 @@ def _index_pull_requests(
     for row in pull_requests or []:
         repo = _text(row.get("repository_name_with_owner")).casefold()
         number = row.get("number")
-        if repo and isinstance(number, int):
+        if repo and type(number) is int and number >= 1:
             key = (repo, number)
             if key in index:
                 raise ValueError(f"Duplicate inventory pull request {repo}#{number}")
