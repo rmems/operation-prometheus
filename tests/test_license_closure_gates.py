@@ -9,6 +9,7 @@ from license_closure_fixtures import (
     WRONG_HEAD_OID,
     bind_source_hash,
     digest_for,
+    inventory_alias,
     inventory_pr,
     missing_license_bundle,
     repository,
@@ -81,7 +82,7 @@ def test_prior_inventory_rename_does_not_look_like_license_change():
     bundle = spdx_known_bundle()
     current = dict(bundle["repositories"][0])
     current["name_with_owner"] = "rmems/widget-renamed"
-    current["aliases"] = [{"name_with_owner": "rmems/widget"}]
+    current["aliases"] = [inventory_alias("rmems/widget")]
     bundle["repositories"] = [bind_source_hash(current)]
     bundle["prior_repositories"] = [
         repository(
