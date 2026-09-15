@@ -115,10 +115,12 @@ def _evaluate_record(
     inventory_id = normalize_license_id(inventory_license)
     has_custom = inventory_has_custom_evidence(repository)
     custom_license_obj: dict[str, Any] | None = None
-    if has_custom and isinstance(repository, dict):
+    if isinstance(repository, dict):
         custom = repository.get("custom_license")
         if isinstance(custom, dict):
             custom_license_obj = custom
+            if not has_custom:
+                reasons.append("source_license_conflict")
     family = classify_license_family(inventory_id, has_custom_evidence=has_custom)
     if family == "missing":
         family = classify_license_family(
