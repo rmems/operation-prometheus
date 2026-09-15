@@ -230,11 +230,28 @@ def _object_rows(value: Any, field: str) -> list[dict[str, Any]]:
     return value
 
 
+_RELEASED_ROW_KEYS = ("record_id",)
+_QUARANTINED_ROW_KEYS = ("record_id", "primary_reason", "reason_codes")
+
+
+def _rows_with_keys(
+    value: Any, field: str, required: tuple[str, ...]
+) -> list[dict[str, Any]]:
+    rows = _object_rows(value, field)
+    if any(key not in row or row[key] is None for row in rows for key in required):
+        raise AssertionError(f"{field} rows are missing required fields")
+    return rows
+
+
 def _report_rows(
     report: dict[str, Any],
 ) -> tuple[list[dict[str, Any]], list[dict[str, Any]]]:
-    released = _object_rows(report.get("released_positives"), "released_positives")
-    quarantined = _object_rows(report.get("quarantined"), "quarantined")
+    released = _rows_with_keys(
+        report.get("released_positives"), "released_positives", _RELEASED_ROW_KEYS
+    )
+    quarantined = _rows_with_keys(
+        report.get("quarantined"), "quarantined", _QUARANTINED_ROW_KEYS
+    )
     return released, quarantined
 
 
@@ -318,10 +335,13 @@ def validate_positive_release(report: dict[str, Any]) -> list[str]:
             "cannot be published as positives"
         )
         for row in quarantined:
-            errors.append(
-                f"  {row['record_id']} [{row['primary_reason']}] "
-                f"reasons={','.join(row['reason_codes'])}"
-            )
+            try:
+                errors.append(
+                    f"  {row['record_id']} [{row['primary_reason']}] "
+                    f"reasons={','.join(row['reason_codes'])}"
+                )
+            except (KeyError, TypeError):
+                errors.append("  quarantined row is missing required fields")
     elif not _derived_closed(report, quarantined):
         errors.append(
             "license closure is fail-closed: bundle declarations do not agree"
