@@ -12,6 +12,7 @@ from license_closure_fixtures import (
     CUSTOM_TEXT_SHA256,
     bind_source_hash,
     digest_for,
+    inventory_alias,
     spdx_known_bundle,
 )
 from license_closure_helpers import (
@@ -85,7 +86,7 @@ def test_object_inventory_aliases_cannot_index():
 def test_array_inventory_aliases_still_close():
     bundle = spdx_known_bundle()
     row = dict(bundle["repositories"][0])
-    row["aliases"] = [{"name_with_owner": "rmems/other"}]
+    row["aliases"] = [inventory_alias("rmems/other")]
     bundle["repositories"][0] = bind_source_hash(row)
     bundle["records"][0]["repo"] = "rmems/other"
     bundle["card"]["source_repo"] = "rmems/other"
