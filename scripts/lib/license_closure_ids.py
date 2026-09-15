@@ -148,6 +148,43 @@ def _unwrap_outer_parens(identifier: str) -> str | None:
     return stripped
 
 
+def _top_level_expression_parts(expression: str) -> list[str] | None:
+    """Split on AND/OR/WITH that are outside parentheses."""
+    parts: list[str] = []
+    buf: list[str] = []
+    depth = 0
+    index = 0
+    length = len(expression)
+    while index < length:
+        char = expression[index]
+        if char == "(":
+            depth += 1
+            buf.append(char)
+            index += 1
+            continue
+        if char == ")":
+            if depth == 0:
+                return None
+            depth -= 1
+            buf.append(char)
+            index += 1
+            continue
+        if depth == 0:
+            match = EXPRESSION_SPLIT_RE.match(expression, index)
+            if match is not None:
+                parts.append("".join(buf).strip())
+                parts.append(match.group(1).upper())
+                buf = []
+                index = match.end()
+                continue
+        buf.append(char)
+        index += 1
+    if depth != 0:
+        return None
+    parts.append("".join(buf).strip())
+    return parts
+
+
 def _expression_tokens(identifier: str) -> list[str] | None:
     stripped = identifier.strip()
     if not stripped:
@@ -155,15 +192,25 @@ def _expression_tokens(identifier: str) -> list[str] | None:
     unwrapped = _unwrap_outer_parens(stripped)
     if unwrapped is None:
         return None
-    pieces = EXPRESSION_SPLIT_RE.split(unwrapped)
+    parts = _top_level_expression_parts(unwrapped)
+    if parts is None:
+        return None
     tokens: list[str] = []
-    for index, piece in enumerate(pieces):
+    for index, piece in enumerate(parts):
         if index % 2 == 1:
             continue
         token = piece.strip()
-        if not token or "(" in token or ")" in token:
+        if not token:
             return None
-        operator = pieces[index - 1].upper() if index else ""
+        operator = parts[index - 1].upper() if index else ""
+        if "(" in token or ")" in token:
+            if not (token.startswith("(") and token.endswith(")")):
+                return None
+            nested = _expression_tokens(token)
+            if nested is None:
+                return None
+            tokens.extend(nested)
+            continue
         if operator == "WITH" and (
             token in SPDX_LICENSE_IDS
             or LICENSE_REF_RE.fullmatch(token)
@@ -206,8 +253,13 @@ def _same_license(left: str | None, right: str | None) -> bool:
     return left.casefold() == right.casefold()
 
 
-def _closed_release_family(identifier: Any, declared_family: Any) -> bool:
+def _closed_release_family(
+    identifier: Any,
+    declared_family: Any,
+    *,
+    has_custom_evidence: bool = False,
+) -> bool:
     family = classify_license_family(
-        identifier, has_custom_evidence=declared_family == "custom"
+        identifier, has_custom_evidence=has_custom_evidence
     )
     return family in CLOSED_FAMILIES and family == declared_family
