@@ -312,6 +312,11 @@ def policy_errors(record: dict, lineno: int, filename: str) -> list[str]:
             f"  {filename}:{lineno} [policy] - secret-like token pattern present "
             f"({families})"
         )
+    return errors
+
+
+def contract_policy_errors(record: dict, lineno: int, filename: str) -> list[str]:
+    errors: list[str] = []
     private_hits: list[str] = []
     seen_private: set[str] = set()
     for text in iter_uri_fields(record):
@@ -383,6 +388,7 @@ def validate_file(
                     )
                 if strict_policy and isinstance(record, dict):
                     errors.extend(policy_errors(record, lineno, filepath.name))
+                    errors.extend(contract_policy_errors(record, lineno, filepath.name))
                     identity = record_identity(record)
                     if identity:
                         previous = seen_ids.get(identity)
