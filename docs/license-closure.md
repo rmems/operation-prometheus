@@ -41,8 +41,8 @@ adjacent grouped operands (`(MIT) OR (Apache-2.0)`) remain SPDX;
 adjacent groups without an operator (`(MIT)(Apache-2.0)`) stay unknown
 instead of recursing forever. Misplaced parentheses
 (`MIT ( AND Apache-2.0)`) stay unknown. `WITH`
-expressions whose right
-operand is a license identifier (`MIT WITH Apache-2.0`) stay unknown. A
+expressions stay unknown, including a parenthesized operand
+(`MIT WITH Apache-2.0`, `MIT WITH (Apache-2.0)`). A
 source repository that is itself Apache-2.0 can still close; using this
 forge's Apache-2.0 license to fill a missing source license cannot.
 
@@ -83,6 +83,9 @@ values that point at different names are rejected. A present but unparseable
 singular `source_license` (for example `{}`) cannot be ignored in favor of a
 matching per-repository map. A present non-object plural map such as
 `source_licenses: []` cannot be ignored in favor of a valid singular.
+A present non-array `source_repos` value such as `{}`, or a list that
+contains a non-string or blank element, cannot be ignored in favor of a
+valid singular `source_repo`.
 Card and manifest `license_families` / `unresolved_license_count` must agree
 with closed evidence when they are declared. Non-string family elements such
 as `["spdx", 1]` fail closed as a bundle error instead of raising. When both
@@ -93,9 +96,13 @@ authenticate `source_hash` before their license is trusted. When the current
 row carries `repository_id`, prior lookup matches that immutable id and does
 not fall back to a reused GitHub name. Card and manifest declaration maps are
 resolved through inventory aliases. Markdown disclosure ignores HTML comments,
-link destinations, and reference definitions, so a URL that only contains
-`MIT` is not disclosure. Disclosure stops the license section at the next
+fenced code blocks, link destinations, and reference definitions, so a URL
+that only contains `MIT`, or a fenced `## License / provenance` heading, is
+not disclosure. Disclosure stops the license section at the next
 H1 or H2 heading.
+Released custom rows persist the inventory `license` object alongside
+`custom_license` so publication can recompute the evidence digest; swapping
+`text_sha256` while keeping the stored digest fails closed.
 `build_manifest.py` copies license-closure fields from the card when they are
 present.
 
@@ -108,7 +115,9 @@ published row does not keep. Missing or stale PR hashes are rejected.
 Duplicate repository+PR keys in that inventory are rejected. Record
 `base_oid` / `head_oid` / merge `commit_oid` values on the record's
 repository state are compared to the matching PR roles after normalizing
-accepted hexadecimal OIDs to lowercase; a correct base OID
+accepted hexadecimal OIDs to lowercase. Only full Git object IDs are
+accepted (40-character SHA-1 or 64-character SHA-256); truncated values
+such as `abc` cannot close. A correct base OID
 does not mask an incorrect head. A supplied PR inventory also requires a
 valid inventory `merge_commit_oid` and a matching record merge role. A
 record merge/commit OID is not compared to the PR head; missing merge
