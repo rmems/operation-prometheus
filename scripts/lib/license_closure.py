@@ -22,6 +22,7 @@ from .license_closure_inventory import (
     evidence_digest,
     inventory_row_source_hash,
     license_evidence_payload,
+    source_provenance_digest,
 )
 from .license_closure_pr import pr_inventory_row_source_hash
 from .license_closure_report import (
@@ -41,5 +42,6 @@ __all__ = [
     "license_evidence_payload",
     "pr_inventory_row_source_hash",
     "released_positive_ids",
+    "source_provenance_digest",
     "validate_positive_release",
 ]
