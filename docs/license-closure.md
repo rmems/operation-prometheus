@@ -6,7 +6,8 @@ Every released positive trajectory must resolve through all three of:
 
 1. Frozen source-inventory license evidence (SPDX id or `LicenseRef-*` plus a
    content digest);
-2. Snapshot provenance (`snapshot_sha256` and the repository `source_hash`);
+2. Snapshot provenance (`snapshot_sha256` and a repository `source_hash` that
+   matches the canonical hash of that inventory row excluding `source_hash`);
 3. Dataset-card disclosure (`source_license` / `source_licenses`, and a
    `License / provenance` section when a markdown card is supplied). Markdown
    disclosure must name the complete identifier; a prefix such as `MIT` does
@@ -23,16 +24,20 @@ an explicit reason code. Publication consumers must treat a report as closed
 only when the quarantined array is empty, counts match those array lengths
 (including `record_count` equal to released plus quarantined), `bundle_errors`
 is empty, and every released row's repository, digest, family, and identifier
-appear in `evidence_digests` / `license_families`. Manifest count fields must
-be actual integers; fractional values such as `0.5` fail closed.
+appear in `evidence_digests` / `license_families`, released record IDs are
+unique, and each released identifier still classifies as a closed family.
+Manifest count fields must be actual integers; fractional values such as
+`0.5` fail closed. A present `records` array, including `[]`, must enumerate
+every evaluated row.
 
 This check does **not** decide license compatibility, relicense source-derived
 material under Operation Prometheus's Apache-2.0 terms, or guess a license
 when GitHub reports `NOASSERTION` / `OTHER`. Unbalanced SPDX parentheses,
 empty expression operands (`MIT OR ()`), and non-`LicenseRef-*` identifiers
-stay unknown even if custom text evidence is present. A source repository that
-is itself Apache-2.0 can still close; using this forge's Apache-2.0 license to
-fill a missing source license cannot.
+stay unknown even if custom text evidence is present. `WITH` expressions whose
+right operand is a license identifier (`MIT WITH Apache-2.0`) stay unknown. A
+source repository that is itself Apache-2.0 can still close; using this
+forge's Apache-2.0 license to fill a missing source license cannot.
 
 Validation is deterministic and uses only frozen local files. It does not
 contact GitHub.
