@@ -90,12 +90,14 @@ def _pr_inventory_reasons(
     repos: list[str],
     pr_number: int | None,
     pull_requests: dict[tuple[str, int], dict[str, Any]] | None,
+    repository: dict[str, Any] | None = None,
 ) -> list[str]:
     if pull_requests is None:
         return []
     names = [name for name in repos if name]
     if not names or pr_number is None:
         return ["snapshot_provenance_missing"]
+    inventory_id = _text((repository or {}).get("repository_id"))
     seen: set[str] = set()
     matched: list[dict[str, Any]] = []
     seen_evidence: set[str] = set()
@@ -106,6 +108,9 @@ def _pr_inventory_reasons(
         seen.add(folded)
         inventory_pr = pull_requests.get((folded, pr_number))
         if inventory_pr is None:
+            continue
+        pr_id = _text(inventory_pr.get("repository_id"))
+        if inventory_id and pr_id and inventory_id != pr_id:
             continue
         evidence = sha256_json(
             {
@@ -155,6 +160,10 @@ def _declared_repos(container: dict[str, Any]) -> set[str]:
 
 
 def _source_coverage_invalid(container: dict[str, Any]) -> bool:
+    if "source_repo" in container:
+        singular = container.get("source_repo")
+        if not isinstance(singular, str) or not singular.strip():
+            return True
     if "source_repos" not in container:
         return False
     extra = container.get("source_repos")
