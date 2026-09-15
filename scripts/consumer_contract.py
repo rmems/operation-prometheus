@@ -65,19 +65,29 @@ def _parse_timestamp(value: str) -> datetime:
     return parsed.astimezone(timezone.utc)
 
 
-def _event_timestamps(record: dict[str, Any]) -> list[str]:
-    timestamps: list[str] = []
+def _prometheus_timestamps(record: dict[str, Any]) -> list[str]:
     meta = record.get("_prometheus")
-    if isinstance(meta, dict):
-        raw = meta.get("event_timestamps") or []
-        if isinstance(raw, list):
-            timestamps.extend(item for item in raw if isinstance(item, str))
+    if not isinstance(meta, dict):
+        return []
+    raw = meta.get("event_timestamps") or []
+    if not isinstance(raw, list):
+        return []
+    return [item for item in raw if isinstance(item, str)]
+
+
+def _payload_event_timestamps(record: dict[str, Any]) -> list[str]:
     events = record.get("events")
-    if isinstance(events, list):
-        for event in events:
-            if isinstance(event, dict) and isinstance(event.get("timestamp"), str):
-                timestamps.append(event["timestamp"])
-    return timestamps
+    if not isinstance(events, list):
+        return []
+    return [
+        event["timestamp"]
+        for event in events
+        if isinstance(event, dict) and isinstance(event.get("timestamp"), str)
+    ]
+
+
+def _event_timestamps(record: dict[str, Any]) -> list[str]:
+    return [*_prometheus_timestamps(record), *_payload_event_timestamps(record)]
 
 
 def future_event_errors(record: dict[str, Any]) -> list[str]:
@@ -122,7 +132,9 @@ def consume(path: Path, normalize: Callable[..., dict[str, Any]]) -> dict[str, A
         except ValueError as exc:
             errors.append(f"{path.name}:{line_number} {exc}")
             continue
-        if not isinstance(normalized, dict) or not isinstance(normalized.get("text"), str):
+        if not isinstance(normalized, dict) or not isinstance(
+            normalized.get("text"), str
+        ):
             errors.append(f"{path.name}:{line_number} parser did not return a text row")
             continue
         consumed.append(
@@ -161,6 +173,29 @@ def default_inputs() -> list[Path]:
     return sorted(CONSUMER_FIXTURES.glob("*.jsonl"))
 
 
+def _sidecar_path(path: Path, out_dir: Path) -> Path:
+    digest = hashlib.sha256(str(path.resolve()).encode("utf-8")).hexdigest()[:12]
+    return out_dir / f"{path.stem}-{digest}.sidecar.json"
+
+
+def _write_sidecar(path: Path, sidecar: dict[str, Any], out_dir: Path) -> Path:
+    out_path = _sidecar_path(path, out_dir)
+    out_path.write_text(
+        json.dumps(sidecar, indent=2, ensure_ascii=False) + "\n", encoding="utf-8"
+    )
+    return out_path
+
+
+def _print_sidecar(path: Path, sidecar: dict[str, Any], out_path: Path) -> bool:
+    if sidecar["ok"]:
+        print(f"  ✓ {path.name} -> {out_path}")
+        return True
+    print(f"  ✗ {path.name}")
+    for error in sidecar["errors"]:
+        print(f"    {error}")
+    return False
+
+
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("files", nargs="*", type=Path)
@@ -178,18 +213,9 @@ def main(argv: list[str] | None = None) -> int:
     failed = False
     for path in files:
         sidecar = consume(path, normalize)
-        digest = hashlib.sha256(str(path.resolve()).encode("utf-8")).hexdigest()[:12]
-        out_path = args.out_dir / f"{path.stem}-{digest}.sidecar.json"
-        out_path.write_text(
-            json.dumps(sidecar, indent=2, ensure_ascii=False) + "\n", encoding="utf-8"
-        )
-        if sidecar["ok"]:
-            print(f"  ✓ {path.name} -> {out_path}")
-        else:
+        out_path = _write_sidecar(path, sidecar, args.out_dir)
+        if not _print_sidecar(path, sidecar, out_path):
             failed = True
-            print(f"  ✗ {path.name}")
-            for error in sidecar["errors"]:
-                print(f"    {error}")
     if failed:
         print("\nconsumer-contract FAILED.")
         return 1
