@@ -123,6 +123,17 @@ def inventory_row_source_hash(repository: dict[str, Any]) -> str:
     )
 
 
+def _producer_scalars_invalid(repository: dict[str, Any]) -> bool:
+    for key in ("archived", "disabled", "fork"):
+        if key in repository and type(repository[key]) is not bool:
+            return True
+    if "pull_request_total_count" in repository:
+        value = repository["pull_request_total_count"]
+        if type(value) is not int:
+            return True
+    return False
+
+
 def _authenticated_inventory_source_hash(
     repository: dict[str, Any] | None,
 ) -> str | None:
@@ -130,6 +141,8 @@ def _authenticated_inventory_source_hash(
     if not isinstance(repository, dict):
         return None
     if repository.get("visibility") != "public":
+        return None
+    if _producer_scalars_invalid(repository):
         return None
     declared = _sha256_or_none(repository.get("source_hash"))
     if declared is None or declared != inventory_row_source_hash(repository):
@@ -192,6 +205,12 @@ def _supplied_record_id(record: dict[str, Any]) -> str:
 
 
 def record_ids_conflict(record: dict[str, Any]) -> bool:
+    for key in ("id", "trajectory_id"):
+        if key not in record:
+            continue
+        value = record[key]
+        if not isinstance(value, str) or not value.strip():
+            return True
     record_key = _text(record.get("id"))
     trajectory_key = _text(record.get("trajectory_id"))
     return bool(record_key and trajectory_key and record_key != trajectory_key)
