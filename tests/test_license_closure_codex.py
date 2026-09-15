@@ -10,7 +10,9 @@ from license_closure_fixtures import (
     BASE_OID,
     CUSTOM_TEXT_SHA256,
     HEAD_OID,
+    MERGE_OID,
     SOURCE_HASH,
+    STALE_DIGEST,
     WRONG_HEAD_OID,
     bind_pr_source_hash,
     bind_source_hash,
@@ -167,6 +169,18 @@ def test_custom_report_validates_with_frozen_custom_object():
     assert not validate_positive_release(report)
 
 
+def test_quarantined_custom_license_retains_frozen_evidence():
+    bundle = custom_license_bundle()
+    bundle["card"]["license_evidence_digest"] = STALE_DIGEST
+    bundle["manifest"]["license_evidence_digest"] = STALE_DIGEST
+    report = _report(bundle)
+    _assert_schema(report)
+    row = report["quarantined"][0]
+    assert "source_license_changed" in row["reason_codes"]
+    assert row["evidence"]["custom_license"]["text_sha256"] == CUSTOM_TEXT_SHA256
+    assert report["released_positives"] == []
+
+
 def test_swapped_custom_text_digest_cannot_validate_release():
     report = _report(custom_license_bundle())
     released = report["released_positives"][0]
@@ -259,6 +273,15 @@ def test_pr_inventory_follows_repository_aliases():
 def test_html_comment_is_not_markdown_disclosure():
     bundle = spdx_known_bundle()
     bundle["markdown"] = "## License / provenance\n\n<!-- MIT -->\n"
+    report = _report(bundle)
+    _assert_schema(report)
+    assert "card_disclosure_missing" in report["quarantined"][0]["reason_codes"]
+    assert report["released_positives"] == []
+
+
+def test_commented_license_heading_is_not_markdown_disclosure():
+    bundle = spdx_known_bundle()
+    bundle["markdown"] = "<!--\n## License / provenance\n-->\nMIT\n"
     report = _report(bundle)
     _assert_schema(report)
     assert "card_disclosure_missing" in report["quarantined"][0]["reason_codes"]
@@ -430,6 +453,21 @@ def test_truncated_git_oids_cannot_close():
     assert report["released_positives"] == []
 
 
+def test_present_malformed_role_oids_cannot_close_on_merge_match():
+    bundle = spdx_known_bundle()
+    bundle["records"][0] = with_code_state(
+        bundle["records"][0],
+        base_oid="abc",
+        head_oid="def",
+        commit_oid=MERGE_OID,
+    )
+    bundle["pull_requests"] = [inventory_pr("rmems/widget", 1)]
+    report = _report(bundle)
+    _assert_schema(report)
+    assert "snapshot_provenance_missing" in report["quarantined"][0]["reason_codes"]
+    assert report["released_positives"] == []
+
+
 def test_uppercase_record_oid_matches_inventory_pr():
     base_oid = "abc" + "1" * 37
     head_oid = "def" + "2" * 37
@@ -531,6 +569,28 @@ def test_pr_inventory_repository_id_mismatch_cannot_close():
     assert report["released_positives"] == []
 
 
+def test_pr_inventory_alias_repository_id_mismatch_cannot_close():
+    bundle = spdx_known_bundle()
+    current = dict(bundle["repositories"][0])
+    current["repository_id"] = "R_kgDOwidget"
+    current["aliases"] = [{"name_with_owner": "rmems/widget-old"}]
+    bundle["repositories"] = [bind_source_hash(current)]
+    bundle["records"][0] = with_code_state(bundle["records"][0])
+    canonical = inventory_pr("rmems/widget", 1)
+    canonical["repository_id"] = "R_kgDOwidget"
+    alias = inventory_pr("rmems/widget-old", 1)
+    alias["repository_id"] = "R_kgDOother"
+    bundle["pull_requests"] = [
+        bind_pr_source_hash(canonical),
+        bind_pr_source_hash(alias),
+    ]
+    report = _report(bundle)
+    _assert_schema(report)
+    assert "snapshot_provenance_missing" in report["quarantined"][0]["reason_codes"]
+    assert report["released_positives"] == []
+    assert report["closed"] is False
+
+
 def test_pr_inventory_repository_id_match_can_close():
     bundle = spdx_known_bundle()
     current = dict(bundle["repositories"][0])
@@ -558,6 +618,15 @@ def test_unknown_declared_source_repo_cannot_close():
 def test_hidden_html_is_not_markdown_disclosure():
     bundle = spdx_known_bundle()
     bundle["markdown"] = "## License / provenance\n\n<span hidden>MIT</span>\n"
+    report = _report(bundle)
+    _assert_schema(report)
+    assert "card_disclosure_missing" in report["quarantined"][0]["reason_codes"]
+    assert report["released_positives"] == []
+
+
+def test_hidden_license_heading_is_not_markdown_disclosure():
+    bundle = spdx_known_bundle()
+    bundle["markdown"] = "<div hidden>\n## License / provenance\nMIT\n</div>\n"
     report = _report(bundle)
     _assert_schema(report)
     assert "card_disclosure_missing" in report["quarantined"][0]["reason_codes"]
