@@ -33,13 +33,24 @@ def inventory_license_object(
     return {"spdx_id": identifier, "name": None, "url": None}
 
 
+def _custom_license_identifier(custom: dict[str, Any]) -> str | None:
+    from_identifier = normalize_license_id(custom.get("identifier"))
+    from_spdx = normalize_license_id(custom.get("spdx_id"))
+    if "identifier" in custom and "spdx_id" in custom:
+        if from_identifier is None or from_spdx is None:
+            return None
+        if not _same_license(from_identifier, from_spdx):
+            return None
+    return from_identifier or from_spdx
+
+
 def inventory_has_custom_evidence(repository: dict[str, Any] | None) -> bool:
     if not isinstance(repository, dict):
         return False
     custom = repository.get("custom_license")
     if not isinstance(custom, dict):
         return False
-    identifier = normalize_license_id(custom.get("identifier") or custom.get("spdx_id"))
+    identifier = _custom_license_identifier(custom)
     digest = _sha256_or_none(custom.get("text_sha256") or custom.get("evidence_sha256"))
     if not identifier or not LICENSE_REF_RE.fullmatch(identifier) or not digest:
         return False
@@ -105,10 +116,15 @@ def source_provenance_digest(
     repo: str,
     repository_source_hash: str,
     snapshot_sha256: str,
+    *,
+    record_id: str = "",
+    pr_number: int | None = None,
 ) -> str:
-    """Bind a released row to its repository identity and snapshot digest."""
+    """Bind a released row to its trajectory, repository, and snapshot."""
     return sha256_json(
         {
+            "pr_number": pr_number,
+            "record_id": record_id,
             "repo": repo,
             "repository_source_hash": repository_source_hash,
             "snapshot_sha256": snapshot_sha256,
@@ -314,6 +330,35 @@ def _declaration_map_conflicts(
         _alias_group_value_conflicts(container.get(plural), repos, coerce)
         for container, _singular, plural, coerce in checks
     )
+
+
+def _declared_source_maps_conflict(
+    card: dict[str, Any],
+    manifest: dict[str, Any],
+    declared_repos: set[str],
+    inventory_index: dict[str, dict[str, Any]],
+) -> bool:
+    for name in declared_repos:
+        names = _identity_names(_inventory_for_repo(inventory_index, name), name)
+        if _declaration_map_conflicts(card, manifest, names):
+            return True
+        card_license = card_license_for_repo(card, names)
+        manifest_license = manifest_license_for_repo(manifest, names)
+        if (
+            card_license is not None
+            and manifest_license is not None
+            and not _same_license(card_license, manifest_license)
+        ):
+            return True
+        card_digest = declared_digest_for_repo(card, names)
+        manifest_digest = declared_digest_for_repo(manifest, names)
+        if (
+            card_digest is not None
+            and manifest_digest is not None
+            and card_digest != manifest_digest
+        ):
+            return True
+    return False
 
 
 def _mapping_license(
