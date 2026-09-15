@@ -12,7 +12,10 @@ from .license_closure_ids import (
     _sha256_or_none,
     _text,
 )
-from .license_closure_inventory import index_repositories
+from .license_closure_inventory import (
+    index_repositories,
+    inventory_has_custom_evidence,
+)
 from .license_closure_pr import _index_pull_requests
 
 
@@ -50,25 +53,29 @@ def _released_evidence_summary(
 
 
 def _bundle_declaration_errors(
-    report: dict[str, Any], manifest: dict[str, Any]
+    report: dict[str, Any], manifest: dict[str, Any], card: dict[str, Any]
 ) -> list[str]:
     errors: list[str] = []
-    declared_families = manifest.get("license_families")
-    if (
-        declared_families is not None
-        and sorted(declared_families) != report["license_families"]
-    ):
-        errors.append(
-            "card/manifest license_families do not agree with closed evidence"
-        )
-    unresolved = manifest.get("unresolved_license_count")
-    if (
-        unresolved is not None
-        and _declared_count(unresolved) != report["counts"]["unresolved_count"]
-    ):
-        errors.append(
-            "manifest unresolved_license_count does not agree with closure result"
-        )
+    for source in (card, manifest):
+        declared_families = source.get("license_families")
+        if declared_families is None:
+            continue
+        if (
+            not isinstance(declared_families, list)
+            or sorted(declared_families) != report["license_families"]
+        ):
+            errors.append(
+                "card/manifest license_families do not agree with closed evidence"
+            )
+            break
+    for source, label in ((card, "card"), (manifest, "manifest")):
+        unresolved = source.get("unresolved_license_count")
+        if unresolved is None:
+            continue
+        if _declared_count(unresolved) != report["counts"]["unresolved_count"]:
+            errors.append(
+                f"{label} unresolved_license_count does not agree with closure result"
+            )
     declared_digests = manifest.get("license_evidence_digests")
     if isinstance(declared_digests, dict):
         observed = {
@@ -174,7 +181,7 @@ def build_license_closure_report(
         "schema_version": SCHEMA_VERSION,
         "snapshot_sha256": snapshot_sha256,
     }
-    report["bundle_errors"] = _bundle_declaration_errors(report, manifest)
+    report["bundle_errors"] = _bundle_declaration_errors(report, manifest, card)
     if report["bundle_errors"]:
         report["closed"] = False
     return report
@@ -233,7 +240,16 @@ def assert_released_positives_are_closed(report: dict[str, Any]) -> None:
     if list(report.get("evidence_digests") or []) != evidence:
         raise AssertionError("evidence_digests do not match released rows")
     if any(
-        not _closed_release_family(row.get("spdx_id"), row.get("license_family"))
+        not _closed_release_family(
+            row.get("spdx_id"),
+            row.get("license_family"),
+            has_custom_evidence=inventory_has_custom_evidence(
+                {
+                    "custom_license": row.get("custom_license"),
+                    "license": {"spdx_id": row.get("spdx_id")},
+                }
+            ),
+        )
         for row in released
     ):
         raise AssertionError("released row license family is not closed")
