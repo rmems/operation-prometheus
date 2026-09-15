@@ -53,6 +53,13 @@ def bind_pr_source_hash(row: dict[str, Any]) -> dict[str, Any]:
     return updated
 
 
+def inventory_alias(name: str, *refs: str) -> dict[str, Any]:
+    return {
+        "name_with_owner": name,
+        "evidence_refs": list(refs) or [f"https://github.com/{name}"],
+    }
+
+
 def record(
     repo: str,
     pr_number: int,
