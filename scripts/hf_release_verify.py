@@ -207,6 +207,36 @@ def download_pinned_checksums(
     return checksums
 
 
+def _require_local_outputs(manifest: dict[str, Any], parquet_dir: Path) -> None:
+    if not manifest["jsonl"]:
+        raise ReleaseVerifyError("release is missing JSONL outputs")
+    if parquet_dir.is_dir() and not any(parquet_dir.glob("*.parquet")):
+        raise ReleaseVerifyError(
+            "parquet directory exists but contains no Parquet outputs"
+        )
+
+
+def _pinned_checksum_errors(
+    *,
+    tag: str,
+    dataset_repo: str,
+    artifacts: list[dict[str, Any]],
+    tags: dict[str, str],
+    downloaded: dict[str, str] | None,
+) -> list[str]:
+    resolved = downloaded
+    if resolved is None and os.environ.get("HF_TOKEN") and tag in tags:
+        resolved = download_pinned_checksums(
+            dataset_repo,
+            tag,
+            [item["path"] for item in artifacts],
+            os.environ.get("HF_TOKEN"),
+        )
+    if not resolved:
+        return []
+    return pinned_revision_checksums(resolved, artifacts)
+
+
 def verify(
     *,
     tag: str,
@@ -222,33 +252,22 @@ def verify(
     manifest = build_release_manifest(
         jsonl_dir, parquet_dir, tag=tag, dataset_repo=dataset_repo
     )
-    if not manifest["jsonl"]:
-        raise ReleaseVerifyError("release is missing JSONL outputs")
-    if parquet_dir.is_dir() and not any(parquet_dir.glob("*.parquet")):
-        raise ReleaseVerifyError(
-            "parquet directory exists but contains no Parquet outputs"
-        )
-    plan = resumable_upload_plan(manifest["jsonl"] + manifest["parquet"])
+    _require_local_outputs(manifest, parquet_dir)
+    artifacts = manifest["jsonl"] + manifest["parquet"]
+    plan = resumable_upload_plan(artifacts)
     tags = (
         remote_tags
         if remote_tags is not None
         else load_remote_tags(dataset_repo, os.environ.get("HF_TOKEN"))
     )
     refuse_overwrite_immutable_tag(tag, manifest["sha256"], tags)
-    checksum_errors: list[str] = []
-    if downloaded is None and os.environ.get("HF_TOKEN") and tag in tags:
-        downloaded = download_pinned_checksums(
-            dataset_repo,
-            tag,
-            [item["path"] for item in manifest["jsonl"] + manifest["parquet"]],
-            os.environ.get("HF_TOKEN"),
-        )
-    if downloaded:
-        checksum_errors.extend(
-            pinned_revision_checksums(
-                downloaded, manifest["jsonl"] + manifest["parquet"]
-            )
-        )
+    checksum_errors = _pinned_checksum_errors(
+        tag=tag,
+        dataset_repo=dataset_repo,
+        artifacts=artifacts,
+        tags=tags,
+        downloaded=downloaded,
+    )
     if checksum_errors:
         raise ReleaseVerifyError("; ".join(checksum_errors))
     return {

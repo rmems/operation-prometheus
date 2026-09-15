@@ -43,27 +43,41 @@ REPORT_SCHEMA = "corpus_integrity_report_v1"
 
 def _manifest_errors() -> list[str]:
     errors: list[str] = []
+    jsonl_stems = {path.stem for path in JSONL_DIR.glob("*.jsonl")}
+    card_stems = {path.stem for path in (ROOT / "datasets" / "cards").glob("*.json")}
+    manifest_stems = {
+        path.name.removesuffix(".manifest.json")
+        for path in MANIFEST_DIR.glob("*.manifest.json")
+    }
+    for stem in sorted(jsonl_stems | card_stems):
+        if stem not in manifest_stems:
+            errors.append(f"dataset {stem} is missing its manifest")
     for path in sorted(MANIFEST_DIR.glob("*.manifest.json")):
-        committed = json.loads(path.read_text(encoding="utf-8"))
-        name = path.name.removesuffix(".manifest.json")
-        card_path = ROOT / "datasets" / "cards" / f"{name}.json"
-        jsonl_path = JSONL_DIR / f"{name}.jsonl"
-        if not card_path.is_file() or not jsonl_path.is_file():
-            errors.append(f"manifest {path.name} is missing its JSONL or card")
-            continue
-        card = json.loads(card_path.read_text(encoding="utf-8"))
-        generated = build_manifest(
-            jsonl_path,
-            card,
-            created_at=str(committed.get("created_at") or ""),
-            created_by=str(committed.get("created_by") or ""),
-            name=name,
-        )
-        if render(generated) != path.read_text(encoding="utf-8"):
-            errors.append(f"{path.name} is stale versus {jsonl_path.name}")
-        declared = str(committed.get("sha256") or "")
-        if declared and declared != sha256_file(jsonl_path):
-            errors.append(f"{path.name} sha256 does not match {jsonl_path.name}")
+        errors.extend(_one_manifest_error(path))
+    return errors
+
+
+def _one_manifest_error(path: Path) -> list[str]:
+    committed = json.loads(path.read_text(encoding="utf-8"))
+    name = path.name.removesuffix(".manifest.json")
+    card_path = ROOT / "datasets" / "cards" / f"{name}.json"
+    jsonl_path = JSONL_DIR / f"{name}.jsonl"
+    if not card_path.is_file() or not jsonl_path.is_file():
+        return [f"manifest {path.name} is missing its JSONL or card"]
+    card = json.loads(card_path.read_text(encoding="utf-8"))
+    generated = build_manifest(
+        jsonl_path,
+        card,
+        created_at=str(committed.get("created_at") or ""),
+        created_by=str(committed.get("created_by") or ""),
+        name=name,
+    )
+    errors: list[str] = []
+    if render(generated) != path.read_text(encoding="utf-8"):
+        errors.append(f"{path.name} is stale versus {jsonl_path.name}")
+    declared = str(committed.get("sha256") or "")
+    if declared and declared != sha256_file(jsonl_path):
+        errors.append(f"{path.name} sha256 does not match {jsonl_path.name}")
     return errors
 
 
@@ -105,6 +119,12 @@ def _resolve_records(
             continue
         state = candidate.get("state")
         source_state = candidate.get("source_state")
+        if state is None:
+            errors.append(
+                f"{row['file']}:{row['line']} maps to candidate "
+                f"{candidate.get('candidate_id')} with no ledger state"
+            )
+            state = "unknown"
         if state in MUTABLE_STATES or source_state in MUTABLE_SOURCE_STATES:
             errors.append(
                 f"{row['file']}:{row['line']} maps to mutable candidate "
