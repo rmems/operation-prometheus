@@ -31,21 +31,26 @@ CONSUMER_FIXTURES = ROOT / "tests" / "fixtures" / "consumer"
 SIDECAR_SCHEMA = "agoge.consumer-sidecar.v1"
 
 
+def _cuda_available() -> bool:
+    if "torch" not in sys.modules:
+        return False
+    cuda = getattr(sys.modules["torch"], "cuda", None)
+    if cuda is None:
+        return False
+    checker = getattr(cuda, "is_available", None)
+    if not callable(checker):
+        return False
+    return bool(checker())
+
+
 def _refuse_gpu() -> None:
     visible = os.environ.get("CUDA_VISIBLE_DEVICES")
     if visible not in (None, "", "-1"):
         raise RuntimeError(
             "consumer-contract must run with no GPU (CUDA_VISIBLE_DEVICES)"
         )
-    if "torch" in sys.modules:
-        torch = sys.modules["torch"]
-        cuda = getattr(torch, "cuda", None)
-        if (
-            cuda is not None
-            and callable(getattr(cuda, "is_available", None))
-            and cuda.is_available()
-        ):
-            raise RuntimeError("consumer-contract imported torch with CUDA available")
+    if _cuda_available():
+        raise RuntimeError("consumer-contract imported torch with CUDA available")
 
 
 def _parser() -> Callable[..., dict[str, Any]]:
