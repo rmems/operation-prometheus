@@ -68,10 +68,7 @@ def evidence_digest(payload: dict[str, Any]) -> str:
     return sha256_json(payload)
 
 
-def record_repo(record: dict[str, Any]) -> str:
-    repo = _text(record.get("repo"))
-    if repo:
-        return repo
+def _nested_record_repo(record: dict[str, Any]) -> str:
     repository = record.get("repository")
     if isinstance(repository, dict):
         owner = _text(repository.get("owner"))
@@ -79,6 +76,16 @@ def record_repo(record: dict[str, Any]) -> str:
         if owner and name:
             return f"{owner}/{name}"
     return ""
+
+
+def record_repo(record: dict[str, Any]) -> str:
+    return _text(record.get("repo")) or _nested_record_repo(record)
+
+
+def record_repo_identities_conflict(record: dict[str, Any]) -> bool:
+    top = _text(record.get("repo"))
+    nested = _nested_record_repo(record)
+    return bool(top and nested and top.casefold() != nested.casefold())
 
 
 def record_id(record: dict[str, Any]) -> str:
@@ -260,3 +267,28 @@ def _inventory_for_repo(
     repo: str,
 ) -> dict[str, Any] | None:
     return index.get(repo.casefold()) if repo else None
+
+
+def _repository_names(row: dict[str, Any]) -> list[str]:
+    names = [_text(row.get("name_with_owner"))]
+    for alias in row.get("aliases") or []:
+        if isinstance(alias, dict):
+            names.append(_text(alias.get("name_with_owner")))
+        else:
+            names.append(_text(alias))
+    return [name for name in names if name]
+
+
+def _prior_repository(
+    prior_index: dict[str, dict[str, Any]],
+    current: dict[str, Any] | None,
+    repo: str,
+) -> dict[str, Any] | None:
+    found = _inventory_for_repo(prior_index, repo)
+    if found is not None or not isinstance(current, dict):
+        return found
+    for name in _repository_names(current):
+        found = _inventory_for_repo(prior_index, name)
+        if found is not None:
+            return found
+    return None
