@@ -223,7 +223,10 @@ def _expression_tokens(identifier: str) -> list[str] | None:
         if "(" in token or ")" in token:
             if not (token.startswith("(") and token.endswith(")")):
                 return None
-            nested = _expression_tokens(token)
+            inner = _unwrap_outer_parens(token)
+            if inner is None or inner == token:
+                return None
+            nested = _expression_tokens(inner)
             if nested is None:
                 return None
             tokens.extend(nested)
