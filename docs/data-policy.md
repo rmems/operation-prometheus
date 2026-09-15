@@ -36,7 +36,7 @@ Raw GitHub API exports (issues.jsonl, prs.jsonl, etc.) are treated as **temporar
 
 Large raw exports should live outside the repo (local disk, object storage, or a private datasets mirror) and are gitignored by default.
 
-Preferred local layout for scale: set **`PROMETHEUS_DATA_ROOT`** (e.g. `~/rmems/prometheus-data`) so the collector writes `raw/<owner_repo>/pr-N.json` outside the git tree. See [datasets/README.md](../datasets/README.md).
+Preferred local layout for scale: set **`PROMETHEUS_DATA_ROOT`** (e.g. `~/rmems/prometheus-data`) so the collector writes `raw/<owner_repo>/pr-N.json` outside the git tree. Content-addressed git objects and patches live under `$PROMETHEUS_DATA_ROOT/artifacts/`. See [datasets/README.md](../datasets/README.md) and [event-collector.md](event-collector.md).
 
 The exhaustive eligibility ledger uses a separate frozen source snapshot under
 `$PROMETHEUS_DATA_ROOT/inventory/`. That snapshot stays outside Git. The

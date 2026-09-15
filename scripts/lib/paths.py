@@ -39,3 +39,29 @@ def resolve_raw_out_dir(repo: str, out_dir: Path | None = None) -> Path:
     if root is not None:
         return root / "raw" / slug
     return repo_root() / "datasets" / "raw" / slug
+
+
+def resolve_artifact_store_dir(store_dir: Path | None = None) -> Path:
+    """Resolve the content-addressed artifact store root.
+
+    Priority:
+    1. Explicit ``store_dir``
+    2. ``$PROMETHEUS_DATA_ROOT/artifacts``
+    3. ``<repo>/datasets/artifacts`` (gitignored)
+    """
+    if store_dir is not None:
+        return Path(store_dir)
+    root = data_root_from_env()
+    if root is not None:
+        return root / "artifacts"
+    return repo_root() / "datasets" / "artifacts"
+
+
+def resolve_resume_state_path(path: Path | None = None) -> Path:
+    """Resolve the collector resume-state JSON path."""
+    if path is not None:
+        return Path(path)
+    root = data_root_from_env()
+    if root is not None:
+        return root / "collector-state.json"
+    return repo_root() / "datasets" / "collector-state.json"

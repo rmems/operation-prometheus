@@ -35,10 +35,42 @@ class FakeClient:
         path = path_or_url.replace(self.base_url, "")
         if path.startswith("/repos/rmems/corinth-canal/pulls/89") and "comments" not in path and "reviews" not in path and "commits" not in path and "files" not in path:
             return json.loads((FIXTURES / "pull_89.json").read_text())
+        if "check-suites" in path:
+            return {"total_count": 1, "check_suites": [
+                {
+                    "id": 1,
+                    "head_sha": "def",
+                    "status": "completed",
+                    "conclusion": "success",
+                    "created_at": "2026-05-27T03:00:00Z",
+                    "app": {"slug": "github-actions"},
+                }
+            ]}
         if "check-runs" in path:
             return json.loads((FIXTURES / "check_runs_89.json").read_text())
-        if path.endswith("/status") or "/status" in path:
+        if path.endswith("/statuses") or "/statuses?" in path:
+            return []
+        if path.endswith("/status") or "/status?" in path:
             return json.loads((FIXTURES / "status_89.json").read_text())
+        if "/git/commits/" in path:
+            oid = path.rsplit("/", 1)[-1]
+            return {
+                "sha": oid,
+                "tree": {"sha": "tree-" + oid},
+                "parents": [],
+                "message": "commit " + oid,
+                "author": {"date": "2026-05-27T00:00:00Z", "name": "rmems"},
+            }
+        if "/git/blobs/" in path:
+            oid = path.rsplit("/", 1)[-1]
+            return {
+                "sha": oid,
+                "encoding": "base64",
+                "content": "cGF0Y2gK",
+                "size": 6,
+            }
+        if "/contents/" in path:
+            return {"sha": "aa" * 20, "encoding": "base64", "content": "b2xkCg=="}
         if path.endswith("/issues/74"):
             return json.loads((FIXTURES / "issue_74.json").read_text())
         raise AssertionError(f"unexpected get_json path: {path_or_url}")
@@ -52,6 +84,18 @@ class FakeClient:
     def get_all(self, path: str, *, per_page: int = 100) -> list:
         if path.endswith("/issues/89/comments"):
             return json.loads((FIXTURES / "issue_comments_89.json").read_text())
+        if path.endswith("/issues/74/comments"):
+            return []
+        if path.endswith("/issues/89/timeline"):
+            return json.loads((FIXTURES / "timeline_89.json").read_text()) if (FIXTURES / "timeline_89.json").exists() else [
+                {
+                    "id": 1,
+                    "event": "merged",
+                    "created_at": "2026-05-27T06:13:36Z",
+                    "actor": {"login": "rmems", "type": "User"},
+                    "commit_id": "ghi",
+                }
+            ]
         if path.endswith("/pulls/89/comments"):
             return json.loads((FIXTURES / "review_comments_89.json").read_text())
         if path.endswith("/pulls/89/reviews"):
@@ -60,6 +104,8 @@ class FakeClient:
             return json.loads((FIXTURES / "commits_89.json").read_text())
         if path.endswith("/pulls/89/files"):
             return json.loads((FIXTURES / "files_89.json").read_text())
+        if path.endswith("/statuses"):
+            return []
         raise AssertionError(f"unexpected get_all path: {path}")
 
 

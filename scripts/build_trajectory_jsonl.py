@@ -7,6 +7,12 @@ Examples:
       --card datasets/cards/corinth-canal-v0.json \\
       --out datasets/jsonl/corinth-canal-v0.jsonl
 
+    python scripts/build_trajectory_jsonl.py \\
+      --raw-dir datasets/raw/corinth-canal \\
+      --card datasets/cards/corinth-canal-v0.json \\
+      --schema-version v1 \\
+      --out datasets/jsonl/corinth-canal-v1.jsonl
+
     python scripts/validate_jsonl.py datasets/jsonl/corinth-canal-v0.jsonl
 """
 
@@ -26,18 +32,23 @@ _SCRIPTS = Path(__file__).resolve().parent
 if str(_SCRIPTS) not in sys.path:
     sys.path.insert(0, str(_SCRIPTS))
 
+from lib.cas import ContentAddressedStore  # noqa: E402
 from lib.normalize import (  # noqa: E402
     load_card,
     load_raw_record,
     normalize_record,
     resolve_source_license,
 )
+from lib.normalize_v1 import normalize_record_v1  # noqa: E402
+from lib.paths import resolve_artifact_store_dir  # noqa: E402
 
 logging.basicConfig(level=logging.INFO, format="%(levelname)s: %(message)s")
 logger = logging.getLogger("build_trajectory_jsonl")
 
 ROOT = Path(__file__).resolve().parent.parent
-SCHEMA_PATH = ROOT / "schemas" / "pr_trajectory.schema.json"
+SCHEMA_V0_PATH = ROOT / "schemas" / "pr_trajectory.schema.json"
+SCHEMA_V1_PATH = ROOT / "schemas" / "trajectory_v1.schema.json"
+V1_ALIASES = {"v1", "1", "1.0"}
 
 
 def build_parser() -> argparse.ArgumentParser:
@@ -74,6 +85,17 @@ def build_parser() -> argparse.ArgumentParser:
         help="Max bytes for trajectory patch field (default 96KiB)",
     )
     p.add_argument(
+        "--schema-version",
+        default="v0",
+        help="Trajectory schema to emit: v0 (default) or v1",
+    )
+    p.add_argument(
+        "--artifact-store",
+        type=Path,
+        default=None,
+        help="Content-addressed store used to attach v1 remote artifact URIs",
+    )
+    p.add_argument(
         "--strict",
         action="store_true",
         help="Fail if any record fails schema validation",
@@ -106,10 +128,17 @@ def main(argv: list[str] | None = None) -> int:
         logger.error("raw-dir not found: %s", raw_dir)
         return 2
 
+    schema_version = str(args.schema_version or "v0").strip().lower()
+    emit_v1 = schema_version in V1_ALIASES
+    if schema_version not in {"v0", "0", "0.1", *V1_ALIASES}:
+        logger.error("Unknown --schema-version %s (expected v0 or v1)", args.schema_version)
+        return 2
+    schema_path = SCHEMA_V1_PATH if emit_v1 else SCHEMA_V0_PATH
+
     # Load schema once; missing jsonschema is a hard startup failure (avoid silent skips).
     try:
         import jsonschema
-        schema = json.loads(SCHEMA_PATH.read_text(encoding="utf-8"))
+        schema = json.loads(schema_path.read_text(encoding="utf-8"))
         validator = jsonschema.Draft7Validator(schema)
     except ImportError:
         logger.error("jsonschema is required. Install with: pip install jsonschema")
@@ -154,6 +183,10 @@ def main(argv: list[str] | None = None) -> int:
         logger.error("No pr-*.json files in %s", raw_dir)
         return 1
 
+    store = None
+    if emit_v1:
+        store = ContentAddressedStore(resolve_artifact_store_dir(args.artifact_store))
+
     lines: list[str] = []
     errors = 0
     for path in paths:
@@ -163,13 +196,22 @@ def main(argv: list[str] | None = None) -> int:
             if pr_filter is not None and pr not in pr_filter:
                 continue
             source_license = resolve_source_license(raw.get("source") or {}, card)
-            traj = normalize_record(
-                raw,
-                card,
-                raw_path=path,
-                max_patch_bytes=args.max_patch_bytes,
-                source_license=source_license,
-            )
+            if emit_v1:
+                traj = normalize_record_v1(
+                    raw,
+                    card,
+                    artifact_store=store,
+                    max_patch_bytes=args.max_patch_bytes,
+                    source_license=source_license,
+                )
+            else:
+                traj = normalize_record(
+                    raw,
+                    card,
+                    raw_path=path,
+                    max_patch_bytes=args.max_patch_bytes,
+                    source_license=source_license,
+                )
             schema_errors = _validate(traj, validator)
             if schema_errors:
                 errors += 1
@@ -179,13 +221,24 @@ def main(argv: list[str] | None = None) -> int:
                 if args.strict:
                     return 1
                 continue
-            lines.append(json.dumps(traj, ensure_ascii=False, separators=(",", ":")))
-            logger.info(
-                "OK %s (quality=%.2f training_use=%s)",
-                path.name,
-                traj.get("quality_score", 0),
-                traj.get("training_use"),
-            )
+            dump_kwargs: dict = {"ensure_ascii": False, "separators": (",", ":")}
+            if emit_v1:
+                dump_kwargs["sort_keys"] = True
+            lines.append(json.dumps(traj, **dump_kwargs))
+            if emit_v1:
+                logger.info(
+                    "OK %s (v1 disposition=%s events=%s)",
+                    path.name,
+                    traj.get("terminal_disposition"),
+                    len(traj.get("events") or []),
+                )
+            else:
+                logger.info(
+                    "OK %s (quality=%.2f training_use=%s)",
+                    path.name,
+                    traj.get("quality_score", 0),
+                    traj.get("training_use"),
+                )
         except Exception as exc:
             errors += 1
             logger.error("Failed %s: %s", path.name, exc)
