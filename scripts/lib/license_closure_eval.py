@@ -40,6 +40,7 @@ from .license_closure_pr import (
     _declared_repos,
     _markdown_discloses,
     _pr_inventory_reasons,
+    _source_coverage_invalid,
 )
 
 
@@ -144,6 +145,8 @@ def _evaluate_record(
     card_repos = _declared_repos(card)
     manifest_repos = _declared_repos(manifest)
     folded_names = {name.casefold() for name in names}
+    if _source_coverage_invalid(card) or _source_coverage_invalid(manifest):
+        reasons.append("declarations_disagree")
     if card_repos and not folded_names.intersection(card_repos):
         reasons.append("declarations_disagree")
     if manifest_repos and not folded_names.intersection(manifest_repos):
@@ -239,6 +242,8 @@ def _evaluate_record(
             custom = repository.get("custom_license")
             if isinstance(custom, dict):
                 released["custom_license"] = custom
+            if inventory_license is not None:
+                released["inventory_license"] = inventory_license
         return released
     return {
         "evidence": evidence,
