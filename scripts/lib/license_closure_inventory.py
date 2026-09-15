@@ -44,6 +44,17 @@ def _custom_license_identifier(custom: dict[str, Any]) -> str | None:
     return from_identifier or from_spdx
 
 
+def _custom_license_digest(custom: dict[str, Any]) -> str | None:
+    from_text = _sha256_or_none(custom.get("text_sha256"))
+    from_evidence = _sha256_or_none(custom.get("evidence_sha256"))
+    if "text_sha256" in custom and "evidence_sha256" in custom:
+        if from_text is None or from_evidence is None:
+            return None
+        if from_text != from_evidence:
+            return None
+    return from_text or from_evidence
+
+
 def inventory_has_custom_evidence(repository: dict[str, Any] | None) -> bool:
     if not isinstance(repository, dict):
         return False
@@ -51,7 +62,7 @@ def inventory_has_custom_evidence(repository: dict[str, Any] | None) -> bool:
     if not isinstance(custom, dict):
         return False
     identifier = _custom_license_identifier(custom)
-    digest = _sha256_or_none(custom.get("text_sha256") or custom.get("evidence_sha256"))
+    digest = _custom_license_digest(custom)
     if not identifier or not LICENSE_REF_RE.fullmatch(identifier) or not digest:
         return False
     inventory_id = normalize_license_id(inventory_license_object(repository))
@@ -190,6 +201,15 @@ def record_pr_number(record: dict[str, Any]) -> int | None:
     if type(value) is int and value >= 1:
         return value
     return None
+
+
+def record_pr_number_invalid(record: dict[str, Any]) -> bool:
+    if "pr_number" not in record:
+        return False
+    value = record["pr_number"]
+    if value is None:
+        return False
+    return not (type(value) is int and value >= 1)
 
 
 def record_license(record: dict[str, Any]) -> str | None:
