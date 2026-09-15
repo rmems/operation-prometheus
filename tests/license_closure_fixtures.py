@@ -4,8 +4,12 @@ from __future__ import annotations
 
 from typing import Any
 
-from lib.license_closure import evidence_digest, license_evidence_payload
-from lib.source_inventory_common import sha256_json
+from lib.license_closure import (
+    evidence_digest,
+    inventory_row_source_hash,
+    license_evidence_payload,
+    pr_inventory_row_source_hash,
+)
 
 SNAPSHOT_SHA256 = "a" * 64
 SOURCE_HASH = "b" * 64
@@ -32,14 +36,19 @@ def repository(
     }
     if custom is not None:
         row["custom_license"] = custom
-    row["source_hash"] = source_hash or sha256_json(row)
+    row["source_hash"] = source_hash or inventory_row_source_hash(row)
     return row
 
 
 def bind_source_hash(row: dict[str, Any]) -> dict[str, Any]:
-    payload = {key: value for key, value in row.items() if key != "source_hash"}
-    updated = dict(payload)
-    updated["source_hash"] = sha256_json(payload)
+    updated = dict(row)
+    updated["source_hash"] = inventory_row_source_hash(updated)
+    return updated
+
+
+def bind_pr_source_hash(row: dict[str, Any]) -> dict[str, Any]:
+    updated = dict(row)
+    updated["source_hash"] = pr_inventory_row_source_hash(updated)
     return updated
 
 
@@ -85,13 +94,15 @@ def inventory_pr(
     head_oid: str = HEAD_OID,
     merge_commit_oid: str = MERGE_OID,
 ) -> dict[str, Any]:
-    return {
-        "base_oid": base_oid,
-        "head_oid": head_oid,
-        "merge_commit_oid": merge_commit_oid,
-        "number": number,
-        "repository_name_with_owner": repo,
-    }
+    return bind_pr_source_hash(
+        {
+            "base_oid": base_oid,
+            "head_oid": head_oid,
+            "merge_commit_oid": merge_commit_oid,
+            "number": number,
+            "repository_name_with_owner": repo,
+        }
+    )
 
 
 def card(
@@ -306,7 +317,7 @@ def conflicting_card_manifest_bundle() -> dict[str, Any]:
     digest = digest_for(repo)
     return {
         "card": card("rmems/widget", "MIT", digest=digest),
-        "manifest": manifest("rmems/widget", "Apache-2.0", digest=digest),
+        "manifest": manifest("rmems/widget", "MIT", digest=digest),
         "markdown": None,
         "prior_repositories": None,
         "records": [record("rmems/widget", 1, "MIT")],
