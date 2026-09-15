@@ -292,3 +292,19 @@ def test_v1_magnet_remote_uri_is_accepted():
     v0, v1 = get_validators()
     errors = validate_file(FIXTURES_DIR / "remote_magnet_uri.jsonl", v0, v1, strict_policy=True)
     assert not any("uri" in e.lower() for e in errors), f"magnet URI should be accepted, got {errors}"
+
+
+def test_v1_unanchored_event_rejected():
+    v0, v1 = get_validators()
+    schema_errors = validate_file(
+        FIXTURES_DIR / "unanchored_event.jsonl", v0, v1, strict_policy=False
+    )
+    policy_errors = validate_file(
+        FIXTURES_DIR / "unanchored_event.jsonl", v0, v1, strict_policy=True
+    )
+    assert any(
+        "not valid under any of the given schemas" in e or "anyOf" in e for e in schema_errors
+    ), f"Expected schema-level unanchored event error, got {schema_errors}"
+    assert any(
+        "auditable evidence anchor" in e for e in policy_errors
+    ), f"Expected strict-policy unanchored event error, got {policy_errors}"
