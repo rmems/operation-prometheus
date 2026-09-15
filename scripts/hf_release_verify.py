@@ -218,22 +218,35 @@ def _require_local_outputs(manifest: dict[str, Any], parquet_dir: Path) -> None:
         )
 
 
+def _maybe_download_pinned(
+    tag: str,
+    dataset_repo: str,
+    artifacts: list[dict[str, Any]],
+    tags: dict[str, str],
+) -> dict[str, str] | None:
+    if not os.environ.get("HF_TOKEN"):
+        return None
+    if tag not in tags:
+        return None
+    return download_pinned_checksums(
+        dataset_repo,
+        tag,
+        [item["path"] for item in artifacts],
+        os.environ.get("HF_TOKEN"),
+    )
+
+
 def _pinned_checksum_errors(
     *,
     tag: str,
     dataset_repo: str,
     artifacts: list[dict[str, Any]],
-    tags: dict[str, str],
-    downloaded: dict[str, str] | None,
+    remotes: dict[str, Any],
 ) -> list[str]:
-    resolved = downloaded
-    if resolved is None and os.environ.get("HF_TOKEN") and tag in tags:
-        resolved = download_pinned_checksums(
-            dataset_repo,
-            tag,
-            [item["path"] for item in artifacts],
-            os.environ.get("HF_TOKEN"),
-        )
+    tags = remotes["tags"]
+    resolved = remotes.get("downloaded")
+    if resolved is None:
+        resolved = _maybe_download_pinned(tag, dataset_repo, artifacts, tags)
     if not resolved:
         return []
     return pinned_revision_checksums(resolved, artifacts)
@@ -243,11 +256,10 @@ def verify(
     *,
     tag: str,
     dataset_repo: str,
-    jsonl_dir: Path,
-    parquet_dir: Path,
-    remote_tags: dict[str, str] | None = None,
-    downloaded: dict[str, str] | None = None,
+    dirs: tuple[Path, Path],
+    remotes: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
+    jsonl_dir, parquet_dir = dirs
     refuse_pull_request_context()
     if os.environ.get("HF_TOKEN") and _event_name() == "pull_request":
         raise ReleaseVerifyError("PRs must never receive HF_TOKEN")
@@ -257,6 +269,8 @@ def verify(
     _require_local_outputs(manifest, parquet_dir)
     artifacts = manifest["jsonl"] + manifest["parquet"]
     plan = resumable_upload_plan(artifacts)
+    remote_tags = None if remotes is None else remotes.get("tags")
+    downloaded = None if remotes is None else remotes.get("downloaded")
     tags = (
         remote_tags
         if remote_tags is not None
@@ -267,8 +281,7 @@ def verify(
         tag=tag,
         dataset_repo=dataset_repo,
         artifacts=artifacts,
-        tags=tags,
-        downloaded=downloaded,
+        remotes={"tags": tags, "downloaded": downloaded},
     )
     if checksum_errors:
         raise ReleaseVerifyError("; ".join(checksum_errors))
@@ -301,8 +314,7 @@ def main(argv: list[str] | None = None) -> int:
         result = verify(
             tag=args.tag,
             dataset_repo=args.dataset_repo,
-            jsonl_dir=args.jsonl_dir,
-            parquet_dir=args.parquet_dir,
+            dirs=(args.jsonl_dir, args.parquet_dir),
         )
     except ReleaseVerifyError as exc:
         print(f"hf-release-verify FAILED: {exc}", file=sys.stderr)
