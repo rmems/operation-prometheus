@@ -348,7 +348,9 @@ def assert_released_positives_are_closed(report: dict[str, Any]) -> None:
         )
     if len({row.get("record_id") for row in released}) != len(released):
         raise AssertionError("Released record IDs are not unique")
-    counts = report.get("counts") or {}
+    counts = report.get("counts")
+    if not isinstance(counts, dict):
+        raise AssertionError("counts must be an object")
     if _declared_count(counts.get("unresolved_count")) != len(quarantined):
         raise AssertionError("Unresolved count drifted from quarantined rows")
     if _declared_count(counts.get("quarantined_count")) != len(quarantined):
