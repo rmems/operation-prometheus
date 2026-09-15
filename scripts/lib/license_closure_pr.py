@@ -63,15 +63,18 @@ def _code_state_matches_inventory_pr(
     if not any(pr_oids.values()):
         return False
     saw_record_oid = False
+    saw_merge = False
     for record_key, pr_key in _RECORD_TO_PR_ROLE:
         record_oids = _record_role_oids(record, record_key)
         if not record_oids:
             continue
         saw_record_oid = True
+        if pr_key == "merge_commit_oid":
+            saw_merge = True
         expected = pr_oids[pr_key]
         if expected is None or any(oid != expected for oid in record_oids):
             return False
-    return saw_record_oid
+    return saw_record_oid and saw_merge
 
 
 def _pr_inventory_reasons(
