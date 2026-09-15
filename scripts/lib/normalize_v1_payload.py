@@ -11,28 +11,38 @@ from .normalize import extract_patch, extract_validation
 
 
 def _sha256_is_digest(sha256: Any) -> bool:
-    return isinstance(sha256, str) and len(sha256) == 64
+    if not isinstance(sha256, str):
+        return False
+    return len(sha256) == 64
+
+
+def _reproduction_role(obj: dict[str, Any]) -> str:
+    return str(obj.get("role") or obj.get("kind") or "git_object")
+
+
+def _present_art_record(obj: dict[str, Any], index: int) -> dict[str, Any]:
+    uri = obj.get("uri")
+    art = {
+        "id": f"obj-{index}",
+        "sha256": obj.get("sha256"),
+        "media_type": obj.get("media_type") or "application/octet-stream",
+        "byte_size": int(obj.get("byte_size") or 0),
+        "availability": "inline",
+        "reproduction_role": _reproduction_role(obj),
+    }
+    if uri:
+        art["availability"] = "remote"
+        art["uri"] = uri
+    return art
 
 
 def _present_git_artifact(obj: dict[str, Any], index: int) -> dict[str, Any] | None:
     availability = obj.get("availability") or "missing"
-    sha256 = obj.get("sha256")
     if availability != "present":
         return None
-    if not _sha256_is_digest(sha256):
+    if not _sha256_is_digest(obj.get("sha256")):
         return None
-    art = {
-        "id": f"obj-{index}",
-        "sha256": sha256,
-        "media_type": obj.get("media_type") or "application/octet-stream",
-        "byte_size": int(obj.get("byte_size") or 0),
-        "availability": "remote" if obj.get("uri") else "inline",
-        "reproduction_role": obj.get("role") or obj.get("kind") or "git_object",
-    }
-    if obj.get("uri"):
-        art["availability"] = "remote"
-        art["uri"] = obj["uri"]
-    return art
+    return _present_art_record(obj, index)
 
 
 def _placeholder_git_artifact(obj: dict[str, Any], index: int) -> dict[str, Any]:
@@ -49,7 +59,7 @@ def _placeholder_git_artifact(obj: dict[str, Any], index: int) -> dict[str, Any]
         "media_type": "application/json",
         "byte_size": len(encoded),
         "availability": "missing",
-        "reproduction_role": obj.get("role") or obj.get("kind") or "git_object",
+        "reproduction_role": _reproduction_role(obj),
     }
 
 

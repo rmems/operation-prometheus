@@ -273,23 +273,34 @@ def _collect_after_blobs(pack: PackBuilder, files: list[dict[str, Any]]) -> None
             pack.quarantine.append(_quarantine_from(record, extra))
 
 
-def _collect_before_blobs(pack: PackBuilder, files: list[dict[str, Any]], base_oid: str) -> None:
+def _before_blob_path(item: dict[str, Any]) -> str | None:
+    status = str(item.get("status") or "")
+    filename = str(item.get("filename") or item.get("previous_filename") or "")
+    if not filename:
+        return None
+    if status == "added":
+        # Before blob is legitimately absent for additions.
+        return None
+    return str(item.get("previous_filename") or filename)
+
+
+def _append_before_blob(pack: PackBuilder, path: str, base_oid: str) -> None:
     ignore = frozenset({"before_blob_absent"})
+    record = fetch_before_blob(pack.fetch, path, base_oid)
+    record["filename"] = path
+    record["role"] = "before_blob"
+    pack.objects.append(record)
+    if not _unavailable(record, ignore_reasons=ignore):
+        return
+    pack.quarantine.append(_quarantine_from(record, extra={"kind": "blob", "filename": path}))
+
+
+def _collect_before_blobs(pack: PackBuilder, files: list[dict[str, Any]], base_oid: str) -> None:
     for item in files:
-        status = str(item.get("status") or "")
-        filename = str(item.get("filename") or item.get("previous_filename") or "")
-        if not filename or status == "added":
-            # Before blob is legitimately absent for additions.
+        path = _before_blob_path(item)
+        if path is None:
             continue
-        before_path = str(item.get("previous_filename") or filename)
-        record = fetch_before_blob(pack.fetch, before_path, base_oid)
-        record["filename"] = before_path
-        record["role"] = "before_blob"
-        pack.objects.append(record)
-        if _unavailable(record, ignore_reasons=ignore):
-            pack.quarantine.append(
-                _quarantine_from(record, extra={"kind": "blob", "filename": before_path})
-            )
+        _append_before_blob(pack, path, base_oid)
 
 
 def _pack_complete(oids: list[str], objects: list[dict[str, Any]]) -> bool:

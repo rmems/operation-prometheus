@@ -398,19 +398,37 @@ def _skip_inventory_item(
     return None
 
 
-def _finish_inventory_item(resume: ResumeState, item: dict, written: tuple[Path, dict], include_snapshots: bool) -> str:
-    path, record = written
-    pack = record.get("snapshots") or {}
-    status = "complete"
-    extra = {
+def _snapshot_quarantined(pack: object, include_snapshots: bool) -> bool:
+    if not include_snapshots:
+        return False
+    if not isinstance(pack, dict):
+        return False
+    return bool(pack.get("quarantine"))
+
+
+def _pack_digest(pack: object) -> object | None:
+    if not isinstance(pack, dict):
+        return None
+    return pack.get("pack_sha256")
+
+
+def _inventory_extra(item: dict, path: Path, pack: object, record: dict) -> dict:
+    return {
         "repo": item["repo"],
         "pr_number": item["pr_number"],
         "shard": str(path),
         "record_sha256": _file_sha256(path),
-        "pack_sha256": pack.get("pack_sha256") if isinstance(pack, dict) else None,
+        "pack_sha256": _pack_digest(pack),
         "evidence_complete": (record.get("collection_meta") or {}).get("evidence_complete"),
     }
-    if include_snapshots and isinstance(pack, dict) and pack.get("quarantine"):
+
+
+def _finish_inventory_item(resume: ResumeState, item: dict, written: tuple[Path, dict], include_snapshots: bool) -> str:
+    path, record = written
+    pack = record.get("snapshots") or {}
+    status = "complete"
+    extra = _inventory_extra(item, path, pack, record)
+    if _snapshot_quarantined(pack, include_snapshots):
         status = "quarantined"
         extra["reason"] = "git_object_inaccessible"
     resume.mark(item["item_id"], status, extra)
