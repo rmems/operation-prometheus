@@ -192,6 +192,7 @@ def test_repeated_build_is_byte_identical():
 def test_classify_license_family_is_fail_closed():
     assert classify_license_family("MIT") == "spdx"
     assert classify_license_family("MIT OR Apache-2.0") == "spdx"
+    assert classify_license_family("(MIT)") == "spdx"
     assert classify_license_family("LicenseRef-TemporalFocus") == "unknown"
     assert (
         classify_license_family("LicenseRef-TemporalFocus", has_custom_evidence=True)
@@ -200,3 +201,12 @@ def test_classify_license_family_is_fail_closed():
     assert classify_license_family("NOASSERTION") == "unknown"
     assert classify_license_family("Not-A-Real-License-1.0") == "unknown"
     assert classify_license_family(None) == "missing"
+    assert classify_license_family("(MIT") == "unknown"
+    assert classify_license_family("MIT)") == "unknown"
+    assert classify_license_family("MIT) OR (Apache-2.0") == "unknown"
+    assert classify_license_family("NOASSERTION", has_custom_evidence=True) == "unknown"
+    assert classify_license_family("OTHER", has_custom_evidence=True) == "unknown"
+    assert (
+        classify_license_family("Not-A-Real-License-1.0", has_custom_evidence=True)
+        == "unknown"
+    )
