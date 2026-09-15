@@ -26,6 +26,17 @@ from typing import Any
 ROOT = Path(__file__).resolve().parent.parent
 
 
+def _reject_nonfinite(constant: str) -> None:
+    raise json.JSONDecodeError(f"non-finite constant {constant!r}", constant, 0)
+
+
+def _load_json(path: Path) -> Any:
+    return json.loads(
+        path.read_text(encoding="utf-8"),
+        parse_constant=_reject_nonfinite,
+    )
+
+
 def record_row(rec: dict[str, Any]) -> dict[str, Any]:
     """Summarize one trajectory record the way the manifest's records[] does."""
     signals = rec.get("review_signals") or []
@@ -96,7 +107,7 @@ def build_manifest(
 
 
 def render(manifest: dict[str, Any]) -> str:
-    return json.dumps(manifest, indent=2, ensure_ascii=False) + "\n"
+    return json.dumps(manifest, indent=2, ensure_ascii=False, allow_nan=False) + "\n"
 
 
 def main(argv: list[str] | None = None) -> int:
@@ -125,10 +136,14 @@ def main(argv: list[str] | None = None) -> int:
     card_path = args.card or ROOT / "datasets" / "cards" / f"{name}.json"
     out_path = args.out or ROOT / "datasets" / "manifests" / f"{name}.manifest.json"
 
-    card = json.loads(card_path.read_text(encoding="utf-8"))
-    existing: dict[str, Any] = {}
-    if out_path.exists():
-        existing = json.loads(out_path.read_text(encoding="utf-8"))
+    try:
+        card = _load_json(card_path)
+        existing: dict[str, Any] = {}
+        if out_path.exists():
+            existing = _load_json(out_path)
+    except (OSError, UnicodeDecodeError, json.JSONDecodeError, ValueError) as exc:
+        print(f"ERROR: {exc}", file=sys.stderr)
+        return 2
 
     created_at = args.created_at or existing.get("created_at")
     created_by = args.created_by or existing.get("created_by")
