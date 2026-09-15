@@ -21,16 +21,13 @@ def inventory_license_object(
     if not isinstance(repository, dict):
         return None
     license_obj = repository.get("license")
-    if isinstance(license_obj, dict):
-        return {
-            "spdx_id": license_obj.get("spdx_id"),
-            "name": license_obj.get("name"),
-            "url": license_obj.get("url"),
-        }
-    identifier = normalize_license_id(license_obj)
-    if identifier is None:
+    if not isinstance(license_obj, dict):
         return None
-    return {"spdx_id": identifier, "name": None, "url": None}
+    return {
+        "spdx_id": license_obj.get("spdx_id"),
+        "name": license_obj.get("name"),
+        "url": license_obj.get("url"),
+    }
 
 
 def _custom_license_identifier(custom: dict[str, Any]) -> str | None:
@@ -134,6 +131,20 @@ def _producer_scalars_invalid(repository: dict[str, Any]) -> bool:
     return False
 
 
+def _repository_id_invalid(row: dict[str, Any]) -> bool:
+    if "repository_id" not in row:
+        return False
+    value = row["repository_id"]
+    return not isinstance(value, str) or not value.strip()
+
+
+def _declared_license_id(value: Any) -> str | None:
+    if not isinstance(value, str):
+        return None
+    text = value.strip()
+    return text or None
+
+
 def _authenticated_inventory_source_hash(
     repository: dict[str, Any] | None,
 ) -> str | None:
@@ -142,7 +153,7 @@ def _authenticated_inventory_source_hash(
         return None
     if repository.get("visibility") != "public":
         return None
-    if _producer_scalars_invalid(repository):
+    if _producer_scalars_invalid(repository) or _repository_id_invalid(repository):
         return None
     declared = _sha256_or_none(repository.get("source_hash"))
     if declared is None or declared != inventory_row_source_hash(repository):
@@ -379,9 +390,7 @@ def _digest_declaration_invalid(container: dict[str, Any], repo: str) -> bool:
         candidates.append(folded[repo.casefold()])
     if "license_evidence_digest" in container:
         candidates.append(container.get("license_evidence_digest"))
-    return any(
-        value is not None and _sha256_or_none(value) is None for value in candidates
-    )
+    return any(_sha256_or_none(value) is None for value in candidates)
 
 
 def _declaration_map_conflicts(
@@ -389,8 +398,8 @@ def _declaration_map_conflicts(
 ) -> bool:
     repos = [name for name in names if name] or [""]
     checks = (
-        (card, "source_license", "source_licenses", normalize_license_id),
-        (manifest, "source_license", "source_licenses", normalize_license_id),
+        (card, "source_license", "source_licenses", _declared_license_id),
+        (manifest, "source_license", "source_licenses", _declared_license_id),
         (card, "license_evidence_digest", "license_evidence_digests", _sha256_or_none),
         (
             manifest,
@@ -477,7 +486,7 @@ def _mapping_license(
     container: dict[str, Any], names: list[str], singular: str, plural: str
 ) -> str | None:
     return _mapped_value_for_names(
-        container, names, singular, plural, normalize_license_id
+        container, names, singular, plural, _declared_license_id
     )
 
 
@@ -513,6 +522,10 @@ def index_repositories(repositories: list[dict[str, Any]]) -> dict[str, dict[str
         name = _text(row.get("name_with_owner"))
         if not name:
             raise ValueError("repository inventory row is missing a canonical name")
+        if _repository_id_invalid(row):
+            raise ValueError(
+                f"repository inventory row {name} has a malformed repository_id"
+            )
         folded = name.casefold()
         if folded in index:
             raise ValueError(f"Duplicate inventory repository {name}")
