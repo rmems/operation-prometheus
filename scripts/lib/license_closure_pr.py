@@ -448,10 +448,20 @@ def _inline_link_close(markdown: str, start: int) -> int | None:
     if index >= length:
         return None
     if markdown[index] == "<":
-        gt = markdown.find(">", index + 1)
-        if gt == -1 or "\n" in markdown[index:gt]:
+        scan = index + 1
+        while scan < length:
+            char = markdown[scan]
+            if char == "\\":
+                scan += 2
+                continue
+            if char == "\n":
+                return None
+            if char == ">":
+                index = scan + 1
+                break
+            scan += 1
+        else:
             return None
-        index = gt + 1
     else:
         depth = 0
         while index < length:
@@ -538,7 +548,9 @@ def _visible_markdown_text(markdown: str) -> str:
 
 
 def _strip_hidden_markup(markdown: str) -> str:
-    return _strip_non_rendered_html(HTML_COMMENT_RE.sub("", markdown))
+    visible = HTML_COMMENT_RE.sub("", markdown)
+    visible = _strip_inline_links(visible)
+    return _strip_non_rendered_html(visible)
 
 
 def _markdown_discloses(markdown: str | None, identifier: str | None) -> bool:
