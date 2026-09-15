@@ -7,6 +7,7 @@ from typing import Any
 
 from .license_closure_eval import _duplicate_id_row, _evaluate_record
 from .license_closure_ids import (
+    LICENSE_FAMILIES,
     SCHEMA_VERSION,
     _closed_release_family,
     _sha256_or_none,
@@ -52,6 +53,14 @@ def _released_evidence_summary(
     return families, evidence
 
 
+def _declared_families_invalid(declared: Any, expected: list[str]) -> bool:
+    if not isinstance(declared, list):
+        return True
+    if any(item not in LICENSE_FAMILIES for item in declared):
+        return True
+    return sorted(declared) != expected
+
+
 def _bundle_declaration_errors(
     report: dict[str, Any], manifest: dict[str, Any], card: dict[str, Any]
 ) -> list[str]:
@@ -60,10 +69,7 @@ def _bundle_declaration_errors(
         declared_families = source.get("license_families")
         if declared_families is None:
             continue
-        if (
-            not isinstance(declared_families, list)
-            or sorted(declared_families) != report["license_families"]
-        ):
+        if _declared_families_invalid(declared_families, report["license_families"]):
             errors.append(
                 "card/manifest license_families do not agree with closed evidence"
             )
