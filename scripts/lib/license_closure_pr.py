@@ -13,6 +13,8 @@ from .license_closure_ids import (
 )
 from .source_inventory_common import sha256_json
 
+HTML_COMMENT_RE = re.compile(r"<!--.*?-->", re.DOTALL)
+
 
 def pr_inventory_row_source_hash(row: dict[str, Any]) -> str:
     """Hash the supplied PR inventory row, excluding ``source_hash``.
@@ -74,20 +76,27 @@ def _code_state_matches_inventory_pr(
 
 def _pr_inventory_reasons(
     record: dict[str, Any],
-    repo: str,
+    repos: list[str],
     pr_number: int | None,
     pull_requests: dict[tuple[str, int], dict[str, Any]] | None,
 ) -> list[str]:
     if pull_requests is None:
         return []
-    if not repo or pr_number is None:
+    names = [name for name in repos if name]
+    if not names or pr_number is None:
         return ["snapshot_provenance_missing"]
-    inventory_pr = pull_requests.get((repo.casefold(), pr_number))
-    if inventory_pr is None or not _code_state_matches_inventory_pr(
-        record, inventory_pr
-    ):
-        return ["snapshot_provenance_missing"]
-    return []
+    seen: set[str] = set()
+    for name in names:
+        folded = name.casefold()
+        if folded in seen:
+            continue
+        seen.add(folded)
+        inventory_pr = pull_requests.get((folded, pr_number))
+        if inventory_pr is not None and _code_state_matches_inventory_pr(
+            record, inventory_pr
+        ):
+            return []
+    return ["snapshot_provenance_missing"]
 
 
 def _index_pull_requests(
@@ -135,5 +144,6 @@ def _markdown_discloses(markdown: str | None, identifier: str | None) -> bool:
     section = _markdown_license_section(markdown)
     if section is None or not identifier:
         return False
+    visible = HTML_COMMENT_RE.sub("", section)
     pattern = r"(?<![A-Za-z0-9.+-])" + re.escape(identifier) + r"(?![A-Za-z0-9.+-])"
-    return re.search(pattern, section, flags=re.IGNORECASE) is not None
+    return re.search(pattern, visible, flags=re.IGNORECASE) is not None
