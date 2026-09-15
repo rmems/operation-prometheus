@@ -20,6 +20,7 @@ from .license_closure_inventory import (
     index_repositories,
     inventory_has_custom_evidence,
     license_evidence_payload,
+    source_provenance_digest,
 )
 from .license_closure_pr import _index_pull_requests
 
@@ -106,20 +107,20 @@ def _bundle_declaration_errors(
             errors.append("manifest record_count does not agree with proposed records")
     if "records" in manifest:
         listed = manifest.get("records")
-        declared_ids = (
-            sorted(
-                _text(row.get("id"))
-                for row in listed
-                if isinstance(row, dict) and _text(row.get("id"))
-            )
-            if isinstance(listed, list)
-            else []
-        )
         actual_ids = sorted(
             row["record_id"]
             for row in report["released_positives"] + report["quarantined"]
         )
-        if not isinstance(listed, list) or declared_ids != actual_ids:
+        declared_ids: list[str] = []
+        malformed = not isinstance(listed, list)
+        if isinstance(listed, list):
+            for row in listed:
+                rid = _text(row.get("id")) if isinstance(row, dict) else ""
+                if not rid:
+                    malformed = True
+                    break
+                declared_ids.append(rid)
+        if malformed or sorted(declared_ids) != actual_ids:
             errors.append("manifest record ids do not agree with proposed records")
     return errors
 
@@ -203,7 +204,15 @@ def released_positive_ids(report: dict[str, Any]) -> list[str]:
     return [row["record_id"] for row in report.get("released_positives") or []]
 
 
-def _released_evidence_bound(row: dict[str, Any]) -> bool:
+def _released_evidence_bound(row: dict[str, Any], report_snapshot: str | None) -> bool:
+    snapshot = _sha256_or_none(row.get("snapshot_sha256"))
+    source_hash = _sha256_or_none(row.get("repository_source_hash"))
+    if snapshot is None or source_hash is None or snapshot != report_snapshot:
+        return False
+    if _sha256_or_none(row.get("source_provenance_digest")) != source_provenance_digest(
+        _text(row.get("repo")), source_hash, snapshot
+    ):
+        return False
     reconstructed = {
         "custom_license": row.get("custom_license"),
         "license": row.get("inventory_license"),
@@ -230,7 +239,13 @@ def _object_rows(value: Any, field: str) -> list[dict[str, Any]]:
     return value
 
 
-_RELEASED_ROW_KEYS = ("record_id",)
+_RELEASED_ROW_KEYS = (
+    "record_id",
+    "repo",
+    "repository_source_hash",
+    "snapshot_sha256",
+    "source_provenance_digest",
+)
 _QUARANTINED_ROW_KEYS = ("record_id", "primary_reason", "reason_codes")
 
 
@@ -272,13 +287,13 @@ def assert_released_positives_are_closed(report: dict[str, Any]) -> None:
     if len({row.get("record_id") for row in released}) != len(released):
         raise AssertionError("Released record IDs are not unique")
     counts = report.get("counts") or {}
-    if counts.get("unresolved_count") != len(quarantined):
+    if _declared_count(counts.get("unresolved_count")) != len(quarantined):
         raise AssertionError("Unresolved count drifted from quarantined rows")
-    if counts.get("quarantined_count") != len(quarantined):
+    if _declared_count(counts.get("quarantined_count")) != len(quarantined):
         raise AssertionError("Quarantined count drifted from quarantined rows")
-    if counts.get("released_positive_count") != len(released):
+    if _declared_count(counts.get("released_positive_count")) != len(released):
         raise AssertionError("Released positive count does not match released rows")
-    if counts.get("record_count") != len(released) + len(quarantined):
+    if _declared_count(counts.get("record_count")) != len(released) + len(quarantined):
         raise AssertionError(
             "Record count does not match released and quarantined rows"
         )
@@ -291,6 +306,7 @@ def assert_released_positives_are_closed(report: dict[str, Any]) -> None:
         raise AssertionError("license_families do not match released rows")
     if list(report.get("evidence_digests") or []) != evidence:
         raise AssertionError("evidence_digests do not match released rows")
+    report_snapshot = _sha256_or_none(report.get("snapshot_sha256"))
     if any(
         not _closed_release_family(
             row.get("spdx_id"),
@@ -303,7 +319,7 @@ def assert_released_positives_are_closed(report: dict[str, Any]) -> None:
                 }
             ),
         )
-        or not _released_evidence_bound(row)
+        or not _released_evidence_bound(row, report_snapshot)
         for row in released
     ):
         raise AssertionError("released row license family is not closed")
