@@ -12,8 +12,10 @@ Every released positive trajectory must resolve through all three of:
 3. Dataset-card disclosure (`source_license` / `source_licenses`, and a
    `License / provenance` section when a markdown card is supplied). Markdown
    disclosure must name the complete identifier; a prefix such as `MIT` does
-   not satisfy `MIT-0`. CommonMark ATX closing hashes on the license heading
-   (`## License / provenance ##`) still locate the section. `LicenseRef-*`
+   not satisfy `MIT-0`. CommonMark ATX license headings keep heading whitespace
+   on the same line (`## License / provenance`); an empty `##` followed by a
+   `License / provenance` paragraph is not a heading. Optional ATX closing
+   hashes (`## License / provenance ##`) still locate the section. `LicenseRef-*`
    custom evidence must use the same
    identifier as the inventory license. If `custom_license` declares both
    `identifier` and `spdx_id`, those fields must agree. If it declares both
@@ -39,10 +41,12 @@ released IDs that are converted to quarantined rows keep their
 `inventory_license` object and the released row's `snapshot_sha256` /
 `repository_source_hash`. A record whose `id` and `trajectory_id` are
 absent, blank, or non-string is quarantined as `declarations_disagree`
-instead of closing under a synthetic `repo#pr` identifier. If both
-identifiers are present as non-empty strings, they must be identical;
-conflicting `id` / `trajectory_id` values quarantine as
-`declarations_disagree` instead of silently preferring `id`.
+instead of closing under a synthetic `repo#pr` identifier. A present `id` or
+`trajectory_id` that is not a non-empty string (for example `id: 7`) cannot
+close by falling back to the other identity. If both identifiers are present
+as non-empty strings, they must be identical; conflicting `id` /
+`trajectory_id` values quarantine as `declarations_disagree` instead of
+silently preferring `id`.
 A trajectory `license` must be a non-empty string; an object such as
 `{"spdx_id": "MIT"}` cannot close by unwrapping `spdx_id`.
 Publication consumers must treat a report as closed
@@ -63,7 +67,9 @@ rejected instead of skipped. `released_positives` and `quarantined` must be
 arrays of objects; a non-object quarantined entry cannot be dropped to fake a
 closed report.
 Rows missing `record_id`, or quarantined rows missing `primary_reason` /
-`reason_codes`, fail closed instead of raising `KeyError`.
+`reason_codes`, fail closed instead of raising `KeyError`. Quarantined
+`record_id` values must be strings; an array identifier cannot crash the
+publication gate with `TypeError`.
 Released rows missing `repo`, `license_family`, or `evidence_digest` fail
 closed instead of raising `KeyError` while building the evidence summary.
 Released rows persist `snapshot_sha256`, `repository_source_hash`, and a
@@ -98,7 +104,9 @@ stay unknown even if custom text evidence is present. Grouped SPDX
 expressions such as `(MIT OR Apache-2.0) AND BSD-3-Clause` remain SPDX;
 adjacent grouped operands (`(MIT) OR (Apache-2.0)`) remain SPDX;
 adjacent groups without an operator (`(MIT)(Apache-2.0)`) stay unknown
-instead of recursing forever. Misplaced parentheses
+instead of recursing forever. Deeply nested but balanced groups such as
+repeated `MIT OR (...)` stay unknown once nesting exceeds the parser bound,
+instead of raising `RecursionError`. Misplaced parentheses
 (`MIT ( AND Apache-2.0)`) stay unknown. `WITH`
 expressions stay unknown, including a parenthesized operand
 (`MIT WITH Apache-2.0`, `MIT WITH (Apache-2.0)`). A
@@ -161,7 +169,9 @@ into a passing `--check`. Duplicate object keys in frozen JSON or JSONL (for
 example `"license": "GPL-3.0-only"` later overwritten by `"license": "MIT"`)
 are rejected instead of silently keeping the last value. A fabricated repository row
 with a newly computed `source_hash` is not authenticated by the snapshot
-digest alone. Inventory rows must declare `visibility` as the exact string
+digest alone. Producer-hash reconstruction rejects malformed coerced scalars
+such as `archived: {}` or `pull_request_total_count: {}` instead of
+authenticating them as `false` / `0`. Inventory rows must declare `visibility` as the exact string
 `public` before `source_hash` is trusted; `private`, `internal`, or a missing
 visibility cannot close even when the digest matches. Prior-inventory rows
 use the same public-visibility authentication before a license change is
