@@ -176,6 +176,8 @@ def build_license_closure_report(
         [row for row in evaluated if row["state"] == "released_positive"],
         key=lambda row: (row["record_id"], row["repo"]),
     )
+    for row in released:
+        row.pop("evidence", None)
     quarantined = sorted(
         [row for row in evaluated if row["state"] == "quarantined"],
         key=lambda row: (row["record_id"], row["repo"]),
