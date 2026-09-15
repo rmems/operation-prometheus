@@ -312,8 +312,18 @@ def _report_rows(
     return released, quarantined
 
 
+def _bundle_error_strings(report: dict[str, Any]) -> list[str] | None:
+    if "bundle_errors" not in report:
+        return None
+    value = report["bundle_errors"]
+    if not isinstance(value, list) or any(not isinstance(item, str) for item in value):
+        return None
+    return value
+
+
 def _derived_closed(report: dict[str, Any], quarantined: list[dict[str, Any]]) -> bool:
-    return not quarantined and not (report.get("bundle_errors") or [])
+    bundle_errors = _bundle_error_strings(report)
+    return not quarantined and bundle_errors is not None and not bundle_errors
 
 
 def assert_released_positives_are_closed(report: dict[str, Any]) -> None:
@@ -381,8 +391,14 @@ def validate_positive_release(report: dict[str, Any]) -> list[str]:
         errors.append(
             "license-closure manifest schema_version is not license_closure_manifest_v1"
         )
-    for bundle_error in report.get("bundle_errors") or []:
-        errors.append(f"license-closure manifest: {bundle_error}")
+    bundle_errors = _bundle_error_strings(report)
+    if bundle_errors is None:
+        errors.append(
+            "license-closure manifest bundle_errors must be an array of strings"
+        )
+    else:
+        for bundle_error in bundle_errors:
+            errors.append(f"license-closure manifest: {bundle_error}")
     try:
         _released, quarantined = _report_rows(report)
     except AssertionError as exc:
