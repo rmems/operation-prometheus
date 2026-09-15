@@ -84,7 +84,9 @@ def _string_fields(record: dict[str, Any], keys: tuple[str, ...]) -> list[str]:
 
 def iter_uri_fields(record: dict[str, Any]) -> list[str]:
     """Yield sourced URI strings, excluding patch bodies and review prose."""
-    values = _string_fields(record, ("source_urls", "evidence_references", "url", "uri", "html_url"))
+    values = _string_fields(
+        record, ("source_urls", "evidence_references", "url", "uri", "html_url")
+    )
     for artifact in record.get("artifacts") or []:
         if isinstance(artifact, dict) and isinstance(artifact.get("uri"), str):
             values.append(artifact["uri"])
@@ -193,6 +195,19 @@ def is_real_check_run_detail(detail: str) -> bool:
     return bool(CHECK_RUN_CONCLUSION_RE.search(detail))
 
 
+def _ci_detail_error(detail: str) -> str | None:
+    if CHECKLIST_RE.search(detail) and not is_real_check_run_detail(detail):
+        return "CI evidence is a PR-body checklist rather than a check-run conclusion"
+    if not detail.strip() or is_real_check_run_detail(detail):
+        return None
+    if detail.startswith("review_apps"):
+        return None
+    folded = detail.casefold()
+    if "passing locally" in folded or "test plan" in folded:
+        return "CI evidence is prose rather than a check-run conclusion"
+    return None
+
+
 def validation_evidence_errors(record: dict[str, Any]) -> list[str]:
     events = record.get("validation")
     if not isinstance(events, list) or not events:
@@ -200,29 +215,23 @@ def validation_evidence_errors(record: dict[str, Any]) -> list[str]:
             return []
         return ["missing required validation evidence"]
     errors: list[str] = []
-    ci_events = [
-        event
-        for event in events
-        if isinstance(event, dict) and event.get("type") == "ci"
-    ]
-    for event in ci_events:
-        detail = str(event.get("detail") or "")
-        if CHECKLIST_RE.search(detail) and not is_real_check_run_detail(detail):
-            errors.append(
-                "CI evidence is a PR-body checklist rather than a check-run conclusion"
-            )
-        elif (
-            detail.strip()
-            and not is_real_check_run_detail(detail)
-            and not detail.startswith("review_apps")
-        ):
-            # Prose-only CI details are allowed only when no checklist is pretending to be a gate.
-            if (
-                "passing locally" in detail.casefold()
-                or "test plan" in detail.casefold()
-            ):
-                errors.append("CI evidence is prose rather than a check-run conclusion")
+    for event in events:
+        if not isinstance(event, dict) or event.get("type") != "ci":
+            continue
+        message = _ci_detail_error(str(event.get("detail") or ""))
+        if message:
+            errors.append(message)
     return errors
+
+
+def _omitted_without_reason(patch: str) -> bool:
+    for line in patch.splitlines():
+        if not line.startswith("# omitted:"):
+            continue
+        folded = line.casefold()
+        if "truncated" not in folded and "unavailable" not in folded:
+            return True
+    return False
 
 
 def silent_truncation_errors(record: dict[str, Any]) -> list[str]:
@@ -230,21 +239,12 @@ def silent_truncation_errors(record: dict[str, Any]) -> list[str]:
     if not isinstance(patch, str) or not patch:
         return []
     declared = any(marker in patch for marker in DECLARED_TRUNCATION_MARKERS)
-    encoded = patch.encode("utf-8")
-    if len(encoded) >= 96 * 1024 and not declared:
+    if len(patch.encode("utf-8")) >= 96 * 1024 and not declared:
         return [
             "silent patch truncation: patch meets the 96KiB budget without a truncation marker"
         ]
-    if "# omitted:" in patch:
-        for line in patch.splitlines():
-            if (
-                line.startswith("# omitted:")
-                and "truncated" not in line.casefold()
-                and "unavailable" not in line.casefold()
-            ):
-                return [
-                    "silent patch truncation: omitted file lacks a truncation reason"
-                ]
+    if "# omitted:" in patch and _omitted_without_reason(patch):
+        return ["silent patch truncation: omitted file lacks a truncation reason"]
     return []
 
 
