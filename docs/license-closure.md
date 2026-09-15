@@ -119,7 +119,10 @@ evaluated. Accepted snapshot digests are stored as lowercase hex.
 The dataset manifest must declare a valid `sha256` of `--records`; a missing
 or malformed digest fails closed. Duplicate inventory aliases that point at
 different repositories are rejected. Duplicate immutable `repository_id`
-values that point at different names are rejected. A present but unparseable
+values that point at different names are rejected. Every supplied repository
+inventory row must be an object with a non-empty canonical `name_with_owner`;
+a valid matching row plus a malformed `{}` entry is rejected instead of
+skipped. A present but unparseable
 singular `source_license` (for example `{}`) cannot be ignored in favor of a
 matching per-repository map. A present non-object plural map such as
 `source_licenses: []` cannot be ignored in favor of a valid singular.
@@ -140,7 +143,10 @@ artifacts declare `source_repo` / `source_repos`, the complete normalized
 sets must agree after alias resolution; membership of the current record
 alone is not enough. Card and manifest `source_licenses` /
 `license_evidence_digests` maps are compared for every declared repository,
-not only repositories that have a proposed record. Prior-inventory rows must
+not only repositories that have a proposed record. Those declared licenses
+and digests are also compared to the matching inventory row, so an unused
+declared repository cannot close by agreeing with the other artifact while
+disagreeing with frozen inventory evidence. Prior-inventory rows must
 authenticate `source_hash` before their license is trusted. When the current
 row carries `repository_id`, prior lookup matches that immutable id and does
 not fall back to a reused GitHub name. Card and manifest declaration maps are
@@ -160,8 +166,10 @@ visible identifier. A void tag such as `<br/>` inside a hidden block
 cannot close that hidden scope. Visible markup such as
 `<p>MIT</p>` still counts; splitting the identifier across block tags
 (`<p>MI</p><p>T</p>`) does not. Disclosure stops the license section at the
-next H1 or H2 heading, including CommonMark headings indented by up to three
-spaces.
+next H1 or H2 heading, including CommonMark ATX headings indented by up to
+three spaces and Setext H1 (`===`) / H2 (`---`) underlines. A paragraph
+followed by `---` is a Setext H2 and ends the section; a lone thematic break
+with no title line does not. `###` headings do not bound the section.
 Released rows persist the inventory `license` object so publication can
 recompute the evidence digest; swapping a custom `text_sha256` or an SPDX
 `spdx_id` / `evidence_digest` while keeping the other bound fields fails
