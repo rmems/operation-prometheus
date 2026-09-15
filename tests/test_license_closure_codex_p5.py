@@ -47,6 +47,7 @@ def test_integer_released_repo_cannot_validate_release():
         row["snapshot_sha256"],
         record_id=row["record_id"],
         pr_number=row["pr_number"],
+        evidence_digest=row["evidence_digest"],
     )
     report["evidence_digests"][0]["repository"] = 7
     errors = validate_positive_release(report)
