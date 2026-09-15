@@ -37,7 +37,7 @@ _VOID_HTML_TAGS = frozenset(
 )
 MARKDOWN_REFERENCE_DEFINITION_RE = re.compile(r"^\s*\[[^\]\n]+\]:\s+\S")
 MARKDOWN_REFERENCE_TITLE_RE = re.compile(
-    r"""^[ \t]+(?=\"(?:\\.|[^\"\\])*\"|'(?:\\.|[^'\\])*'|\((?:\\.|[^)\\])*\))\s*$"""
+    r"""^[ \t]+(?:"(?:\\.|[^"\\])*"|'(?:\\.|[^'\\])*'|\((?:\\.|[^)\\])*\))\s*$"""
 )
 MARKDOWN_INLINE_LINK_RE = re.compile(r"!?\[([^\]\n]*)\]\((?:[^)\\]|\\.)*\)")
 MARKDOWN_REFERENCE_LINK_RE = re.compile(r"!?\[([^\]\n]*)\]\[[^\]\n]*\]")
