@@ -148,12 +148,16 @@ different file than the report describes. `--out` cannot resolve to the same
 path as `--records`, `--card`, `--manifest`, `--inventory`,
 `--inventory-manifest`, `--prior-inventory`, `--prior-inventory-manifest`, or
 `--markdown-card`, including
-through symlinks; a colliding `--out` is rejected before `--check` or write
+through symlinks and hard links that share an inode; a colliding `--out` is
+rejected before `--check` or write
 so frozen inputs cannot be overwritten. `--card` and `--manifest` must be JSON
 objects; an array or scalar root fails closed instead of raising
 `AttributeError`. JSON parsers reject the non-finite
 constants `NaN`, `Infinity`, and `-Infinity`; `render_json` writes with
-`allow_nan=False`. Duplicate object keys in frozen JSON or JSONL (for
+`allow_nan=False`. `build_manifest.py` uses the same non-finite rejection when
+loading cards and existing manifests, and `render` writes with
+`allow_nan=False`, so a card `unresolved_license_count: NaN` cannot be copied
+into a passing `--check`. Duplicate object keys in frozen JSON or JSONL (for
 example `"license": "GPL-3.0-only"` later overwritten by `"license": "MIT"`)
 are rejected instead of silently keeping the last value. A fabricated repository row
 with a newly computed `source_hash` is not authenticated by the snapshot
@@ -232,7 +236,8 @@ recompute the evidence digest; swapping a custom `text_sha256` or an SPDX
 `build_manifest.py` copies license-closure fields from the card when they are
 present. It copies `source_repo` only when the card declares a non-blank
 singular name, so a plural-only `source_repos` card does not emit a blank
-`source_repo` that would fail coverage.
+`source_repo` that would fail coverage. Copied numeric fields cannot be the
+non-finite JSON constants `NaN` / `Infinity` / `-Infinity`.
 
 When a caller supplies a frozen pull-request inventory, every proposed record
 must appear in that list. Each row must include a `source_hash` bound to the
@@ -247,7 +252,11 @@ entry is rejected. Duplicate repository+PR keys in that inventory are rejected. 
 repository state are compared to the matching PR roles after normalizing
 accepted hexadecimal OIDs to lowercase. Only full Git object IDs are
 accepted (40-character SHA-1 or 64-character SHA-256); truncated values
-such as `abc` cannot close. A present malformed `base_oid` or `head_oid`
+such as `abc` cannot close. Every present inventory PR `base_oid`,
+`head_oid`, or `merge_commit_oid` must be a full Git object ID; truncated
+inventory `base_oid` / `head_oid` values such as `abc` and `def` cannot
+authenticate a record that only matches `merge_commit_oid`. A present
+malformed `base_oid` or `head_oid`
 is not treated as absent: a matching merge OID cannot close over invalid
 declared roles. A correct base OID
 does not mask an incorrect head. A supplied PR inventory also requires a
@@ -264,7 +273,8 @@ different id cannot close, including when a canonical PR row matches and an
 alias PR row for the same number declares a different id.
 Omitting the pull-request inventory keeps repository-level snapshot checks only.
 Top-level `repo` and `repository.owner`/`name` must agree when both are
-present.
+present. A present non-string or blank top-level `repo` such as `7` cannot
+be erased so the nested identity can close.
 
 The closure manifest reports license families, per-repository evidence
 digests, and unresolved counts.
