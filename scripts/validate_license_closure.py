@@ -16,10 +16,13 @@ does not treat this repository's Apache-2.0 license as a source relicense.
 from __future__ import annotations
 
 import argparse
+import hashlib
 import json
 import sys
 from pathlib import Path
 from typing import Any
+
+import jsonschema
 
 _SCRIPTS = Path(__file__).resolve().parent
 if str(_SCRIPTS) not in sys.path:
@@ -63,15 +66,51 @@ def _snapshot_sha256(args: argparse.Namespace) -> str:
 
 
 def _schema_validator():
-    try:
-        import jsonschema
-    except ImportError as exc:
-        raise RuntimeError("jsonschema is required") from exc
     schema = _load_json(SCHEMA_PATH)
     return jsonschema.Draft7Validator(
         schema,
         format_checker=jsonschema.Draft7Validator.FORMAT_CHECKER,
     )
+
+
+def _sha256_file(path: Path) -> str:
+    return hashlib.sha256(path.read_bytes()).hexdigest()
+
+
+def _hex_digest(value: Any) -> str | None:
+    text = str(value or "").strip().lower()
+    if len(text) == 64 and all(char in "0123456789abcdef" for char in text):
+        return text
+    return None
+
+
+def _publication_binding_errors(args: argparse.Namespace, record_count: int) -> list[str]:
+    errors: list[str] = []
+    dataset_manifest = _load_json(args.manifest)
+    expected_records = _hex_digest(dataset_manifest.get("sha256"))
+    if expected_records and expected_records != _sha256_file(args.records):
+        errors.append(f"{args.manifest} sha256 does not match {args.records}")
+    if "record_count" in dataset_manifest:
+        try:
+            declared = int(dataset_manifest["record_count"])
+        except (TypeError, ValueError):
+            declared = -1
+        if declared != record_count:
+            errors.append(f"{args.manifest} record_count does not match {args.records}")
+    if not args.inventory_manifest:
+        return errors
+    inventory_manifest = _load_json(args.inventory_manifest)
+    files = inventory_manifest.get("files")
+    listed = None
+    if isinstance(files, dict):
+        listed = files.get(args.inventory.name) or files.get("repositories.jsonl")
+    if isinstance(listed, dict):
+        expected_inventory = _hex_digest(listed.get("sha256"))
+        if expected_inventory and expected_inventory != _sha256_file(args.inventory):
+            errors.append(
+                f"{args.inventory_manifest} repositories digest does not match {args.inventory}"
+            )
+    return errors
 
 
 def build_parser() -> argparse.ArgumentParser:
@@ -165,7 +204,8 @@ def main(argv: list[str] | None = None) -> int:
     elif not args.out:
         sys.stdout.buffer.write(rendered)
 
-    errors = validate_positive_release(report)
+    errors = _publication_binding_errors(args, report["counts"]["record_count"])
+    errors.extend(validate_positive_release(report))
     if errors:
         print("License-closure FAILED:", file=sys.stderr)
         for error in errors:
