@@ -260,6 +260,7 @@ def _evaluate_record(
         if inventory_license is not None:
             released["inventory_license"] = inventory_license
         assert source_hash is not None
+        assert digest is not None
         released["repository_source_hash"] = source_hash
         released["snapshot_sha256"] = snapshot_sha256
         released["source_provenance_digest"] = source_provenance_digest(
@@ -268,6 +269,7 @@ def _evaluate_record(
             snapshot_sha256,
             record_id=rid,
             pr_number=pr_number,
+            evidence_digest=digest,
         )
         return released
     return {
