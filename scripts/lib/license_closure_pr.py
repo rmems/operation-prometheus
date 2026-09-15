@@ -35,9 +35,9 @@ _VOID_HTML_TAGS = frozenset(
         "wbr",
     }
 )
-MARKDOWN_REFERENCE_DEFINITION_RE = re.compile(
-    r"^\s*\[[^\]\n]+\]:\s+\S.*$",
-    re.MULTILINE,
+MARKDOWN_REFERENCE_DEFINITION_RE = re.compile(r"^\s*\[[^\]\n]+\]:\s+\S")
+MARKDOWN_REFERENCE_TITLE_RE = re.compile(
+    r"""^[ \t]+(?:"(?:\\.|[^"\\])*"|'(?:\\.|[^'\\])*'|\((?:\\.|[^)\\])*\))\s*$"""
 )
 MARKDOWN_INLINE_LINK_RE = re.compile(r"!?\[([^\]\n]*)\]\((?:[^)\\]|\\.)*\)")
 MARKDOWN_REFERENCE_LINK_RE = re.compile(r"!?\[([^\]\n]*)\]\[[^\]\n]*\]")
@@ -232,7 +232,7 @@ def _markdown_license_section(markdown: str) -> str | None:
     if match is None:
         return None
     rest = markdown[match.end() :]
-    next_heading = re.search(r"^#{1,2}\s+", rest, re.MULTILINE)
+    next_heading = re.search(r"^ {0,3}#{1,2}(?:\s|$)", rest, re.MULTILINE)
     if next_heading is None:
         return rest
     return rest[: next_heading.start()]
@@ -277,9 +277,24 @@ def _strip_non_rendered_html(markdown: str) -> str:
     return "".join(parser.parts)
 
 
+def _strip_reference_definitions(markdown: str) -> str:
+    lines = markdown.split("\n")
+    kept: list[str] = []
+    index = 0
+    while index < len(lines):
+        if MARKDOWN_REFERENCE_DEFINITION_RE.match(lines[index]):
+            index += 1
+            if index < len(lines) and MARKDOWN_REFERENCE_TITLE_RE.match(lines[index]):
+                index += 1
+            continue
+        kept.append(lines[index])
+        index += 1
+    return "\n".join(kept)
+
+
 def _visible_markdown_text(markdown: str) -> str:
     visible = HTML_COMMENT_RE.sub("", markdown)
-    visible = MARKDOWN_REFERENCE_DEFINITION_RE.sub("", visible)
+    visible = _strip_reference_definitions(visible)
     visible = MARKDOWN_INLINE_LINK_RE.sub(r"\1", visible)
     visible = MARKDOWN_REFERENCE_LINK_RE.sub(r"\1", visible)
     visible = _strip_non_rendered_html(visible)
