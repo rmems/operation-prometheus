@@ -4,13 +4,19 @@
       "name": "CUDA Build",
       "status": "completed",
       "conclusion": "success",
-      "html_url": "https://github.com/rmems/corinth-canal/actions"
+      "html_url": "https://github.com/rmems/corinth-canal/actions",
+      "head_sha": "def",
+      "started_at": "2026-05-27T03:00:00Z",
+      "completed_at": "2026-05-27T03:10:00Z"
     },
     {
       "name": "CPU tests",
       "status": "completed",
       "conclusion": "success",
-      "html_url": "https://github.com/rmems/corinth-canal/actions"
+      "html_url": "https://github.com/rmems/corinth-canal/actions",
+      "head_sha": "def",
+      "started_at": "2026-05-27T03:00:00Z",
+      "completed_at": "2026-05-27T03:12:00Z"
     }
   ]
 }
