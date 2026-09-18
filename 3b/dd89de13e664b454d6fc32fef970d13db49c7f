@@ -1,0 +1,63 @@
+scripts/lib/migrate_v0_events.py
+  s_4d9f586cc5507d::t_44f312b7486f4d 1-47
+scripts/lib/migrate_v0_timestamps.py
+  s_4d9f586cc5507d::t_1e786c149a0114 1-51
+scripts/lib/migrate_v0_io.py
+  s_4d9f586cc5507d::t_56312368317084 1-7,9-10,12-14,21-38,40-49,53-59,63,67-73,75-79,81-92,94-116
+  s_4d9f586cc5507d::t_b3cf622c2cc0bc 74,80,93
+  s_4d9f586cc5507d::t_20c82cb9415590 39,50-52
+  s_4d9f586cc5507d::t_8c4c897c35be33 8
+  s_4d9f586cc5507d::t_88410c21277df2 11,15-20
+  s_4d9f586cc5507d::t_f10ef479911b61 60-62,64-66
+scripts/lib/migrate_v0_record.py
+  s_4d9f586cc5507d::t_c548c5f89a08e3 132-133,142-143
+  s_4d9f586cc5507d::t_87f4f66cb4a7c0 59
+  s_4d9f586cc5507d::t_3f281f908b0a47 126
+  s_4d9f586cc5507d::t_6963ef062ff857 72-83
+  s_4d9f586cc5507d::t_cd3740ddb506f0 1-25,34-58,60-65,67-71,84-93,101-104,112-113,115-125,127-131,134-141,144-170,177-209,216-218,221-224,237-240,245-246
+  s_4d9f586cc5507d::t_68b235936240db 66
+  s_4d9f586cc5507d::t_cbfe0167be18dd 94-100
+  s_4d9f586cc5507d::t_39c90185c363bb 171-176
+  s_4d9f586cc5507d::t_69edd8ca24f169 105-111,114
+  s_4d9f586cc5507d::t_312c5abd9e77d7 26-33
+  s_4d9f586cc5507d::t_89f5cdf2a94072 210-215,219-220,225-236,241-244
+tests/test_migrate_v0_to_v1.py
+  s_4d9f586cc5507d::t_2542a395b9a9ff 255-413
+scripts/lib/migrate_v0_fields.py
+  s_4d9f586cc5507d::t_1f66676a3b533c 1,8,35-46,59,67-82
+  s_4d9f586cc5507d::t_aeb7b4ef68dda6 2-7,9-34,47-58,60-66
+scripts/migrate_v0_to_v1.py
+  s_4d9f586cc5507d::t_fc05d767d7e8dd 82-84
+scripts/lib/migrate_v0_constants.py
+  s_4d9f586cc5507d::t_8af052e7d77cbf 1-72
+scripts/lib/migrate_v0_to_v1.py
+  s_4d9f586cc5507d::t_0c71b20aef983e 11-26
+scripts/lib/migrate_v0_contract.py
+  s_4d9f586cc5507d::t_8b33cb48ab12ae 1-64
+scripts/lib/migrate_v0_text.py
+  s_4d9f586cc5507d::t_fb456c46daedb0 1-82
+scripts/lib/migrate_v0_envelope.py
+  s_4d9f586cc5507d::t_0e59b59fc7e5ab 186,190,193
+  s_4d9f586cc5507d::t_8dd9db4d65ccf0 118,121-127
+  s_4d9f586cc5507d::t_919a942b0d7e80 212
+  s_4d9f586cc5507d::t_785d7df3f2b0ab 1-117,119-120,128-185,187-189,191-192,194-211,213-225
+scripts/lib/migrate_v0_mapping.py
+  s_4d9f586cc5507d::t_7be996d3f4dce0 5-12,14-22,25-49
+  s_4d9f586cc5507d::t_9269c073b365a6 24
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.5.2",
+  "base_commit_sha": "3bdd89de13e664b454d6fc32fef970d13db49c7f",
+  "prompts": {},
+  "sessions": {
+    "s_4d9f586cc5507d": {
+      "agent_id": {
+        "tool": "cursor",
+        "id": "7ba47837-16c5-47ef-9079-cd3aa168ca6a",
+        "model": "grok-4.6"
+      },
+      "human_author": "Raul Cardenas Montoya <montoyaraul34@gmail.com>"
+    }
+  }
+}
