@@ -28,17 +28,19 @@ export PROMETHEUS_DATA_ROOT=~/rmems/prometheus-data   # or /tmp/prometheus-data
 #   $PROMETHEUS_DATA_ROOT/raw/<owner_repo>/pr-N.json
 ```
 
-When `PROMETHEUS_DATA_ROOT` is set and `--out-dir` is omitted, `collect_pr_records.py` writes under that root. Resume multi-hour batches with `--skip-existing`. Discover candidates with `scripts/list_merged_prs.py` (still shortlist before training).
+When `PROMETHEUS_DATA_ROOT` is set and `--out-dir` is omitted, `collect_pr_records.py` writes under that root. Resume multi-hour batches with `--skip-existing` or, for inventory-driven collection, `--resume-state`. Discover candidates with `scripts/list_merged_prs.py` (still shortlist before training) or collect from `datasets/inventory/v0.7/` (see [docs/event-collector.md](../docs/event-collector.md)).
 
 | Commit | Do not commit |
 |--------|----------------|
-| cards, manifests, small curated JSONL, examples | `$PROMETHEUS_DATA_ROOT/**`, full multi-MB JSONL regenerates |
+| cards, manifests, small curated JSONL, examples | `$PROMETHEUS_DATA_ROOT/**`, full multi-MB JSONL regenerates, artifact-store objects |
 
 This keeps the repository small, inspectable, and compliant with the project's prime directive and "Do Not" guidelines.
 
 See:
 - [AGENTS.md](../AGENTS.md) for overall rules
 - [schemas/pr_trajectory.schema.json](../schemas/pr_trajectory.schema.json) for the canonical trajectory data shape (schema v0)
+- [schemas/trajectory_v1.schema.json](../schemas/trajectory_v1.schema.json) for typed event-sourced v1 trajectories
+- [docs/event-collector.md](../docs/event-collector.md) for inventory-driven collection, resume, and snapshots
 - [docs/source-repos.md](../docs/source-repos.md) for extraction shortlists and source repo tracking
 - [cards/corinth-canal-trajectories-v0.md](cards/corinth-canal-trajectories-v0.md) for the first extracted dataset card
 - [../STATUS.md](../STATUS.md) for current extraction status
@@ -52,3 +54,7 @@ See:
 - `examples/` — tiny synthetic samples for schema demos
 - `inventory/` — thin eligibility rows, policy, drift evidence, and manifests;
   never the frozen raw source snapshot
+- `shards/` / `corpus/` — v0.7 shard outputs and the merged global manifest live
+  outside extract PRs; the merge contract is documented in
+  [docs/corpus-shard-merge.md](../docs/corpus-shard-merge.md) and implemented by
+  `scripts/merge_corpus_shards.py`

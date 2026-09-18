@@ -1,0 +1,107 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "https://github.com/rmems/operation-prometheus/schemas/corpus_global_manifest.schema.json",
+  "title": "Operation Prometheus canonical global corpus manifest",
+  "type": "object",
+  "required": [
+    "schema_version",
+    "provider",
+    "shard_count",
+    "assignment_rule",
+    "inventory_revision",
+    "inventory_policy_version",
+    "trajectory_schema_version",
+    "counts",
+    "exclusion_total",
+    "quarantine_total",
+    "shards",
+    "files",
+    "manifest_sha256"
+  ],
+  "properties": {
+    "schema_version": { "const": "corpus_global_manifest_v1" },
+    "provider": { "const": "github" },
+    "shard_count": { "type": "integer", "minimum": 1 },
+    "assignment_rule": {
+      "const": "int(sha256(github_repository_node_id)[0:8], 16) % 3"
+    },
+    "inventory_revision": { "$ref": "#/definitions/sha256" },
+    "inventory_policy_version": { "type": "string", "minLength": 1 },
+    "trajectory_schema_version": { "const": "1" },
+    "counts": { "$ref": "#/definitions/counts" },
+    "exclusion_total": { "$ref": "#/definitions/count" },
+    "quarantine_total": { "$ref": "#/definitions/count" },
+    "shards": {
+      "type": "array",
+      "minItems": 1,
+      "items": { "$ref": "#/definitions/shard_summary" }
+    },
+    "files": {
+      "type": "object",
+      "required": ["records.jsonl"],
+      "properties": {
+        "records.jsonl": { "$ref": "#/definitions/file" }
+      },
+      "additionalProperties": false
+    },
+    "manifest_sha256": { "$ref": "#/definitions/sha256" }
+  },
+  "additionalProperties": false,
+  "definitions": {
+    "count": { "type": "integer", "minimum": 0 },
+    "sha256": { "type": "string", "pattern": "^[a-f0-9]{64}$" },
+    "file": {
+      "type": "object",
+      "required": ["bytes", "sha256"],
+      "properties": {
+        "bytes": { "type": "integer", "minimum": 0 },
+        "sha256": { "$ref": "#/definitions/sha256" }
+      },
+      "additionalProperties": false
+    },
+    "counts": {
+      "type": "object",
+      "required": [
+        "repository_count",
+        "record_count",
+        "included_positive",
+        "included_negative",
+        "quarantined",
+        "excluded",
+        "watchlist_open"
+      ],
+      "properties": {
+        "repository_count": { "$ref": "#/definitions/count" },
+        "record_count": { "$ref": "#/definitions/count" },
+        "included_positive": { "$ref": "#/definitions/count" },
+        "included_negative": { "$ref": "#/definitions/count" },
+        "quarantined": { "$ref": "#/definitions/count" },
+        "excluded": { "$ref": "#/definitions/count" },
+        "watchlist_open": { "$ref": "#/definitions/count" }
+      },
+      "additionalProperties": false
+    },
+    "shard_summary": {
+      "type": "object",
+      "required": [
+        "shard_number",
+        "manifest_sha256",
+        "records_sha256",
+        "records_bytes",
+        "repository_count",
+        "record_count",
+        "counts"
+      ],
+      "properties": {
+        "shard_number": { "type": "integer", "minimum": 0 },
+        "manifest_sha256": { "$ref": "#/definitions/sha256" },
+        "records_sha256": { "$ref": "#/definitions/sha256" },
+        "records_bytes": { "type": "integer", "minimum": 0 },
+        "repository_count": { "$ref": "#/definitions/count" },
+        "record_count": { "$ref": "#/definitions/count" },
+        "counts": { "$ref": "#/definitions/counts" }
+      },
+      "additionalProperties": false
+    }
+  }
+}

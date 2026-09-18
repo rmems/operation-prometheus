@@ -108,6 +108,44 @@ def _is_absolute_uri(value: object) -> bool:
     return True
 
 
+def _is_git_oid(value: object) -> bool:
+    return isinstance(value, str) and bool(_GIT_OID_RE.fullmatch(value))
+
+
+def _code_state_has_git_oid(code_state: object) -> bool:
+    if not isinstance(code_state, dict):
+        return False
+    return any(_is_git_oid(code_state.get(key)) for key in _SNAPSHOT_KEYS)
+
+
+def _event_has_evidence_url(event: dict) -> bool:
+    refs = event.get("evidence_references")
+    if not isinstance(refs, list):
+        return False
+    return any(_is_absolute_uri(ref) for ref in refs)
+
+
+def _event_has_auditable_anchor(event: dict) -> bool:
+    return _event_has_evidence_url(event) or _code_state_has_git_oid(
+        event.get("code_state")
+    )
+
+
+def _event_anchor_errors(events: list, filename: str, lineno: int) -> list[str]:
+    errors: list[str] = []
+    for event in events:
+        if isinstance(event, dict) and not _event_has_auditable_anchor(event):
+            errors.append(
+                _policy(
+                    filename,
+                    lineno,
+                    "event missing auditable evidence anchor "
+                    "(evidence_references URL or code_state git object id)",
+                )
+            )
+    return errors
+
+
 def _contains_nonfinite(obj: object) -> bool:
     if isinstance(obj, float) and not math.isfinite(obj):
         return True
@@ -316,6 +354,7 @@ def _v1_policy_errors(record: dict, filename: str, lineno: int) -> list[str]:
     errors = [
         *_event_timestamp_errors(events, filename, lineno),
         *_actor_type_errors(events, filename, lineno),
+        *_event_anchor_errors(events, filename, lineno),
     ]
     if record.get("trajectory_type") == "software" and isinstance(
         record.get("events"), list

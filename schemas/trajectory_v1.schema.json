@@ -3,6 +3,17 @@
   "$id": "https://github.com/rmems/operation-prometheus/schemas/trajectory_v1.schema.json",
   "title": "Trajectory v1",
   "description": "Lossless event-sourced trajectory v1 schema and provenance envelope.",
+  "definitions": {
+    "gitObjectId": {
+      "type": "string",
+      "pattern": "^[0-9a-fA-F]{3,64}$"
+    },
+    "evidenceUrl": {
+      "type": "string",
+      "minLength": 1,
+      "format": "uri"
+    }
+  },
   "type": "object",
   "required": [
     "schema_version",
@@ -120,7 +131,7 @@
           },
           "evidence_references": {
             "type": "array",
-            "items": { "type": "string" }
+            "items": { "$ref": "#/definitions/evidenceUrl" }
           },
           "disposition": {
             "enum": [
@@ -137,7 +148,65 @@
             ]
           },
           "content": { "type": "string" }
-        }
+        },
+        "anyOf": [
+          {
+            "required": ["evidence_references"],
+            "properties": {
+              "evidence_references": {
+                "type": "array",
+                "minItems": 1,
+                "items": { "$ref": "#/definitions/evidenceUrl" }
+              }
+            }
+          },
+          {
+            "required": ["code_state"],
+            "properties": {
+              "code_state": {
+                "type": "object",
+                "anyOf": [
+                  {
+                    "required": ["commit_oid"],
+                    "properties": {
+                      "commit_oid": { "$ref": "#/definitions/gitObjectId" }
+                    }
+                  },
+                  {
+                    "required": ["base_oid"],
+                    "properties": {
+                      "base_oid": { "$ref": "#/definitions/gitObjectId" }
+                    }
+                  },
+                  {
+                    "required": ["head_oid"],
+                    "properties": {
+                      "head_oid": { "$ref": "#/definitions/gitObjectId" }
+                    }
+                  },
+                  {
+                    "required": ["tree_oid"],
+                    "properties": {
+                      "tree_oid": { "$ref": "#/definitions/gitObjectId" }
+                    }
+                  },
+                  {
+                    "required": ["before_blob"],
+                    "properties": {
+                      "before_blob": { "$ref": "#/definitions/gitObjectId" }
+                    }
+                  },
+                  {
+                    "required": ["after_blob"],
+                    "properties": {
+                      "after_blob": { "$ref": "#/definitions/gitObjectId" }
+                    }
+                  }
+                ]
+              }
+            }
+          }
+        ]
       }
     },
     "lineage": {
