@@ -72,7 +72,10 @@ class GitHubClient:
         self.max_retries = max_retries
         self.min_remaining = min_remaining
         self._sleep = sleep_fn
-        self._opener = opener or urllib.request.build_opener(_SafeRedirectHandler())
+        if opener is None:
+            self._opener = urllib.request.build_opener(_SafeRedirectHandler())
+        else:
+            self._opener = opener
         if not self.token and opener is None:
             logger.warning(
                 "No GitHub token configured; unauthenticated rate limit is ~60 req/hr"

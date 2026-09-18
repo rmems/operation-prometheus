@@ -14,8 +14,10 @@ import collect_pr_records as collect_mod
 from lib.github_client import GitHubClient, GitHubError
 from lib.github_page_fixtures import (
     PAGE_KINDS,
+    PageCapture,
     RecordingOpener,
     ReplayOpener,
+    ReplayOptions,
     attach_page_recorder,
     build_page_envelope,
     dumps_cassette,
@@ -114,14 +116,7 @@ def _json_bytes(value: Any) -> bytes:
     return json.dumps(value, separators=(",", ":")).encode("utf-8")
 
 
-def _envelope(
-    url: str,
-    body: Any,
-    *,
-    status: int = 200,
-    headers: dict[str, str] | None = None,
-    accept: str = JSON_ACCEPT,
-) -> dict[str, Any]:
+def _envelope(url: str, body: Any, **extras: Any) -> dict[str, Any]:
     if isinstance(body, (bytes, bytearray)):
         raw = bytes(body)
     elif isinstance(body, str):
@@ -129,12 +124,14 @@ def _envelope(
     else:
         raw = _json_bytes(body)
     return build_page_envelope(
-        method="GET",
-        url=url,
-        status=status,
-        raw_body=raw,
-        response_headers=headers or _headers(),
-        accept=accept,
+        PageCapture(
+            method="GET",
+            url=url,
+            status=int(extras.get("status", 200)),
+            raw_body=raw,
+            response_headers=extras.get("headers") or _headers(),
+            accept=str(extras.get("accept", JSON_ACCEPT)),
+        )
     )
 
 
@@ -223,11 +220,13 @@ def test_sanitize_strips_credentials_unstable_headers_and_home_paths():
         "url": f"{API}/repos/{REPO}/issues/89/comments?token={token}",
     }
     page = build_page_envelope(
-        method="GET",
-        url=f"https://user:{token}@api.github.com/repos/{REPO}/issues/89/comments?access_token={token}&page=1",
-        status=200,
-        raw_body=_json_bytes(body),
-        response_headers=raw_headers,
+        PageCapture(
+            method="GET",
+            url=f"https://user:{token}@api.github.com/repos/{REPO}/issues/89/comments?access_token={token}&page=1",
+            status=200,
+            raw_body=_json_bytes(body),
+            response_headers=raw_headers,
+        )
     )
     dumped = dumps_cassette([page])
     assert token not in dumped
@@ -306,7 +305,7 @@ def test_replay_rate_limit_403_then_success():
         _envelope(url, _load_github("pull_89.json")),
     ]
     slept: list[float] = []
-    client = replay_github_client(pages, sleep_fn=slept.append)
+    client = replay_github_client(pages, ReplayOptions(sleep_fn=slept.append))
     payload = client.get_json(f"/repos/{REPO}/pulls/89")
     assert payload["merged"] is True
     assert slept
@@ -317,7 +316,7 @@ def test_replay_terminal_404():
     pages = [
         _envelope(url, {"message": "Not Found"}, status=404, headers=_headers(**{"X-RateLimit-Remaining": "10"}))
     ]
-    client = replay_github_client(pages, max_retries=0)
+    client = replay_github_client(pages, ReplayOptions(max_retries=0))
     with pytest.raises(GitHubError, match="404") as excinfo:
         client.get_json(f"/repos/{REPO}/issues/404")
     assert excinfo.value.status == 404
@@ -490,3 +489,117 @@ def test_collect_pr_records_writes_sanitized_cassette(tmp_path: Path, monkeypatc
     assert recorded["page_count"] == 11
     assert scan_cassette_secrets(recorded) == []
     assert dumps_cassette(recorded["pages"]) == TRAJECTORY_CASSETTE.read_text(encoding="utf-8")
+
+
+def test_paginated_check_runs_are_not_truncated():
+    url = f"{API}/repos/{REPO}/commits/def/check-runs?per_page=100"
+    link = f"<{url}&page=2>; rel=\"next\""
+    body = {
+        "total_count": 5,
+        "check_runs": [
+            {
+                "name": "CUDA Build",
+                "status": "completed",
+                "conclusion": "success",
+                "html_url": "https://github.com/rmems/corinth-canal/actions",
+            }
+        ],
+    }
+    page = _envelope(url, body, headers=_headers(Link=link))
+    assert page["truncated"] is False
+    assert page["pagination"]["next"]
+
+
+def test_load_cassette_rejects_mismatched_page_count(tmp_path: Path):
+    path = tmp_path / "bad.json"
+    payload = json.loads(dumps_cassette(pr89_multipage_pages()[:1]))
+    payload["page_count"] = 99
+    path.write_text(json.dumps(payload), encoding="utf-8")
+    with pytest.raises(GitHubError, match="page_count"):
+        load_cassette(path)
+
+
+def test_load_cassette_rejects_wrong_schema_version(tmp_path: Path):
+    path = tmp_path / "bad.json"
+    payload = json.loads(dumps_cassette(pr89_multipage_pages()[:1]))
+    payload["schema_version"] = "github_page_cassette_v0"
+    path.write_text(json.dumps(payload), encoding="utf-8")
+    with pytest.raises(GitHubError, match="schema_version"):
+        load_cassette(path)
+
+
+def test_recording_uses_request_url_not_redirect_target():
+    requested = f"{API}/repos/old-owner/old-name/pulls/89"
+    final = f"{API}/repos/{REPO}/pulls/89"
+
+    class RedirectOpener:
+        def open(self, fullurl, data=None, timeout=None):  # noqa: ANN001
+            del data, timeout
+            req = fullurl if isinstance(fullurl, urllib.request.Request) else urllib.request.Request(fullurl)
+            return FakeResponse(_json_bytes(_load_github("pull_89.json")), _headers(), final, 200)
+
+    recorder = RecordingOpener(RedirectOpener())
+    client = GitHubClient(token="x", opener=recorder, sleep_fn=lambda _s: None)
+    payload = client.get_json(requested)
+    assert payload["merged"] is True
+    assert recorder.pages[0]["url"] == requested
+    replayed = replay_github_client(recorder.pages).get_json(requested)
+    assert replayed["merged"] is True
+
+
+def test_recording_returns_raw_body_to_collector():
+    token = "ghp_" + ("D" * 36)
+    live = ScriptedOpener(
+        [(200, _headers(), _json_bytes({"body": token, "path": "/home/raulmc/secret"}))]
+    )
+    recorder = RecordingOpener(live)
+    client = GitHubClient(token="x", opener=recorder, sleep_fn=lambda _s: None)
+    payload = client.get_json(f"{API}/repos/{REPO}/pulls/89")
+    assert payload["body"] == token
+    assert payload["path"] == "/home/raulmc/secret"
+    dumped = dumps_cassette(recorder.pages)
+    assert token not in dumped
+    assert "/home/raulmc" not in dumped
+
+
+class _FalseyOpener:
+    def __bool__(self) -> bool:
+        return False
+
+    def open(self, fullurl, data=None, timeout=None):  # noqa: ANN001
+        del data, timeout
+        req = fullurl if isinstance(fullurl, urllib.request.Request) else urllib.request.Request(fullurl)
+        return FakeResponse(_json_bytes({"ok": True}), _headers(), req.full_url, 200)
+
+
+def test_falsey_custom_opener_is_kept():
+    opener = _FalseyOpener()
+    client = GitHubClient(token="x", opener=opener, sleep_fn=lambda _s: None)
+    assert client._opener is opener
+    assert client.get_json(f"{API}/repos/{REPO}/pulls/1") == {"ok": True}
+
+
+def test_cassette_write_failure_returns_collector_error(tmp_path: Path, monkeypatch: pytest.MonkeyPatch):
+    def boom(path: Path, pages: list[dict[str, Any]]) -> Path:
+        del path, pages
+        raise OSError("disk full")
+
+    monkeypatch.setattr(collect_mod, "write_cassette", boom)
+    monkeypatch.setattr(
+        collect_mod.GitHubClient,
+        "from_env",
+        classmethod(lambda cls, env_name="GITHUB_TOKEN": replay_github_client(TRAJECTORY_CASSETTE)),
+    )
+    rc = collect_mod.main(
+        [
+            "--repo",
+            REPO,
+            "--pr",
+            "89",
+            "--out-dir",
+            str(tmp_path / "raw"),
+            "--record-pages",
+            str(tmp_path / "out.json"),
+        ]
+    )
+    assert rc == 1

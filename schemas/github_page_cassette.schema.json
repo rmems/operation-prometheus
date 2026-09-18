@@ -1,0 +1,41 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "https://github.com/rmems/operation-prometheus/schemas/github_page_cassette.schema.json",
+  "title": "GitHub page cassette v1",
+  "type": "object",
+  "required": ["schema_version", "page_count", "pages"],
+  "additionalProperties": false,
+  "properties": {
+    "schema_version": { "const": "github_page_cassette_v1" },
+    "page_count": { "type": "integer", "minimum": 0 },
+    "pages": {
+      "type": "array",
+      "items": { "$ref": "#/definitions/page" }
+    }
+  },
+  "definitions": {
+    "page": {
+      "type": "object",
+      "required": ["kind", "method", "url", "status"],
+      "properties": {
+        "kind": { "type": "string" },
+        "method": { "type": "string" },
+        "url": { "type": "string" },
+        "status": { "type": "integer" },
+        "seq": { "type": "integer" },
+        "etag": { "type": ["string", "null"] },
+        "body": {},
+        "body_text": { "type": ["string", "null"] },
+        "malformed_json": { "type": "boolean" },
+        "truncated": { "type": "boolean" },
+        "duplicate": { "type": "boolean" },
+        "duplicate_of": { "type": ["integer", "null"] },
+        "headers": { "type": "object" },
+        "request": { "type": "object" },
+        "identity": { "type": "object" },
+        "pagination": { "type": "object" },
+        "rate_limit": { "type": "object" }
+      }
+    }
+  }
+}

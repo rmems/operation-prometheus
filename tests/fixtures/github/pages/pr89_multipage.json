@@ -9,8 +9,10 @@
         },
         "body": "## Summary\nFix CUDA teardown and document Tier 0-5 ladder.\n\nCloses #74\n\n## Validation\n- cargo test --no-default-features passed\n- compute-sanitizer memcheck: ERROR SUMMARY: 0 errors\n",
         "changed_files": 3,
+        "closed_at": "2026-05-27T06:13:36Z",
         "comments": 2,
         "commits": 3,
+        "created_at": "2026-05-27T00:00:00Z",
         "deletions": 143,
         "draft": false,
         "head": {
@@ -31,6 +33,7 @@
         "review_comments": 1,
         "state": "closed",
         "title": "feat(gpu): add CUDA validation ladder",
+        "updated_at": "2026-05-27T06:13:36Z",
         "user": {
           "login": "rmems",
           "type": "User"
@@ -49,7 +52,7 @@
         "x-ratelimit-resource": "core"
       },
       "identity": {
-        "body_sha256": "b9cbba32c1f267ec205ebb420ef1f5d28d1ae5fb2751cd2787cabcb4dcdf330f",
+        "body_sha256": "76d4800988ed74925f0e2ef468db7e09d230830892cf3bb358b599e11355a0df",
         "etag": "W/\"stable-etag\"",
         "status": 200
       },
@@ -215,9 +218,13 @@
         },
         {
           "body": "Document GGUF_CHECKPOINT_PATH in the Tier 1 commands.",
+          "commit_id": "def",
           "created_at": "2026-05-27T01:05:00Z",
+          "diff_hunk": "@@ -1,3 +1,3 @@",
           "id": 2,
+          "in_reply_to_id": 1,
           "line": 12,
+          "original_commit_id": "abc",
           "path": "docs/CUDA_VALIDATION.md",
           "user": {
             "login": "reviewer-x",
@@ -238,7 +245,7 @@
         "x-ratelimit-resource": "core"
       },
       "identity": {
-        "body_sha256": "46ab84cdd55227c57a96bdde518a1d6a2e2d5d6462a517daf8094b5c1b851c61",
+        "body_sha256": "dcc7b2aec2a2a6a15d431db2a07df60f32b615327649371bc5562124dedd4f2d",
         "etag": "W/\"stable-etag\"",
         "status": 200
       },
@@ -506,15 +513,21 @@
       "body": {
         "check_runs": [
           {
+            "completed_at": "2026-05-27T03:10:00Z",
             "conclusion": "success",
+            "head_sha": "def",
             "html_url": "https://github.com/rmems/corinth-canal/actions",
             "name": "CUDA Build",
+            "started_at": "2026-05-27T03:00:00Z",
             "status": "completed"
           },
           {
+            "completed_at": "2026-05-27T03:12:00Z",
             "conclusion": "success",
+            "head_sha": "def",
             "html_url": "https://github.com/rmems/corinth-canal/actions",
             "name": "CPU tests",
+            "started_at": "2026-05-27T03:00:00Z",
             "status": "completed"
           }
         ]
@@ -532,7 +545,7 @@
         "x-ratelimit-resource": "core"
       },
       "identity": {
-        "body_sha256": "a9dd09ae9158ee0d853f9087a5ccba5e560be7fb2113c7b97412fdfdab00ecb1",
+        "body_sha256": "13fbb0f5dfcde5bedb870b9609841c99c8e709fe8a24fc468b34e56194a3d954",
         "etag": "W/\"stable-etag\"",
         "status": 200
       },
