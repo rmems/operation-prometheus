@@ -1,0 +1,44 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "https://github.com/rmems/operation-prometheus/schemas/corpus_shard_record.schema.json",
+  "title": "Operation Prometheus corpus shard record",
+  "description": "Thin accounting envelope for one frozen-inventory row owned by a corpus shard. Extra trajectory fields are permitted so the global merge can preserve shard-owned record bytes.",
+  "type": "object",
+  "required": [
+    "schema_version",
+    "candidate_id",
+    "repository_id",
+    "state",
+    "reason_codes"
+  ],
+  "properties": {
+    "schema_version": { "const": "corpus_shard_record_v1" },
+    "candidate_id": { "type": "string", "pattern": "^github:repository:.+:pull:.+$" },
+    "repository_id": { "type": "string", "minLength": 1 },
+    "repository_name_with_owner": { "type": "string", "minLength": 3 },
+    "state": {
+      "enum": [
+        "included_positive",
+        "included_negative",
+        "quarantined",
+        "excluded",
+        "watchlist_open"
+      ]
+    },
+    "reason_codes": {
+      "type": "array",
+      "minItems": 1,
+      "uniqueItems": true,
+      "items": { "type": "string", "minLength": 1 }
+    },
+    "trajectory_type": {
+      "type": ["string", "null"],
+      "enum": ["software", "research", null]
+    },
+    "trajectory_id": { "type": ["string", "null"], "minLength": 1 },
+    "trajectory_sha256": {
+      "type": ["string", "null"],
+      "pattern": "^[a-f0-9]{64}$"
+    }
+  }
+}
