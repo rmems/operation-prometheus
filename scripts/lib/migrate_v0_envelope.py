@@ -219,7 +219,10 @@ def _base_envelope(
 
 
 def _maybe_quality(envelope: dict[str, Any], quality: object) -> None:
-    if isinstance(quality, bool) or not isinstance(quality, (int, float)):
+    if isinstance(quality, bool):
         return
-    if math.isfinite(float(quality)):
-        envelope["evidence_quality"] = {"signal_to_noise": float(quality)}
+    if isinstance(quality, int):
+        envelope["evidence_quality"] = {"signal_to_noise": quality}
+        return
+    if isinstance(quality, float) and math.isfinite(quality):
+        envelope["evidence_quality"] = {"signal_to_noise": quality}

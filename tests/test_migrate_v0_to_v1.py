@@ -388,7 +388,7 @@ def test_non_string_validation_type_is_refused_not_raised():
     record["validation"] = [{"type": ["ci"], "result": "pass"}]
     decision = migrate_record(_line(record))
     assert decision["status"] == "refused"
-    assert decision["reason_codes"] == ["unknown_event"]
+    assert decision["reason_codes"] == ["v0_contract"]
 
 
 def test_incomplete_v0_object_is_refused():
@@ -411,3 +411,78 @@ def test_malformed_source_url_is_refused():
     decision = migrate_record(_line(record))
     assert decision["status"] == "refused"
     assert decision["reason_codes"] == ["malformed_source_url"]
+
+
+def test_migrate_files_refuses_source_out_alias(tmp_path):
+    source = tmp_path / "in.jsonl"
+    source.write_bytes(_fixture("v0_admissible.jsonl").read_bytes())
+    original = source.read_bytes()
+    try:
+        migrate_files(
+            [source], out_path=source, report_path=tmp_path / "report.json"
+        )
+    except RuntimeError as exc:
+        assert "overwrite source file" in str(exc)
+    else:
+        raise AssertionError("expected RuntimeError")
+    assert source.read_bytes() == original
+
+
+def test_large_integer_quality_score_does_not_abort():
+    record = _admissible()
+    record["quality_score"] = 10**1000
+    decision = migrate_record(_line(record))
+    assert decision["status"] == "refused"
+    assert decision["reason_codes"] == ["v0_contract"]
+
+
+def test_nested_v0_validation_result_is_refused():
+    record = _admissible()
+    record["validation"] = [{"type": "ci", "result": "bogus"}]
+    decision = migrate_record(_line(record))
+    assert decision["status"] == "refused"
+    assert decision["reason_codes"] == ["v0_contract"]
+
+
+def test_sub_microsecond_timestamp_is_refused():
+    record = _admissible()
+    record["timestamp"] = "2023-01-01T12:00:00.123456789Z"
+    decision = migrate_record(_line(record))
+    assert decision["status"] == "refused"
+    assert decision["reason_codes"] == ["malformed_timestamp"]
+
+
+def test_duplicate_json_keys_are_refused():
+    record = _admissible()
+    raw = json.dumps(record, separators=(",", ":"))
+    raw = raw[:-1] + ',"outcome":"closed"}'
+    decision = migrate_record((raw + "\n").encode("utf-8"))
+    assert decision["status"] == "refused"
+    assert decision["reason_codes"] == ["invalid_json"]
+
+
+def test_merged_outcome_requires_terminal_timestamp():
+    record = _admissible()
+    del record["timestamp"]
+    record["created_at"] = "2023-01-01T12:00:00Z"
+    decision = migrate_record(_line(record))
+    assert decision["status"] == "refused"
+    assert decision["reason_codes"] == ["missing_terminal_timestamp"]
+
+
+def test_open_outcome_maps_to_interrupted():
+    record = _admissible()
+    record["outcome"] = "open"
+    decision = migrate_record(_line(record))
+    assert decision["status"] == "admitted"
+    assert decision["output_record"]["terminal_disposition"] == "interrupted"
+
+
+def test_overflow_numeric_literal_is_refused():
+    record = _admissible()
+    line = (
+        json.dumps(record, separators=(",", ":")).replace("0.85", "1e999") + "\n"
+    ).encode("utf-8")
+    decision = migrate_record(line)
+    assert decision["status"] == "refused"
+    assert decision["reason_codes"] == ["invalid_json"]

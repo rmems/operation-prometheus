@@ -2,14 +2,19 @@
 
 from __future__ import annotations
 
+import re
 from datetime import datetime, timezone
 from typing import Any
 
-from .migrate_v0_constants import TIMESTAMP_KEYS
+from .migrate_v0_constants import TERMINAL_TIMESTAMP_KEYS, TIMESTAMP_KEYS
+
+_OVERLONG_FRACTION = re.compile(r"\.\d{7,}")
 
 
 def parse_utc_timestamp(value: str) -> str | None:
     """Normalize a timezone-aware instant. Naive values are refused."""
+    if _OVERLONG_FRACTION.search(value):
+        return None
     try:
         iso_ts = value[:-1] + "+00:00" if value.endswith(("Z", "z")) else value
         parsed = datetime.fromisoformat(iso_ts)
@@ -29,11 +34,16 @@ def _format_utc(utc: datetime) -> str:
 
 def extract_timestamp(record: dict[str, Any]) -> tuple[str | None, str | None]:
     """Return (timestamp, error_code). error_code is set on malformed values."""
-    for key in TIMESTAMP_KEYS:
+    keys = TERMINAL_TIMESTAMP_KEYS.get(record.get("outcome"), TIMESTAMP_KEYS)
+    for key in keys:
         parsed = _timestamp_from_key(record, key)
         if parsed is None:
             continue
         return parsed
+    if record.get("outcome") in TERMINAL_TIMESTAMP_KEYS and any(
+        key in record for key in TIMESTAMP_KEYS
+    ):
+        return None, "missing_terminal_timestamp"
     return None, "unavailable_timestamp"
 
 

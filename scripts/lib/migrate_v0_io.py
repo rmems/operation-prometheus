@@ -33,8 +33,7 @@ def migrate_files(
     report_path: Path,
 ) -> dict[str, Any]:
     """Migrate one or more JSONL files into out_path + report_path."""
-    if resolved_same(out_path, report_path):
-        raise RuntimeError("output and report paths must be different")
+    _refuse_aliased_destinations(inputs, out_path, report_path)
     validator = v1_validator()
     sink = _BatchSink()
     input_rows: list[dict[str, Any]] = []
@@ -53,6 +52,20 @@ def migrate_files(
     atomic_write_text(out_path, admitted_text)
     atomic_write_text(report_path, canonical_dumps(report) + "\n")
     return report
+
+
+def _refuse_aliased_destinations(
+    inputs: list[Path], out_path: Path, report_path: Path
+) -> None:
+    if resolved_same(out_path, report_path):
+        raise RuntimeError("output and report paths must be different")
+    for source in inputs:
+        if resolved_same(source, out_path):
+            raise RuntimeError(f"refusing to overwrite source file: {source}")
+        if resolved_same(source, report_path):
+            raise RuntimeError(
+                f"refusing to overwrite source file with the report: {source}"
+            )
 
 
 def _migrate_bytes(raw: bytes, *, input_path: str) -> tuple[str, dict[str, Any]]:

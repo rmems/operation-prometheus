@@ -118,12 +118,16 @@ def _refuse_timestamp(parsed: dict[str, Any], meta: SourceMeta) -> dict[str, Any
     _timestamp, ts_error = extract_timestamp(parsed)
     if ts_error is None:
         return None
-    detail = (
-        "source timestamp is not a parseable UTC instant"
-        if ts_error == "malformed_timestamp"
-        else "source has no timestamp; refusing rather than fabricating one"
-    )
+    detail = _timestamp_refusal_detail(ts_error)
     return _record_refusal(parsed, meta, [ts_error], detail)
+
+
+def _timestamp_refusal_detail(ts_error: str) -> str:
+    if ts_error == "malformed_timestamp":
+        return "source timestamp is not a parseable UTC instant"
+    if ts_error == "missing_terminal_timestamp":
+        return "terminal outcome has only nonterminal lifecycle timestamps"
+    return "source has no timestamp; refusing rather than fabricating one"
 
 
 def _refuse_code_state(parsed: dict[str, Any], meta: SourceMeta) -> dict[str, Any] | None:

@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import re
 
-MIGRATION_TOOL_VERSION = "migrate-v0-to-v1/0.2.0"
+MIGRATION_TOOL_VERSION = "migrate-v0-to-v1/0.2.1"
 V1_SCHEMA_VERSIONS = frozenset({"1", "1.0", "v1"})
 SOURCE_SCHEMA = "pr_trajectory_v0"
 COLLECTION_POLICY = "migrated-from-pr_trajectory_v0"
@@ -16,10 +16,15 @@ OUTCOME_TO_TERMINAL = {
     "merged": "successful",
     "closed": "failed",
     "abandoned": "interrupted",
-    "open": "inconclusive",
+    "open": "interrupted",
 }
 UNMAPPABLE_OUTCOMES = frozenset({"superseded"})
 TIMESTAMP_KEYS = ("timestamp", "merged_at", "closed_at", "created_at", "updated_at")
+TERMINAL_TIMESTAMP_KEYS = {
+    "merged": ("timestamp", "merged_at"),
+    "closed": ("timestamp", "closed_at"),
+    "abandoned": ("timestamp", "closed_at"),
+}
 OID_FIELD_MAP = (
     ("commit_oid", "commit_oid"),
     ("merge_commit_sha", "commit_oid"),

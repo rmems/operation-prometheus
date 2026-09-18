@@ -4,9 +4,10 @@ from __future__ import annotations
 
 import hashlib
 import json
+import math
 from typing import Any
 
-from validate_jsonl import SCHEMA_V1_PATH, load_schema
+from validate_jsonl import SCHEMA_V0_PATH, SCHEMA_V1_PATH, load_schema
 
 try:
     import jsonschema
@@ -32,19 +33,78 @@ def reject_nonfinite(name: str) -> None:
 
 def parse_json_object(source_text: str) -> tuple[dict[str, Any] | None, str, str]:
     """Parse one JSON object. Returns (object, reason_code, detail)."""
+    parsed, reason, detail = _loads_json_object(source_text)
+    if parsed is None:
+        return None, reason, detail
     try:
-        parsed = json.loads(source_text, parse_constant=reject_nonfinite)
+        reject_nonfinite_tree(parsed)
+        canonical_dumps(parsed).encode("utf-8")
+    except UnicodeEncodeError:
+        return None, "unencodable_json", "parsed JSON is not UTF-8 encodable"
+    except ValueError as exc:
+        return None, "invalid_json", str(exc)
+    return parsed, "", ""
+
+
+def _loads_json_object(source_text: str) -> tuple[dict[str, Any] | None, str, str]:
+    try:
+        parsed = json.loads(
+            source_text,
+            parse_constant=reject_nonfinite,
+            object_pairs_hook=_unique_object,
+        )
     except json.JSONDecodeError as exc:
         return None, "invalid_json", f"invalid JSON: {exc}"
     except ValueError as exc:
         return None, "invalid_json", str(exc)
     if not isinstance(parsed, dict):
         return None, "not_an_object", "JSONL record is not an object"
-    try:
-        canonical_dumps(parsed).encode("utf-8")
-    except UnicodeEncodeError:
-        return None, "unencodable_json", "parsed JSON is not UTF-8 encodable"
     return parsed, "", ""
+
+
+def _unique_object(pairs: list[tuple[Any, Any]]) -> dict[str, Any]:
+    seen: set[Any] = set()
+    parsed: dict[str, Any] = {}
+    for key, value in pairs:
+        if key in seen:
+            raise ValueError(f"duplicate JSON object key: {key}")
+        seen.add(key)
+        parsed[key] = value
+    return parsed
+
+
+def reject_nonfinite_tree(value: object) -> None:
+    """Refuse parsed inf/NaN that did not go through parse_constant."""
+    if _is_nonfinite_number(value):
+        raise ValueError("non-finite JSON number")
+    _walk_nonfinite_children(value)
+
+
+def _is_nonfinite_number(value: object) -> bool:
+    return isinstance(value, float) and not math.isfinite(value)
+
+
+def _walk_nonfinite_children(value: object) -> None:
+    children = _nested_json_values(value)
+    for item in children:
+        reject_nonfinite_tree(item)
+
+
+def _nested_json_values(value: object) -> list[object]:
+    if isinstance(value, dict):
+        return list(value.values())
+    if isinstance(value, list):
+        return list(value)
+    return []
+
+
+def v0_validator() -> Any:
+    if jsonschema is None:
+        raise RuntimeError("jsonschema is required. Install with: pip install jsonschema")
+    schema = load_schema(SCHEMA_V0_PATH)
+    return jsonschema.Draft7Validator(
+        schema, format_checker=jsonschema.Draft7Validator.FORMAT_CHECKER
+    )
 
 
 def v1_validator() -> Any:
