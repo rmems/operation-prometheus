@@ -79,6 +79,9 @@ def main(argv: list[str] | None = None) -> int:
         if resolved_same(source, report_path):
             logger.error("refusing to overwrite source file with the report: %s", source)
             return 2
+    if resolved_same(out_path, report_path):
+        logger.error("output and report paths must be different")
+        return 2
 
     try:
         report = migrate_files(inputs, out_path=out_path, report_path=report_path)

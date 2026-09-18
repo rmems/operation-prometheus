@@ -252,3 +252,162 @@ def test_migrate_jsonl_helper_matches_file_path(tmp_path):
     file_report = json.loads(report_path.read_text(encoding="utf-8"))
     assert report["admitted_count"] == file_report["admitted_count"]
     assert report["records"][0]["source_sha256"] == file_report["records"][0]["source_sha256"]
+
+
+def _admissible() -> dict:
+    return json.loads(_fixture("v0_admissible.jsonl").read_text(encoding="utf-8"))
+
+
+def _line(record: dict) -> bytes:
+    return (json.dumps(record, ensure_ascii=False, separators=(",", ":")) + "\n").encode("utf-8")
+
+
+def test_digest_uses_original_source_bytes():
+    line = _fixture("v0_admissible.jsonl").read_bytes().rstrip(b"\n") + b"\r\n"
+    decision = migrate_record(line)
+    assert decision["status"] == "admitted"
+    raw = line.rstrip(b"\r\n")
+    artifact = decision["output_record"]["artifacts"][0]
+    assert artifact["byte_size"] == len(raw)
+    assert artifact["sha256"] == hashlib.sha256(raw).hexdigest()
+    assert artifact["sha256"] == decision["source_sha256"]
+
+
+def test_nonfinite_json_constants_are_refused():
+    record = _admissible()
+    line = (
+        json.dumps(record, separators=(",", ":")).replace("0.85", "NaN") + "\n"
+    ).encode("utf-8")
+    decision = migrate_record(line)
+    assert decision["status"] == "refused"
+    assert decision["reason_codes"] == ["invalid_json"]
+    assert decision["output_record"] is None
+
+
+def test_cli_rejects_identical_out_and_report(tmp_path):
+    source = tmp_path / "in.jsonl"
+    source.write_bytes(_fixture("v0_admissible.jsonl").read_bytes())
+    dest = tmp_path / "same.jsonl"
+    rc = main(["--out", str(dest), "--report", str(dest), str(source)])
+    assert rc == 2
+    assert not dest.exists()
+
+
+def test_atomic_write_does_not_clobber_source_named_like_tmp(tmp_path):
+    source = tmp_path / "out.jsonl.tmp"
+    source.write_bytes(_fixture("v0_admissible.jsonl").read_bytes())
+    original = source.read_bytes()
+    out = tmp_path / "out.jsonl"
+    report = tmp_path / "report.json"
+    rc = main(["--out", str(out), "--report", str(report), str(source)])
+    assert rc == 0
+    assert source.read_bytes() == original
+    assert out.is_file()
+
+
+def test_naive_timestamp_is_refused_not_assigned_utc():
+    record = _admissible()
+    record["timestamp"] = "2023-01-01T12:00:00"
+    decision = migrate_record(_line(record))
+    assert decision["status"] == "refused"
+    assert decision["reason_codes"] == ["malformed_timestamp"]
+
+
+def test_fractional_seconds_are_preserved():
+    record = _admissible()
+    record["timestamp"] = "2023-01-01T12:00:00.999999Z"
+    decision = migrate_record(_line(record))
+    assert decision["status"] == "admitted"
+    assert decision["output_record"]["events"][0]["timestamp"] == "2023-01-01T12:00:00.999999Z"
+
+
+def test_timezone_overflow_is_refused():
+    record = _admissible()
+    record["timestamp"] = "0001-01-01T00:00:00+14:00"
+    decision = migrate_record(_line(record))
+    assert decision["status"] == "refused"
+    assert decision["reason_codes"] == ["malformed_timestamp"]
+
+
+def test_conflicting_oid_aliases_are_refused():
+    record = _admissible()
+    record["commit_oid"] = "abc"
+    record["merge_commit_sha"] = "def"
+    decision = migrate_record(_line(record))
+    assert decision["status"] == "refused"
+    assert decision["reason_codes"] == ["conflicting_commit_oid"]
+
+
+def test_lone_surrogate_is_refused():
+    record = _admissible()
+    raw = json.dumps(record, separators=(",", ":")).replace(
+        "CI was flaky", "CI was flaky \\ud800"
+    )
+    decision = migrate_record((raw + "\n").encode("utf-8"))
+    assert decision["status"] == "refused"
+    assert decision["reason_codes"] == ["unencodable_json"]
+
+
+def test_superseded_is_not_relabeled_reverted():
+    record = _admissible()
+    record["outcome"] = "superseded"
+    decision = migrate_record(_line(record))
+    assert decision["status"] == "refused"
+    assert decision["reason_codes"] == ["unmappable_outcome"]
+    assert decision["output_record"] is None
+
+
+def test_physical_line_numbers_include_blank_lines(tmp_path):
+    chunks = [
+        b"",
+        _fixture("v0_admissible.jsonl").read_bytes().rstrip(b"\n"),
+        b"",
+        _fixture("missing_commit_oid.jsonl").read_bytes().rstrip(b"\n"),
+    ]
+    source = tmp_path / "blank.jsonl"
+    source.write_bytes(b"\n".join(chunks) + b"\n")
+    report = migrate_files(
+        [source], out_path=tmp_path / "out.jsonl", report_path=tmp_path / "report.json"
+    )
+    assert [row["line"] for row in report["records"]] == [2, 4]
+    assert report["records"][0]["status"] == "admitted"
+    assert report["records"][1]["reason_codes"] == ["unavailable_commit_oid"]
+
+
+def test_jsonl_does_not_split_on_unicode_line_separators():
+    record = _admissible()
+    record["issue_context"] = "hello\u0085world"
+    admitted, report = migrate_jsonl(json.dumps(record, ensure_ascii=False) + "\n")
+    assert report["admitted_count"] == 1
+    assert report["refused_count"] == 0
+    assert admitted
+
+
+def test_non_string_validation_type_is_refused_not_raised():
+    record = _admissible()
+    record["validation"] = [{"type": ["ci"], "result": "pass"}]
+    decision = migrate_record(_line(record))
+    assert decision["status"] == "refused"
+    assert decision["reason_codes"] == ["unknown_event"]
+
+
+def test_incomplete_v0_object_is_refused():
+    record = {
+        "id": "only-core",
+        "repo": "rmems/ci-demo",
+        "outcome": "merged",
+        "patch": "--- a/x\n+++ b/x",
+        "timestamp": "2023-01-01T12:00:00Z",
+        "head_oid": "abc",
+    }
+    decision = migrate_record(_line(record))
+    assert decision["status"] == "refused"
+    assert decision["reason_codes"] == ["v0_contract"]
+
+
+def test_malformed_source_url_is_refused():
+    record = _admissible()
+    record["source_urls"] = ["not-a-github-pr"]
+    decision = migrate_record(_line(record))
+    assert decision["status"] == "refused"
+    assert decision["reason_codes"] == ["malformed_source_url"]
