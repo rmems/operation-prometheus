@@ -1,0 +1,163 @@
+scripts/lib/normalize_v1_common.py
+  s_4d9f586cc5507d::t_292c0eb89f3c35 1-43
+scripts/lib/corpus_shard_inventory.py
+  s_4d9f586cc5507d::t_292c0eb89f3c35 1-116
+scripts/lib/normalize_v1_append.py
+  s_4d9f586cc5507d::t_292c0eb89f3c35 1-130
+schemas/corpus_shard_manifest.schema.json
+  s_4d9f586cc5507d::t_292c0eb89f3c35 1-81
+tests/fixtures/github/pull_89.json
+  s_4d9f586cc5507d::t_292c0eb89f3c35 7-9
+tests/test_merge_corpus_shards.py
+  s_4d9f586cc5507d::t_292c0eb89f3c35 1-244
+scripts/lib/paths.py
+  s_4d9f586cc5507d::t_292c0eb89f3c35 42-67
+tests/corpus_shard_fixtures.py
+  s_4d9f586cc5507d::t_292c0eb89f3c35 1-253
+schemas/trajectory_v1.schema.json
+  s_4d9f586cc5507d::t_292c0eb89f3c35 6-16,134,151-209
+scripts/lib/github_client.py
+  s_4d9f586cc5507d::t_5723679e9c384c 75-78
+tests/fixtures/github/check_runs_89.json
+  s_4d9f586cc5507d::t_292c0eb89f3c35 7-10,16-19
+README.md
+  s_4d9f586cc5507d::t_292c0eb89f3c35 113-114
+tests/fixtures/v1/research_valid.jsonl
+  s_4d9f586cc5507d::t_292c0eb89f3c35 1
+scripts/lib/resume_state.py
+  s_4d9f586cc5507d::t_292c0eb89f3c35 1-160
+scripts/build_trajectory_jsonl.py
+  s_4d9f586cc5507d::t_292c0eb89f3c35 10-15,27-32,41-44,50-53,89-99,120-126,129-130,132-169,171,173,176,178-198,200,205-219,222-229,237,240
+scripts/merge_corpus_shards.py
+  s_4d9f586cc5507d::t_292c0eb89f3c35 1-210
+tests/fixtures/v1/research_no_disposition.jsonl
+  s_4d9f586cc5507d::t_292c0eb89f3c35 1
+scripts/lib/inventory_io.py
+  s_4d9f586cc5507d::t_292c0eb89f3c35 1-50
+scripts/lib/github_page_truncate.py
+  s_2369201a08ac97::t_8a9cc1c44bf5d0 1-35
+datasets/README.md
+  s_4d9f586cc5507d::t_292c0eb89f3c35 31,35,42-43,57-60
+scripts/lib/github_page_sanitize.py
+  s_4d9f586cc5507d::t_3aba1f01afd4f2 2-7,9-10,24-76,78-141
+  s_2369201a08ac97::t_0dc062098a5f61 1,8,11-23
+  s_2369201a08ac97::t_8c8a7aa6bf7307 77
+tests/fixtures/github/review_comments_89.json
+  s_4d9f586cc5507d::t_292c0eb89f3c35 22-25
+scripts/collect_pr_records.py
+  ai_agent 7-8,14-15,17-20,30,33,41-58,64-95,109-128,131-147,149-158,163,165-166,169-181,186-189,195-207,212,222,227,232,244-303,313-316,318,322-325,327,329-334,336-344,353-363,365-382,384-404,408-593
+scripts/lib/corpus_shard_common.py
+  s_4d9f586cc5507d::t_292c0eb89f3c35 1-179
+scripts/lib/github_page_transport.py
+  s_4d9f586cc5507d::t_53c51e3b50ba71 1-91,101-108,119-138,140-206
+  s_2369201a08ac97::t_dec1b919e4d7fc 109
+  s_4d9f586cc5507d::t_639249fcdb9e23 139
+  s_2369201a08ac97::t_29483d0df87909 92-100,110-118
+scripts/lib/inventory_targets.py
+  s_4d9f586cc5507d::t_292c0eb89f3c35 1-170
+tests/test_github_page_fixtures.py
+  s_4d9f586cc5507d::t_a96a923ed7c8f3 119,130,132-133
+  s_2369201a08ac97::t_4514d6362c83fa 546-547
+  s_4d9f586cc5507d::t_5355450bf0555c 17,20
+  s_4d9f586cc5507d::t_edf69825356ec5 127-129,131,134
+  s_4d9f586cc5507d::t_36b6de0cfb5cf6 308
+  s_4d9f586cc5507d::t_154d62d244f547 319
+  s_4d9f586cc5507d::t_47c6c154da7eeb 223-229
+  s_2369201a08ac97::t_d6db71c084cc0b 492-545,548-605
+scripts/lib/github_page_envelope.py
+  s_2369201a08ac97::t_a89657793fe88e 11-14
+  s_4d9f586cc5507d::t_61417f0ee87415 1-10,15-32,34,36-96
+  s_2369201a08ac97::t_e0fb4584d95aea 33,35
+scripts/validate_jsonl.py
+  s_4d9f586cc5507d::t_292c0eb89f3c35 98-120,174-179,193
+tests/fixtures/v1/missing_snapshot.jsonl
+  s_4d9f586cc5507d::t_292c0eb89f3c35 1
+scripts/lib/github_page_kinds.py
+  s_2369201a08ac97::t_d9c324c674fb06 1-47
+tests/test_event_collector.py
+  s_4d9f586cc5507d::t_292c0eb89f3c35 1-507
+schemas/corpus_global_manifest.schema.json
+  s_4d9f586cc5507d::t_292c0eb89f3c35 1-107
+docs/data-policy.md
+  s_4d9f586cc5507d::t_292c0eb89f3c35 39
+scripts/lib/normalize_v1_check_events.py
+  s_4d9f586cc5507d::t_292c0eb89f3c35 1-122
+tests/test_v1_schema.py
+  s_4d9f586cc5507d::t_292c0eb89f3c35 295-310
+scripts/lib/trajectory_emit.py
+  s_4d9f586cc5507d::t_292c0eb89f3c35 1-129
+scripts/lib/normalize_v1.py
+  s_4d9f586cc5507d::t_292c0eb89f3c35 1-128
+docs/event-collector.md
+  s_4d9f586cc5507d::t_292c0eb89f3c35 1-81
+scripts/lib/github_page_body.py
+  s_2369201a08ac97::t_17ed233f83ac17 1-36
+tests/fixtures/v1/empty_research_payload.jsonl
+  s_4d9f586cc5507d::t_292c0eb89f3c35 1
+scripts/lib/github_page_fixtures.py
+  s_4d9f586cc5507d::t_ddfe0082926a59 10-18,20,22-27,29-34,37-61
+  s_2369201a08ac97::t_d0a2493f659bc6 21
+tests/fixtures/github/pages/pr89_multipage.json
+  ai_agent 12,15,36,55,221,223,225,227,248,516,518,521,525,527,530,548
+scripts/lib/corpus_shards.py
+  s_4d9f586cc5507d::t_292c0eb89f3c35 1-153
+scripts/lib/normalize_v1_payload.py
+  s_4d9f586cc5507d::t_292c0eb89f3c35 1-150
+scripts/lib/corpus_shard_verify.py
+  s_4d9f586cc5507d::t_292c0eb89f3c35 1-253
+scripts/lib/raw_record.py
+  s_4d9f586cc5507d::t_292c0eb89f3c35 7,13-20,23,49,56-75,87-95,103-104,117-124,128,130-134,148-150,157-158,163,165-166,174,179-180,216-522,527,531,533-536,538,543,549,563-568,570-607,609-610,624,626-629,635,638-640,646,654-694,699,701,705-708,712
+scripts/lib/normalize_v1_events.py
+  s_4d9f586cc5507d::t_292c0eb89f3c35 1-221
+tests/fixtures/v1/unanchored_event.jsonl
+  s_4d9f586cc5507d::t_292c0eb89f3c35 1
+scripts/lib/normalize_v1_ci_events.py
+  s_4d9f586cc5507d::t_292c0eb89f3c35 1-98
+scripts/lib/cas.py
+  s_4d9f586cc5507d::t_292c0eb89f3c35 1-172
+schemas/corpus_shard_record.schema.json
+  s_4d9f586cc5507d::t_292c0eb89f3c35 1-44
+tests/test_collect_and_normalize.py
+  s_4d9f586cc5507d::t_292c0eb89f3c35 28-129,138-141,150-153
+schemas/github_page_cassette.schema.json
+  s_4d9f586cc5507d::t_c2dab3ed7caa6f 1-41
+scripts/lib/normalize_v1_artifacts.py
+  s_4d9f586cc5507d::t_292c0eb89f3c35 1-166
+scripts/lib/github_page_cassette.py
+  s_4d9f586cc5507d::t_df76aad031dc61 1-77,93,112-139
+  s_2369201a08ac97::t_9ee0476c11b4c0 78-92,94-111
+scripts/lib/collect_events.py
+  s_4d9f586cc5507d::t_292c0eb89f3c35 1-272
+scripts/lib/snapshots.py
+  s_4d9f586cc5507d::t_292c0eb89f3c35 1-344
+.gitignore
+  s_4d9f586cc5507d::t_292c0eb89f3c35 46-48
+docs/corpus-shard-merge.md
+  s_4d9f586cc5507d::t_292c0eb89f3c35 1-56
+scripts/lib/normalize_v1_event_spec.py
+  s_4d9f586cc5507d::t_292c0eb89f3c35 1-45
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.5.2",
+  "base_commit_sha": "a958c73f1788a8f19466fe7b64df8d3edac334ae",
+  "prompts": {},
+  "sessions": {
+    "s_2369201a08ac97": {
+      "agent_id": {
+        "tool": "cursor",
+        "id": "df0473b9-8e6d-4b07-8604-3ddde56feeaf",
+        "model": "grok-4.6"
+      },
+      "human_author": "Raul Cardenas Montoya <montoyaraul34@gmail.com>"
+    },
+    "s_4d9f586cc5507d": {
+      "agent_id": {
+        "tool": "cursor",
+        "id": "7ba47837-16c5-47ef-9079-cd3aa168ca6a",
+        "model": "grok-4.6"
+      },
+      "human_author": "Raul Cardenas Montoya <montoyaraul34@gmail.com>"
+    }
+  }
+}
