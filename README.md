@@ -112,3 +112,5 @@ python scripts/validate_jsonl.py --strict-policy datasets/jsonl/corinth-canal-v0
 ```
 
 The collector performs **no write operations** to GitHub. Raw dumps must stay out of git (`datasets/raw/` is ignored).
+
+Inventory-driven batches, durable resume, and content-addressed git snapshots are documented in [docs/event-collector.md](docs/event-collector.md). `--repo`/`--pr` remain the compatible per-PR path. Emit typed v1 trajectories with `build_trajectory_jsonl.py --schema-version v1` (v0 remains the default).
