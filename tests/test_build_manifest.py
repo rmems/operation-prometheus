@@ -51,13 +51,86 @@ def test_manifest_sha_and_bytes_come_from_the_jsonl():
     jsonl = JSONL / "myelin-accelerator-v0.jsonl"
     card = json.loads((CARDS / "myelin-accelerator-v0.json").read_text())
     m = build_manifest(
-        jsonl, card, created_at="2026-01-01", created_by="test", name="myelin-accelerator-v0"
+        jsonl,
+        card,
+        created_at="2026-01-01",
+        created_by="test",
+        name="myelin-accelerator-v0",
     )
     data = jsonl.read_bytes()
     assert m["sha256"] == hashlib.sha256(data).hexdigest()
     assert m["bytes"] == len(data)
     assert m["record_count"] == 5
     assert m["source_repo"] == "rmems/myelin-accelerator"
+
+
+def test_generator_copies_license_closure_fields_from_the_card(tmp_path: Path):
+    from build_manifest import build_manifest
+
+    jsonl = tmp_path / "fixture.jsonl"
+    jsonl.write_text(
+        json.dumps(
+            {
+                "id": "rmems-widget-1",
+                "pr_number": 1,
+                "training_use": "repair",
+                "task_type": "bugfix",
+                "domain": "tools",
+                "language": "Python",
+                "quality_score": 0.9,
+                "outcome": "merged",
+            }
+        )
+        + "\n",
+        encoding="utf-8",
+    )
+    card = {
+        "schema_version": "pr_trajectory_v0",
+        "source_repo": "rmems/widget",
+        "source_license": "MIT",
+        "license_families": ["spdx"],
+        "unresolved_license_count": 0,
+    }
+    manifest = build_manifest(
+        jsonl, card, created_at="2026-01-01", created_by="test", name="fixture"
+    )
+    assert manifest["source_license"] == "MIT"
+    assert manifest["license_families"] == ["spdx"]
+    assert manifest["unresolved_license_count"] == 0
+
+
+def test_generator_omits_source_repo_for_plural_only_cards(tmp_path: Path):
+    from build_manifest import build_manifest
+
+    jsonl = tmp_path / "fixture.jsonl"
+    jsonl.write_text(
+        json.dumps(
+            {
+                "id": "rmems-widget-1",
+                "pr_number": 1,
+                "training_use": "repair",
+                "task_type": "bugfix",
+                "domain": "tools",
+                "language": "Python",
+                "quality_score": 0.9,
+                "outcome": "merged",
+            }
+        )
+        + "\n",
+        encoding="utf-8",
+    )
+    card = {
+        "schema_version": "pr_trajectory_v0",
+        "source_repos": ["rmems/widget", "Limen-Neural/axon-encoder"],
+        "source_license": "MIT",
+        "license_families": ["spdx"],
+        "unresolved_license_count": 0,
+    }
+    manifest = build_manifest(
+        jsonl, card, created_at="2026-01-01", created_by="test", name="fixture"
+    )
+    assert "source_repo" not in manifest
+    assert manifest["source_repos"] == ["rmems/widget", "Limen-Neural/axon-encoder"]
 
 
 def test_every_committed_manifest_is_generator_fresh():

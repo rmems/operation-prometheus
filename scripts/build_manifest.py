@@ -26,6 +26,17 @@ from typing import Any
 ROOT = Path(__file__).resolve().parent.parent
 
 
+def _reject_nonfinite(constant: str) -> None:
+    raise json.JSONDecodeError(f"non-finite constant {constant!r}", constant, 0)
+
+
+def _load_json(path: Path) -> Any:
+    return json.loads(
+        path.read_text(encoding="utf-8"),
+        parse_constant=_reject_nonfinite,
+    )
+
+
 def record_row(rec: dict[str, Any]) -> dict[str, Any]:
     """Summarize one trajectory record the way the manifest's records[] does."""
     signals = rec.get("review_signals") or []
@@ -58,13 +69,20 @@ def build_manifest(
     name: str,
 ) -> dict[str, Any]:
     data = jsonl_path.read_bytes()
-    records = [json.loads(line) for line in data.decode("utf-8").splitlines() if line.strip()]
+    records = [
+        json.loads(line) for line in data.decode("utf-8").splitlines() if line.strip()
+    ]
+    source_repo: dict[str, str] = {}
+    if "source_repo" in card:
+        singular = card["source_repo"]
+        if isinstance(singular, str) and singular.strip():
+            source_repo["source_repo"] = singular
     return {
         "name": name,
         "schema_version": str(card.get("schema_version") or "pr_trajectory_v0"),
         "created_at": created_at,
         "created_by": created_by,
-        "source_repo": str(card.get("source_repo") or ""),
+        **source_repo,
         "jsonl_path": jsonl_path.relative_to(ROOT).as_posix()
         if jsonl_path.is_relative_to(ROOT)
         else str(jsonl_path),
@@ -72,19 +90,40 @@ def build_manifest(
         "sha256": hashlib.sha256(data).hexdigest(),
         "bytes": len(data),
         "records": [record_row(r) for r in records],
+        **{
+            key: card[key]
+            for key in (
+                "source_repos",
+                "source_license",
+                "source_licenses",
+                "license_evidence_digest",
+                "license_evidence_digests",
+                "license_families",
+                "unresolved_license_count",
+            )
+            if key in card
+        },
     }
 
 
 def render(manifest: dict[str, Any]) -> str:
-    return json.dumps(manifest, indent=2, ensure_ascii=False) + "\n"
+    return json.dumps(manifest, indent=2, ensure_ascii=False, allow_nan=False) + "\n"
 
 
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--jsonl", type=Path, required=True, help="curated JSONL file")
-    parser.add_argument("--card", type=Path, help="dataset card (default: cards/<name>.json)")
-    parser.add_argument("--out", type=Path, help="manifest path (default: manifests/<name>.manifest.json)")
-    parser.add_argument("--created-at", help="override the preserved created_at (YYYY-MM-DD)")
+    parser.add_argument(
+        "--card", type=Path, help="dataset card (default: cards/<name>.json)"
+    )
+    parser.add_argument(
+        "--out",
+        type=Path,
+        help="manifest path (default: manifests/<name>.manifest.json)",
+    )
+    parser.add_argument(
+        "--created-at", help="override the preserved created_at (YYYY-MM-DD)"
+    )
     parser.add_argument("--created-by", help="override the preserved created_by")
     parser.add_argument(
         "--check",
@@ -97,10 +136,14 @@ def main(argv: list[str] | None = None) -> int:
     card_path = args.card or ROOT / "datasets" / "cards" / f"{name}.json"
     out_path = args.out or ROOT / "datasets" / "manifests" / f"{name}.manifest.json"
 
-    card = json.loads(card_path.read_text(encoding="utf-8"))
-    existing: dict[str, Any] = {}
-    if out_path.exists():
-        existing = json.loads(out_path.read_text(encoding="utf-8"))
+    try:
+        card = _load_json(card_path)
+        existing: dict[str, Any] = {}
+        if out_path.exists():
+            existing = _load_json(out_path)
+    except (OSError, UnicodeDecodeError, json.JSONDecodeError, ValueError) as exc:
+        print(f"ERROR: {exc}", file=sys.stderr)
+        return 2
 
     created_at = args.created_at or existing.get("created_at")
     created_by = args.created_by or existing.get("created_by")
@@ -134,7 +177,9 @@ def main(argv: list[str] | None = None) -> int:
         return 0
 
     if rendered == current:
-        print(f"{out_path.name} already up to date ({manifest['record_count']} records).")
+        print(
+            f"{out_path.name} already up to date ({manifest['record_count']} records)."
+        )
         return 0
     out_path.write_text(rendered, encoding="utf-8")
     print(f"Wrote {out_path.name} ({manifest['record_count']} records).")
