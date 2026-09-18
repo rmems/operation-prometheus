@@ -18,6 +18,10 @@ Inventory-driven batch with durable resume and content-addressed snapshots:
       --artifact-store "$PROMETHEUS_DATA_ROOT/artifacts" \\
       --resume-state "$PROMETHEUS_DATA_ROOT/collector-state.json" \\
       --snapshots
+
+    python scripts/collect_pr_records.py \\
+      --repo rmems/corinth-canal --pr 89 \\
+      --record-pages tests/fixtures/github/pages/pr89.json
 """
 
 from __future__ import annotations
@@ -36,6 +40,11 @@ if str(_SCRIPTS) not in sys.path:
 
 from lib.cas import ContentAddressedStore  # noqa: E402
 from lib.github_client import GitHubClient, GitHubError, parse_repo, repo_slug  # noqa: E402
+from lib.github_page_fixtures import (  # noqa: E402
+    RecordingOpener,
+    attach_page_recorder,
+    write_cassette,
+)
 from lib.inventory_targets import DEFAULT_STATES, load_inventory_targets  # noqa: E402
 from lib.paths import (  # noqa: E402
     DATA_ROOT_ENV,
@@ -220,6 +229,16 @@ def _add_collect_flags(parser: argparse.ArgumentParser) -> None:
         action="store_true",
         help="Print planned work without calling GitHub",
     )
+    parser.add_argument(
+        "--record-pages",
+        type=Path,
+        default=None,
+        metavar="PATH",
+        help=(
+            "Write a sanitized GitHub page cassette for offline replay. "
+            "Credentials, cookies, and unstable headers are never stored."
+        ),
+    )
 
 
 def build_parser() -> argparse.ArgumentParser:
@@ -299,17 +318,29 @@ def _run_per_pr(args: argparse.Namespace) -> int:
         return _per_pr_dry_run(full, prs, out_dir, args)
 
     client = GitHubClient.from_env(args.token_env)
+    recorder = attach_page_recorder(client) if args.record_pages is not None else None
     options = _options_from_args(args, store, include_snapshots)
     job = ListedPrJob(client=client, full=full, out_dir=out_dir, args=args, options=options)
-    failures = 0
-    collected = 0
-    skipped = 0
+    rc = 0
+    cassette_error: OSError | None = None
+    try:
+        rc = _collect_listed_prs(job, prs)
+    finally:
+        cassette_error = _write_page_cassette(args, recorder)
+    if cassette_error is not None:
+        logger.error("Failed to write page cassette: %s", cassette_error)
+        return 1
+    return rc
+
+
+def _collect_listed_prs(job: ListedPrJob, prs: list[int]) -> int:
+    collected = skipped = failures = 0
     for pr in prs:
         skipped_one, collected_one, failed = _collect_listed_pr(job, pr)
         skipped += skipped_one
         collected += collected_one
         failures += failed
-        if failed and not args.continue_on_error:
+        if failed and not job.args.continue_on_error:
             return 1
     if failures:
         logger.error(
@@ -319,8 +350,21 @@ def _run_per_pr(args: argparse.Namespace) -> int:
             skipped,
         )
         return 1
-    logger.info("Done: %s collected, %s skipped → %s", collected, skipped, out_dir)
+    logger.info("Done: %s collected, %s skipped → %s", collected, skipped, job.out_dir)
     return 0
+
+
+def _write_page_cassette(args: argparse.Namespace, recorder: RecordingOpener | None) -> OSError | None:
+    if recorder is None or args.record_pages is None:
+        return None
+    try:
+        write_cassette(args.record_pages, recorder.pages)
+    except OSError as exc:
+        return exc
+    logger.info(
+        "Wrote page cassette %s (%s pages)", args.record_pages, len(recorder.pages)
+    )
+    return None
 
 
 def _collect_listed_pr(job: ListedPrJob, pr: int) -> tuple[int, int, int]:
@@ -508,18 +552,9 @@ def _run_inventory(args: argparse.Namespace) -> int:
     client = GitHubClient.from_env(args.token_env)
     tallies = {"collected": 0, "skipped": 0, "quarantined": 0, "failed": 0}
     for item in run.items:
-        status = _collect_inventory_item(run, resume, client, item)
-        if status == "skipped":
-            tallies["skipped"] += 1
-            continue
-        if status == "failed":
-            tallies["failed"] += 1
-            if not args.continue_on_error:
-                return 1
-            continue
-        tallies["collected"] += 1
-        if status == "quarantined":
-            tallies["quarantined"] += 1
+        status = _count_inventory_status(tallies, _collect_inventory_item(run, resume, client, item))
+        if status == "failed" and not args.continue_on_error:
+            return 1
     logger.info(
         "Done: %s collected, %s skipped, %s quarantined, %s failed → %s",
         tallies["collected"],
@@ -530,6 +565,19 @@ def _run_inventory(args: argparse.Namespace) -> int:
     )
     logger.info("Resume state %s counts=%s", run.resume_path, resume.counts())
     return 1 if tallies["failed"] else 0
+
+
+def _count_inventory_status(tallies: dict[str, int], status: str) -> str:
+    if status == "skipped":
+        tallies["skipped"] += 1
+        return status
+    if status == "failed":
+        tallies["failed"] += 1
+        return status
+    tallies["collected"] += 1
+    if status == "quarantined":
+        tallies["quarantined"] += 1
+    return status
 
 
 def main(argv: list[str] | None = None) -> int:
