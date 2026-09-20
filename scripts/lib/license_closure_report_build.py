@@ -16,32 +16,27 @@ from .license_closure_report_bundle import (
 )
 
 
-def build_license_closure_report(
-    records: list[dict[str, Any]],
-    card: dict[str, Any],
-    manifest: dict[str, Any],
-    repositories: list[dict[str, Any]],
-    *,
-    snapshot_sha256: str,
-    pull_requests: list[dict[str, Any]] | None = None,
-    prior_repositories: list[dict[str, Any]] | None = None,
-    markdown_card: str | None = None,
-) -> dict[str, Any]:
-    """Build a deterministic license-closure manifest from frozen evidence."""
-    snapshot_sha256 = _require_snapshot(snapshot_sha256)
+def build_license_closure_report(bundle: dict[str, Any]) -> dict[str, Any]:
+    """Build a deterministic license-closure manifest from frozen evidence.
+
+    ``bundle`` carries ``records``, ``card``, ``manifest``, ``repositories``,
+    and ``snapshot_sha256`` plus optional ``pull_requests``,
+    ``prior_repositories``, and ``markdown_card``.
+    """
+    card = bundle.get("card")
+    manifest = bundle.get("manifest")
+    records = bundle.get("records")
     _require_objects(card, manifest, records)
+    snapshot_sha256 = _require_snapshot(bundle.get("snapshot_sha256"))
     evaluated = _evaluate_records(
-        records,
-        card,
-        manifest,
-        repositories,
-        snapshot_sha256,
-        pull_requests,
-        prior_repositories,
-        markdown_card,
+        records, {**bundle, "snapshot_sha256": snapshot_sha256}
     )
     released, quarantined = _partition_rows(evaluated)
-    return _assemble_report(evaluated, released, quarantined, snapshot_sha256, card, manifest)
+    report = _assemble_report(evaluated, released, quarantined, snapshot_sha256)
+    report["bundle_errors"] = _bundle_declaration_errors(report, manifest, card)
+    if report["bundle_errors"]:
+        report["closed"] = False
+    return report
 
 
 def _require_snapshot(snapshot_sha256: str) -> str:
@@ -56,45 +51,58 @@ def _require_objects(card: object, manifest: object, records: list[object]) -> N
         raise ValueError("card must be an object")
     if not isinstance(manifest, dict):
         raise ValueError("manifest must be an object")
-    if any(not isinstance(record, dict) for record in records):
+    if not isinstance(records, list) or any(
+        not isinstance(record, dict) for record in records
+    ):
         raise ValueError("trajectory records must be objects")
 
 
-def _evaluate_records(
-    records: list[dict[str, Any]],
-    card: dict[str, Any],
-    manifest: dict[str, Any],
-    repositories: list[dict[str, Any]],
-    snapshot_sha256: str,
-    pull_requests: list[dict[str, Any]] | None,
-    prior_repositories: list[dict[str, Any]] | None,
-    markdown_card: str | None,
-) -> list[dict[str, Any]]:
-    inventory_index = index_repositories(repositories)
-    prior_index = (
-        index_repositories(prior_repositories) if prior_repositories is not None else None
+def _evaluate_record_acc(record: dict[str, Any], ctx: dict[str, Any]) -> EvalAcc:
+    return EvalAcc(
+        record=record,
+        card=ctx["card"],
+        manifest=ctx["manifest"],
+        inventory_index=ctx["inventory_index"],
+        prior_index=ctx["prior_index"],
+        pull_requests=ctx["pr_index"],
+        snapshot_sha256=ctx["snapshot_sha256"],
+        markdown=ctx.get("markdown_card"),
     )
-    pr_index = None if pull_requests is None else _index_pull_requests(pull_requests)
-    evaluated = [
-        _evaluate_record(
-            EvalAcc(
-                record=record,
-                card=card,
-                manifest=manifest,
-                inventory_index=inventory_index,
-                prior_index=prior_index,
-                pull_requests=pr_index,
-                snapshot_sha256=snapshot_sha256,
-                markdown=markdown_card,
-            )
-        )
-        for record in records
-    ]
+
+
+def _dedupe_evaluated(evaluated: list[dict[str, Any]]) -> list[dict[str, Any]]:
     id_counts = Counter(row["record_id"] for row in evaluated)
     return [
         _duplicate_id_row(row) if id_counts[row["record_id"]] > 1 else row
         for row in evaluated
     ]
+
+
+def _optional_index(rows: list[dict[str, Any]] | None) -> dict[str, dict[str, Any]] | None:
+    if rows is None:
+        return None
+    return index_repositories(rows)
+
+
+def _evaluate_records(
+    records: list[dict[str, Any]], bundle: dict[str, Any]
+) -> list[dict[str, Any]]:
+    pull_requests = bundle.get("pull_requests")
+    ctx = {
+        "card": bundle["card"],
+        "manifest": bundle["manifest"],
+        "inventory_index": index_repositories(bundle.get("repositories") or []),
+        "prior_index": _optional_index(bundle.get("prior_repositories")),
+        "pr_index": (
+            _index_pull_requests(pull_requests) if pull_requests is not None else None
+        ),
+        "snapshot_sha256": bundle["snapshot_sha256"],
+        "markdown_card": bundle.get("markdown_card"),
+    }
+    evaluated = [
+        _evaluate_record(_evaluate_record_acc(record, ctx)) for record in records
+    ]
+    return _dedupe_evaluated(evaluated)
 
 
 def _partition_rows(
@@ -121,11 +129,9 @@ def _assemble_report(
     released: list[dict[str, Any]],
     quarantined: list[dict[str, Any]],
     snapshot_sha256: str,
-    card: dict[str, Any],
-    manifest: dict[str, Any],
 ) -> dict[str, Any]:
     families, evidence = _released_evidence_summary(released)
-    report = {
+    return {
         "closed": not quarantined,
         "counts": {
             "quarantined_count": len(quarantined),
@@ -140,10 +146,6 @@ def _assemble_report(
         "schema_version": SCHEMA_VERSION,
         "snapshot_sha256": snapshot_sha256,
     }
-    report["bundle_errors"] = _bundle_declaration_errors(report, manifest, card)
-    if report["bundle_errors"]:
-        report["closed"] = False
-    return report
 
 
 def released_positive_ids(report: dict[str, Any]) -> list[str]:

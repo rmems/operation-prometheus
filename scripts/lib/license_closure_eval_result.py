@@ -57,9 +57,11 @@ def _released_row(acc: EvalAcc, evidence: dict[str, Any]) -> dict[str, Any]:
             acc.repo,
             acc.source_hash,
             acc.snapshot_sha256,
-            record_id=acc.rid,
-            pr_number=acc.pr_number,
-            evidence_digest=acc.digest,
+            {
+                "record_id": acc.rid,
+                "pr_number": acc.pr_number,
+                "evidence_digest": acc.digest,
+            },
         ),
         "evidence": evidence,
     }

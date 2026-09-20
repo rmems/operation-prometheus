@@ -110,7 +110,7 @@ def render(manifest: dict[str, Any]) -> str:
     return json.dumps(manifest, indent=2, ensure_ascii=False, allow_nan=False) + "\n"
 
 
-def main(argv: list[str] | None = None) -> int:
+def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--jsonl", type=Path, required=True, help="curated JSONL file")
     parser.add_argument(
@@ -130,60 +130,82 @@ def main(argv: list[str] | None = None) -> int:
         action="store_true",
         help="exit non-zero if the committed manifest is stale instead of rewriting it",
     )
-    args = parser.parse_args(argv)
+    return parser
 
+
+def _load_inputs(args: argparse.Namespace) -> tuple[dict[str, Any], dict[str, Any]] | int:
     name = args.jsonl.stem
     card_path = args.card or ROOT / "datasets" / "cards" / f"{name}.json"
     out_path = args.out or ROOT / "datasets" / "manifests" / f"{name}.manifest.json"
-
     try:
         card = _load_json(card_path)
-        existing: dict[str, Any] = {}
-        if out_path.exists():
-            existing = _load_json(out_path)
+        existing = _load_json(out_path) if out_path.exists() else {}
     except (OSError, UnicodeDecodeError, json.JSONDecodeError, ValueError) as exc:
         print(f"ERROR: {exc}", file=sys.stderr)
         return 2
+    return card, {"existing": existing, "out_path": out_path}
 
+
+def _provenance(args: argparse.Namespace, existing: dict[str, Any], out_path: Path):
     created_at = args.created_at or existing.get("created_at")
     created_by = args.created_by or existing.get("created_by")
-    if not created_at or not created_by:
+    if not all((created_at, created_by)):
         print(
             f"ERROR: no existing manifest at {out_path} to preserve provenance from; "
             "pass --created-at and --created-by.",
             file=sys.stderr,
         )
-        return 2
+        return None
+    return str(created_at), str(created_by)
 
+
+def _emit_check(rendered: str, current: str | None, args: argparse.Namespace) -> int:
+    name = args.jsonl.stem
+    out_path = args.out or ROOT / "datasets" / "manifests" / f"{name}.manifest.json"
+    if rendered != current:
+        print(
+            f"ERROR: {out_path.name} is out of date with {args.jsonl.name}. "
+            f"Run: python scripts/build_manifest.py --jsonl {args.jsonl}",
+            file=sys.stderr,
+        )
+        return 1
+    return 0
+
+
+def _emit_write(rendered: str, current: str | None, out_path: Path, count: int) -> int:
+    if rendered == current:
+        print(f"{out_path.name} already up to date ({count} records).")
+        return 0
+    out_path.write_text(rendered, encoding="utf-8")
+    print(f"Wrote {out_path.name} ({count} records).")
+    return 0
+
+
+def main(argv: list[str] | None = None) -> int:
+    args = build_parser().parse_args(argv)
+    loaded = _load_inputs(args)
+    if isinstance(loaded, int):
+        return loaded
+    card, ctx = loaded
+    provenance = _provenance(args, ctx["existing"], ctx["out_path"])
+    if provenance is None:
+        return 2
     manifest = build_manifest(
         args.jsonl.resolve(),
         card,
-        created_at=str(created_at),
-        created_by=str(created_by),
-        name=name,
+        created_at=provenance[0],
+        created_by=provenance[1],
+        name=args.jsonl.stem,
     )
     rendered = render(manifest)
+    out_path = ctx["out_path"]
     current = out_path.read_text(encoding="utf-8") if out_path.exists() else None
-
     if args.check:
-        if rendered != current:
-            print(
-                f"ERROR: {out_path.name} is out of date with {args.jsonl.name}. "
-                f"Run: python scripts/build_manifest.py --jsonl {args.jsonl}",
-                file=sys.stderr,
-            )
+        if _emit_check(rendered, current, args):
             return 1
         print(f"{out_path.name} is up to date ({manifest['record_count']} records).")
         return 0
-
-    if rendered == current:
-        print(
-            f"{out_path.name} already up to date ({manifest['record_count']} records)."
-        )
-        return 0
-    out_path.write_text(rendered, encoding="utf-8")
-    print(f"Wrote {out_path.name} ({manifest['record_count']} records).")
-    return 0
+    return _emit_write(rendered, current, out_path, manifest["record_count"])
 
 
 if __name__ == "__main__":

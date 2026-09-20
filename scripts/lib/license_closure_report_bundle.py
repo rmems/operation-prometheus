@@ -88,6 +88,11 @@ def _unresolved_bundle_errors(
     return errors
 
 
+def _digest_drifted(observed: dict[str, str], repo: Any, digest: Any) -> bool:
+    actual = observed.get(_text(repo).casefold())
+    return actual is not None and _sha256_or_none(digest) != actual
+
+
 def _digest_bundle_errors(report: dict[str, Any], manifest: dict[str, Any]) -> list[str]:
     declared_digests = manifest.get("license_evidence_digests")
     if not isinstance(declared_digests, dict):
@@ -95,31 +100,37 @@ def _digest_bundle_errors(report: dict[str, Any], manifest: dict[str, Any]) -> l
     observed = {
         row["repository"].casefold(): row["digest"] for row in report["evidence_digests"]
     }
-    errors: list[str] = []
-    for repo, digest in declared_digests.items():
-        actual = observed.get(_text(repo).casefold())
-        if actual is not None and _sha256_or_none(digest) != actual:
-            errors.append(
-                f"manifest evidence digest for {repo} does not agree with inventory"
-            )
-    return errors
+    return [
+        f"manifest evidence digest for {repo} does not agree with inventory"
+        for repo, digest in declared_digests.items()
+        if _digest_drifted(observed, repo, digest)
+    ]
 
 
-def _record_bundle_errors(report: dict[str, Any], manifest: dict[str, Any]) -> list[str]:
-    errors: list[str] = []
-    if "record_count" in manifest:
-        if _declared_count(manifest["record_count"]) != report["counts"]["record_count"]:
-            errors.append("manifest record_count does not agree with proposed records")
+def _record_count_error(
+    report: dict[str, Any], manifest: dict[str, Any]
+) -> list[str]:
+    if "record_count" not in manifest:
+        return []
+    if _declared_count(manifest["record_count"]) != report["counts"]["record_count"]:
+        return ["manifest record_count does not agree with proposed records"]
+    return []
+
+
+def _record_id_errors(report: dict[str, Any], manifest: dict[str, Any]) -> list[str]:
     if "records" not in manifest:
-        return errors
-    listed = manifest.get("records")
+        return []
     actual_ids = sorted(
         row["record_id"] for row in report["released_positives"] + report["quarantined"]
     )
-    declared_ids, malformed = _listed_record_ids(listed)
+    declared_ids, malformed = _listed_record_ids(manifest.get("records"))
     if malformed or sorted(declared_ids) != actual_ids:
-        errors.append("manifest record ids do not agree with proposed records")
-    return errors
+        return ["manifest record ids do not agree with proposed records"]
+    return []
+
+
+def _record_bundle_errors(report: dict[str, Any], manifest: dict[str, Any]) -> list[str]:
+    return _record_count_error(report, manifest) + _record_id_errors(report, manifest)
 
 
 def _listed_record_ids(listed: object) -> tuple[list[str], bool]:

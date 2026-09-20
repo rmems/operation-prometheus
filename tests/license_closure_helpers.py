@@ -25,7 +25,7 @@ def _validator():
 
 
 def _report(bundle: dict) -> dict:
-    return build_license_closure_report(**report_kwargs(bundle))
+    return build_license_closure_report(report_kwargs(bundle))
 
 
 def _assert_schema(report: dict) -> None:

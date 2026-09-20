@@ -78,6 +78,16 @@ FENCE_OPEN_RE = re.compile(r"^( {0,3})(`{3,}|~{3,})")
 
 
 
+def _style_is_hidden(value: str | None) -> bool:
+    return bool(value) and bool(_HIDDEN_STYLE_RE.search(value))
+
+
+def _attr_hides(folded_name: str, value: str | None) -> bool:
+    if folded_name == "hidden":
+        return True
+    return folded_name == "style" and _style_is_hidden(value)
+
+
 class _VisibleHtmlText(HTMLParser):
     """Collect text that would render, skipping hidden and non-rendered HTML."""
 
@@ -89,13 +99,9 @@ class _VisibleHtmlText(HTMLParser):
     def _hides(self, tag: str, attrs: list[tuple[str, str | None]]) -> bool:
         if tag in _NON_RENDERED_HTML_TAGS:
             return True
-        for name, value in attrs:
-            folded = name.casefold()
-            if folded == "hidden":
-                return True
-            if folded == "style" and value and _HIDDEN_STYLE_RE.search(value):
-                return True
-        return False
+        return any(
+            _attr_hides(name.casefold(), value) for name, value in attrs
+        )
 
     def handle_starttag(self, tag: str, attrs: list[tuple[str, str | None]]) -> None:
         if self._skip or self._hides(tag, attrs):

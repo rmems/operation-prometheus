@@ -174,17 +174,15 @@ def source_provenance_digest(
     repo: str,
     repository_source_hash: str,
     snapshot_sha256: str,
-    *,
-    record_id: str = "",
-    pr_number: int | None = None,
-    evidence_digest: str = "",
+    binding: dict[str, Any] | None = None,
 ) -> str:
     """Bind a released row to its trajectory, license evidence, repository, and snapshot."""
+    binding = binding or {}
     return sha256_json(
         {
-            "evidence_digest": evidence_digest,
-            "pr_number": pr_number,
-            "record_id": record_id,
+            "evidence_digest": binding.get("evidence_digest", ""),
+            "pr_number": binding.get("pr_number"),
+            "record_id": binding.get("record_id", ""),
             "repo": repo,
             "repository_source_hash": repository_source_hash,
             "snapshot_sha256": snapshot_sha256,

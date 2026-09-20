@@ -15,10 +15,7 @@ from .license_closure_pr import _markdown_discloses
 
 
 def add_family_reasons(acc: EvalAcc) -> None:
-    if acc.declared_card is None:
-        acc.reasons.append("card_disclosure_missing")
-    if not _markdown_discloses(acc.markdown, acc.declared_card or acc.inventory_id):
-        acc.reasons.append("card_disclosure_missing")
+    _add_disclosure_reasons(acc)
     identifiers = [
         acc.declared_record,
         acc.declared_card,
@@ -33,6 +30,13 @@ def add_family_reasons(acc: EvalAcc) -> None:
     _apply_closed_family(acc)
     _add_forge_reason(acc, present)
     _add_change_reasons(acc)
+
+
+def _add_disclosure_reasons(acc: EvalAcc) -> None:
+    if acc.declared_card is None:
+        acc.reasons.append("card_disclosure_missing")
+    if not _markdown_discloses(acc.markdown, acc.declared_card or acc.inventory_id):
+        acc.reasons.append("card_disclosure_missing")
 
 
 def _add_missing_identifier_reasons(
@@ -75,21 +79,21 @@ def _add_forge_reason(acc: EvalAcc, present: list[str]) -> None:
 
 
 def _add_change_reasons(acc: EvalAcc) -> None:
-    changed = (
-        _declared_digest_changed(acc)
-        or _prior_digest_changed(acc)
-        or _prior_id_changed(acc)
-    )
-    if changed:
+    if any(
+        check(acc)
+        for check in (
+            _declared_digest_changed,
+            _prior_digest_changed,
+            _prior_id_changed,
+        )
+    ):
         acc.reasons.append("source_license_changed")
 
 
 def _prior_digest_changed(acc: EvalAcc) -> bool:
-    return (
-        acc.prior_digest is not None
-        and acc.digest is not None
-        and acc.prior_digest != acc.digest
-    )
+    if acc.prior_digest is None or acc.digest is None:
+        return False
+    return acc.prior_digest != acc.digest
 
 
 def _declared_digest_changed(acc: EvalAcc) -> bool:
@@ -105,3 +109,6 @@ def _prior_id_changed(acc: EvalAcc) -> bool:
     if acc.prior_id is None or acc.inventory_id is None:
         return False
     return not _same_license(acc.prior_id, acc.inventory_id)
+
+
+

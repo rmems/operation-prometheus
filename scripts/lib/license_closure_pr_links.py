@@ -5,7 +5,9 @@ from __future__ import annotations
 from .license_closure_pr_html import (
     MARKDOWN_REFERENCE_DESTINATION_RE,
     MARKDOWN_REFERENCE_TITLE_RE,
+    _tick_run_length,
 )
+
 
 def _reference_definition_kind(line: str) -> str | None:
     index = 0
@@ -22,39 +24,39 @@ def _reference_definition_kind(line: str) -> str | None:
     return "full"
 
 
+def _title_line_end(lines: list[str], index: int) -> int:
+    if index < len(lines) and MARKDOWN_REFERENCE_TITLE_RE.match(lines[index]):
+        return index + 1
+    return index
+
+
+def _reference_definition_span(lines: list[str], index: int) -> int | None:
+    kind = _reference_definition_kind(lines[index])
+    if kind == "full":
+        return _title_line_end(lines, index + 1)
+    if kind != "label_only":
+        return None
+    nxt = index + 1
+    if nxt < len(lines) and MARKDOWN_REFERENCE_DESTINATION_RE.match(lines[nxt]):
+        return _title_line_end(lines, nxt + 1)
+    return None
+
+
 def _strip_reference_definitions(markdown: str) -> str:
     lines = markdown.split("\n")
     kept: list[str] = []
     index = 0
     while index < len(lines):
-        kind = _reference_definition_kind(lines[index])
-        if kind == "full":
-            index += 1
-            if index < len(lines) and MARKDOWN_REFERENCE_TITLE_RE.match(lines[index]):
-                index += 1
+        skipped = _reference_definition_span(lines, index)
+        if skipped is not None:
+            index = skipped
             continue
-        if kind == "label_only":
-            nxt = index + 1
-            if nxt < len(lines) and MARKDOWN_REFERENCE_DESTINATION_RE.match(lines[nxt]):
-                index = nxt + 1
-                if index < len(lines) and MARKDOWN_REFERENCE_TITLE_RE.match(
-                    lines[index]
-                ):
-                    index += 1
-                continue
         kept.append(lines[index])
         index += 1
     return "\n".join(kept)
 
 
-def _skip_markdown_link_title(markdown: str, index: int) -> int | None:
-    if index >= len(markdown):
-        return index
-    opener = markdown[index]
-    if opener not in "\"'(":
-        return index
-    closer = ")" if opener == "(" else opener
-    index += 1
+def _escaped_span_end(markdown: str, index: int, closer: str) -> int | None:
     while index < len(markdown):
         char = markdown[index]
         if char == "\\":
@@ -68,6 +70,19 @@ def _skip_markdown_link_title(markdown: str, index: int) -> int | None:
     return None
 
 
+def _title_closer(opener: str) -> str:
+    return ")" if opener == "(" else opener
+
+
+def _skip_markdown_link_title(markdown: str, index: int) -> int | None:
+    if index >= len(markdown):
+        return index
+    opener = markdown[index]
+    if opener not in "\"'(":
+        return index
+    return _escaped_span_end(markdown, index + 1, _title_closer(opener))
+
+
 def _skip_spaces(markdown: str, index: int) -> int:
     length = len(markdown)
     while index < length and markdown[index] in " \t":
@@ -76,19 +91,7 @@ def _skip_spaces(markdown: str, index: int) -> int:
 
 
 def _angle_destination_end(markdown: str, index: int) -> int | None:
-    scan = index + 1
-    length = len(markdown)
-    while scan < length:
-        char = markdown[scan]
-        if char == "\\":
-            scan += 2
-            continue
-        if char == "\n":
-            return None
-        if char == ">":
-            return scan + 1
-        scan += 1
-    return None
+    return _escaped_span_end(markdown, index + 1, ">")
 
 
 def _bare_destination_end(markdown: str, index: int) -> int | None:
@@ -103,14 +106,17 @@ def _bare_destination_end(markdown: str, index: int) -> int | None:
             return None
         if char in " \t" and depth == 0:
             return index
-        if char == "(":
-            depth += 1
-        elif char == ")":
-            if depth == 0:
-                return index
-            depth -= 1
+        depth += (char == "(") - (char == ")")
+        if depth < 0:
+            return index
         index += 1
     return None
+
+
+def _link_destination_end(markdown: str, index: int) -> int | None:
+    if markdown[index] == "<":
+        return _angle_destination_end(markdown, index)
+    return _bare_destination_end(markdown, index)
 
 
 def _inline_link_close(markdown: str, start: int) -> int | None:
@@ -118,13 +124,10 @@ def _inline_link_close(markdown: str, start: int) -> int | None:
     index = _skip_spaces(markdown, start)
     if index >= length:
         return None
-    if markdown[index] == "<":
-        index = _angle_destination_end(markdown, index)
-    else:
-        index = _bare_destination_end(markdown, index)
-    if index is None:
+    end = _link_destination_end(markdown, index)
+    if end is None:
         return None
-    index = _skip_spaces(markdown, index)
+    index = _skip_spaces(markdown, end)
     titled = _skip_markdown_link_title(markdown, index)
     if titled is None:
         return None
@@ -134,12 +137,9 @@ def _inline_link_close(markdown: str, start: int) -> int | None:
     return None
 
 
-def _skip_inline_code_span(markdown: str, index: int) -> int | None:
-    length = len(markdown)
-    tick_len = 1
-    while index + tick_len < length and markdown[index + tick_len] == "`":
-        tick_len += 1
+def _code_span_end(markdown: str, index: int, tick_len: int) -> int | None:
     scan = index + tick_len
+    length = len(markdown)
     while scan < length:
         char = markdown[scan]
         if char == "\n":
@@ -147,13 +147,16 @@ def _skip_inline_code_span(markdown: str, index: int) -> int | None:
         if char != "`":
             scan += 1
             continue
-        run = 1
-        while scan + run < length and markdown[scan + run] == "`":
-            run += 1
+        run = _tick_run_length(markdown, scan)
         if run == tick_len:
             return scan + run
         scan += run
     return None
+
+
+def _code_span_skip(markdown: str, index: int) -> int:
+    end = _code_span_end(markdown, index, _tick_run_length(markdown, index))
+    return end if end is not None else index + 1
 
 
 def _markdown_label_close(markdown: str, text_start: int) -> int | None:
@@ -168,20 +171,36 @@ def _markdown_label_close(markdown: str, text_start: int) -> int | None:
         if char == "\n":
             return None
         if char == "`":
-            skipped = _skip_inline_code_span(markdown, index)
-            if skipped is None:
-                index += 1
-                continue
-            index = skipped
+            index = _code_span_skip(markdown, index)
             continue
-        if char == "[":
-            depth += 1
-        elif char == "]":
-            depth -= 1
-            if depth == 0:
-                return index
+        depth += (char == "[") - (char == "]")
+        if depth == 0:
+            return index
         index += 1
     return None
+
+
+def _link_opener_len(markdown: str, index: int) -> int:
+    if markdown[index] == "[":
+        return 1
+    is_image = markdown[index] == "!" and markdown[index + 1 : index + 2] == "["
+    return 2 if is_image else 0
+
+
+def _inline_link_span(
+    markdown: str, index: int
+) -> tuple[int, int, int] | None:
+    opener = _link_opener_len(markdown, index)
+    if not opener:
+        return None
+    text_start = index + opener
+    close = _markdown_label_close(markdown, text_start)
+    if close is None or markdown[close + 1 : close + 2] != "(":
+        return None
+    dest_close = _inline_link_close(markdown, close + 2)
+    if dest_close is None:
+        return None
+    return text_start, close, dest_close
 
 
 def _strip_inline_links(markdown: str, *, keep_openers: bool = False) -> str:
@@ -189,24 +208,18 @@ def _strip_inline_links(markdown: str, *, keep_openers: bool = False) -> str:
     index = 0
     length = len(markdown)
     while index < length:
-        image = (
-            markdown[index] == "!" and index + 1 < length and markdown[index + 1] == "["
+        span = _inline_link_span(markdown, index)
+        if span is None:
+            result.append(markdown[index])
+            index += 1
+            continue
+        text_start, close, dest_close = span
+        if keep_openers:
+            result.append("[")
+        result.append(
+            _strip_inline_links(
+                markdown[text_start:close], keep_openers=keep_openers
+            )
         )
-        if markdown[index] == "[" or image:
-            text_start = index + (2 if image else 1)
-            close = _markdown_label_close(markdown, text_start)
-            if close is not None and close + 1 < length and markdown[close + 1] == "(":
-                dest_close = _inline_link_close(markdown, close + 2)
-                if dest_close is not None:
-                    if keep_openers:
-                        result.append("[")
-                    result.append(
-                        _strip_inline_links(
-                            markdown[text_start:close], keep_openers=keep_openers
-                        )
-                    )
-                    index = dest_close + 1
-                    continue
-        result.append(markdown[index])
-        index += 1
+        index = dest_close + 1
     return "".join(result)

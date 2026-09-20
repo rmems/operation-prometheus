@@ -103,34 +103,44 @@ def _parse_jsonl(raw: bytes, path: Path) -> list[dict[str, Any]]:
     return rows
 
 
+def _snapshot_source_label(inventory_manifest_path: Path | None, fallback: str) -> str:
+    if inventory_manifest_path is not None:
+        return str(inventory_manifest_path)
+    return fallback
+
+
+def _declared_snapshot(
+    inventory_manifest: dict[str, Any] | None,
+    inventory_manifest_path: Path | None,
+) -> str:
+    if inventory_manifest is None:
+        return ""
+    declared = _sha256_or_none(inventory_manifest.get("snapshot_sha256")) or ""
+    if not declared:
+        raise ValueError(
+            f"{_snapshot_source_label(inventory_manifest_path, 'inventory-manifest')}"
+            " is missing snapshot_sha256"
+        )
+    return declared
+
+
 def _snapshot_sha256(
     explicit: str | None,
     inventory_manifest: dict[str, Any] | None,
     inventory_manifest_path: Path | None,
 ) -> str:
     explicit_digest = _sha256_or_none(explicit) or ""
-    declared = ""
-    if inventory_manifest is not None:
-        declared = _sha256_or_none(inventory_manifest.get("snapshot_sha256")) or ""
-        if not declared:
-            source = (
-                inventory_manifest_path
-                if inventory_manifest_path is not None
-                else "inventory-manifest"
-            )
-            raise ValueError(f"{source} is missing snapshot_sha256")
-    if explicit_digest and declared and explicit_digest != declared:
+    declared = _declared_snapshot(inventory_manifest, inventory_manifest_path)
+    if all((explicit_digest, declared)) and explicit_digest != declared:
         raise ValueError(
             "--snapshot-sha256 disagrees with inventory-manifest snapshot_sha256"
         )
     digest = declared or explicit_digest
     if not digest:
-        source = (
-            inventory_manifest_path
-            if inventory_manifest_path is not None
-            else "snapshot_sha256"
+        raise ValueError(
+            f"{_snapshot_source_label(inventory_manifest_path, 'snapshot_sha256')}"
+            " is missing snapshot_sha256"
         )
-        raise ValueError(f"{source} is missing snapshot_sha256")
     return digest
 
 
@@ -236,58 +246,37 @@ def _inventory_file_binding_errors(
     return [mismatch] if mismatch else []
 
 
-def _publication_binding_errors(
-    *,
-    records_path: Path,
-    records_digest: str,
-    record_count: int,
-    dataset_manifest: Any,
-    dataset_manifest_path: Path,
-    inventory_path: Path,
-    inventory_digest: str,
-    inventory_manifest: Any | None,
-    inventory_manifest_path: Path | None,
-    prior_inventory_path: Path | None = None,
-    prior_inventory_digest: str | None = None,
-    prior_inventory_manifest: Any | None = None,
-    prior_inventory_manifest_path: Path | None = None,
-) -> list[str]:
+def _record_count_mismatch(
+    dataset_manifest: Any, record_count: int
+) -> bool:
+    if not isinstance(dataset_manifest, dict):
+        return False
+    if "record_count" not in dataset_manifest:
+        return False
+    declared = dataset_manifest["record_count"]
+    return not (type(declared) is int and declared == record_count)
+
+
+def _publication_binding_errors(binding: dict[str, Any]) -> list[str]:
+    dataset_manifest = binding["dataset_manifest"]
     errors: list[str] = []
     mismatch = _require_matching_digest(
         dataset_manifest.get("sha256") if isinstance(dataset_manifest, dict) else None,
-        records_digest,
-        records_path,
-        str(dataset_manifest_path),
+        binding["records_digest"],
+        binding["records_path"],
+        str(binding["dataset_manifest_path"]),
     )
     if mismatch:
         errors.append(mismatch)
-    if isinstance(dataset_manifest, dict) and "record_count" in dataset_manifest:
-        declared = dataset_manifest["record_count"]
-        if (
-            isinstance(declared, bool)
-            or not isinstance(declared, int)
-            or declared != record_count
-        ):
-            errors.append(
-                f"{dataset_manifest_path} record_count does not match {records_path}"
-            )
-    errors.extend(
-        _inventory_file_binding_errors(
-            inventory_path=inventory_path,
-            inventory_digest=inventory_digest,
-            inventory_manifest=inventory_manifest,
-            inventory_manifest_path=inventory_manifest_path,
+    if _record_count_mismatch(dataset_manifest, binding["record_count"]):
+        errors.append(
+            f"{binding['dataset_manifest_path']} record_count does not match "
+            f"{binding['records_path']}"
         )
-    )
-    if prior_inventory_path is not None:
-        errors.extend(
-            _inventory_file_binding_errors(
-                inventory_path=prior_inventory_path,
-                inventory_digest=prior_inventory_digest or "",
-                inventory_manifest=prior_inventory_manifest,
-                inventory_manifest_path=prior_inventory_manifest_path,
-            )
-        )
+    errors.extend(_inventory_file_binding_errors(**binding["inventory_binding"]))
+    prior = binding.get("prior_binding")
+    if prior is not None:
+        errors.extend(_inventory_file_binding_errors(**prior))
     return errors
 
 
@@ -415,24 +404,29 @@ def _apply_binding_errors(
     report: dict[str, Any], args: argparse.Namespace, inputs: dict[str, Any]
 ) -> None:
     raws = inputs["raws"]
+    prior_binding = None
+    if args.prior_inventory is not None:
+        prior_binding = {
+            "inventory_path": args.prior_inventory,
+            "inventory_digest": _sha256_bytes(raws["prior_inventory"] or b""),
+            "inventory_manifest": inputs["prior_inventory_manifest"],
+            "inventory_manifest_path": args.prior_inventory_manifest,
+        }
     binding_errors = _publication_binding_errors(
-        records_path=args.records,
-        records_digest=_sha256_bytes(raws["records"]),
-        record_count=report["counts"]["record_count"],
-        dataset_manifest=inputs["manifest"],
-        dataset_manifest_path=args.manifest,
-        inventory_path=args.inventory,
-        inventory_digest=_sha256_bytes(raws["inventory"]),
-        inventory_manifest=inputs["inventory_manifest"],
-        inventory_manifest_path=args.inventory_manifest,
-        prior_inventory_path=args.prior_inventory,
-        prior_inventory_digest=(
-            _sha256_bytes(raws["prior_inventory"])
-            if raws["prior_inventory"] is not None
-            else None
-        ),
-        prior_inventory_manifest=inputs["prior_inventory_manifest"],
-        prior_inventory_manifest_path=args.prior_inventory_manifest,
+        {
+            "records_path": args.records,
+            "records_digest": _sha256_bytes(raws["records"]),
+            "record_count": report["counts"]["record_count"],
+            "dataset_manifest": inputs["manifest"],
+            "dataset_manifest_path": args.manifest,
+            "inventory_binding": {
+                "inventory_path": args.inventory,
+                "inventory_digest": _sha256_bytes(raws["inventory"]),
+                "inventory_manifest": inputs["inventory_manifest"],
+                "inventory_manifest_path": args.inventory_manifest,
+            },
+            "prior_binding": prior_binding,
+        }
     )
     if binding_errors:
         report["bundle_errors"] = (
@@ -500,13 +494,15 @@ def main(argv: list[str] | None = None) -> int:
     try:
         inputs = _frozen_inputs(args)
         report = build_license_closure_report(
-            inputs["records"],
-            inputs["card"],
-            inputs["manifest"],
-            inputs["inventory"],
-            snapshot_sha256=inputs["snapshot_sha256"],
-            prior_repositories=inputs["prior_inventory"],
-            markdown_card=inputs["markdown_card"],
+            {
+                "card": inputs["card"],
+                "manifest": inputs["manifest"],
+                "markdown_card": inputs["markdown_card"],
+                "prior_repositories": inputs["prior_inventory"],
+                "records": inputs["records"],
+                "repositories": inputs["inventory"],
+                "snapshot_sha256": inputs["snapshot_sha256"],
+            }
         )
     except (OSError, UnicodeDecodeError, ValueError, json.JSONDecodeError) as exc:
         print(f"ERROR: {exc}", file=sys.stderr)

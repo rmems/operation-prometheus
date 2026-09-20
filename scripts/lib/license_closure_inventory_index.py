@@ -85,21 +85,23 @@ def _alias_entries(row: dict[str, Any], name: str) -> list[Any]:
     return aliases
 
 
+def _alias_ref_invalid(item: Any) -> bool:
+    return not isinstance(item, str) or not item.strip()
+
+
+def _alias_refs_invalid(refs: Any) -> bool:
+    if not isinstance(refs, list) or not refs:
+        return True
+    if any(_alias_ref_invalid(item) for item in refs):
+        return True
+    return len(set(refs)) != len(refs)
+
+
 def _alias_object_invalid(alias: dict[str, Any]) -> bool:
     name = alias.get("name_with_owner")
     if not isinstance(name, str) or not name.strip():
         return True
-    refs = alias.get("evidence_refs")
-    if not isinstance(refs, list) or not refs:
-        return True
-    seen: set[str] = set()
-    for item in refs:
-        if not isinstance(item, str) or not item.strip():
-            return True
-        if item in seen:
-            return True
-        seen.add(item)
-    return False
+    return _alias_refs_invalid(alias.get("evidence_refs"))
 
 
 def _alias_name(alias: Any, name: str) -> str:
@@ -126,40 +128,36 @@ def _repository_names(row: dict[str, Any]) -> list[str]:
     return [name for name in names if name]
 
 
+def _canonical_repo_key(
+    name: str, inventory_index: dict[str, dict[str, Any]]
+) -> str:
+    folded = name.casefold()
+    row = inventory_index.get(folded)
+    if not isinstance(row, dict):
+        return f"name:{folded}"
+    repo_id = _text(row.get("repository_id"))
+    if repo_id:
+        return f"id:{repo_id}"
+    canonical = _text(row.get("name_with_owner")).casefold()
+    return f"name:{canonical or folded}"
+
+
 def _canonical_declared_repos(
     names: set[str],
     inventory_index: dict[str, dict[str, Any]],
 ) -> set[str]:
-    keys: set[str] = set()
-    for name in names:
-        folded = name.casefold()
-        row = inventory_index.get(folded)
-        if isinstance(row, dict):
-            repo_id = _text(row.get("repository_id"))
-            if repo_id:
-                keys.add(f"id:{repo_id}")
-                continue
-            canonical = _text(row.get("name_with_owner")).casefold()
-            if canonical:
-                keys.add(f"name:{canonical}")
-                continue
-        keys.add(f"name:{folded}")
-    return keys
+    return {_canonical_repo_key(name, inventory_index) for name in names}
 
 
 def _identity_names(repository: dict[str, Any] | None, repo: str) -> list[str]:
     names = [repo] if repo else []
     if isinstance(repository, dict):
         names.extend(_repository_names(repository))
-    seen: set[str] = set()
-    unique: list[str] = []
+    seen: dict[str, str] = {}
     for name in names:
-        folded = name.casefold()
-        if not name or folded in seen:
-            continue
-        seen.add(folded)
-        unique.append(name)
-    return unique
+        if name:
+            seen.setdefault(name.casefold(), name)
+    return list(seen.values())
 
 
 def _unique_inventory_rows(index: dict[str, dict[str, Any]]) -> list[dict[str, Any]]:
@@ -174,26 +172,39 @@ def _unique_inventory_rows(index: dict[str, dict[str, Any]]) -> list[dict[str, A
     return rows
 
 
+def _prior_by_repository_id(
+    prior_index: dict[str, dict[str, Any]], repo_id: str
+) -> dict[str, Any] | None:
+    for row in _unique_inventory_rows(prior_index):
+        if _text(row.get("repository_id")) == repo_id:
+            return row
+    return None
+
+
+def _prior_by_names(
+    prior_index: dict[str, dict[str, Any]], names: list[str]
+) -> dict[str, Any] | None:
+    for name in names:
+        found = _inventory_for_repo(prior_index, name)
+        if found is not None:
+            return found
+    return None
+
+
 def _prior_repository(
     prior_index: dict[str, dict[str, Any]],
     current: dict[str, Any] | None,
     repo: str,
 ) -> dict[str, Any] | None:
-    if isinstance(current, dict):
-        repo_id = _text(current.get("repository_id"))
-        if repo_id:
-            for row in _unique_inventory_rows(prior_index):
-                if _text(row.get("repository_id")) == repo_id:
-                    return row
-            return None
+    if not isinstance(current, dict):
+        return _inventory_for_repo(prior_index, repo)
+    repo_id = _text(current.get("repository_id"))
+    if repo_id:
+        return _prior_by_repository_id(prior_index, repo_id)
     found = _inventory_for_repo(prior_index, repo)
-    if found is not None or not isinstance(current, dict):
+    if found is not None:
         return found
-    for name in _repository_names(current):
-        found = _inventory_for_repo(prior_index, name)
-        if found is not None:
-            return found
-    return None
+    return _prior_by_names(prior_index, _repository_names(current))
 
 
 def _licenses_agree(
@@ -207,18 +218,19 @@ def _licenses_agree(
     return all(_same_license(item, inventory_license) for item in declared)
 
 
+def _declared_differs(declared: str | None, actual: str | None) -> bool:
+    return declared is not None and declared != actual
+
+
 def _digests_agree(
     card_digest: str | None, manifest_digest: str | None, inventory_digest: str | None
 ) -> bool:
-    if (
-        card_digest is not None
-        and manifest_digest is not None
-        and card_digest != manifest_digest
-    ):
+    if None not in (card_digest, manifest_digest) and card_digest != manifest_digest:
         return False
-    if card_digest is not None and card_digest != inventory_digest:
-        return False
-    return not (manifest_digest is not None and manifest_digest != inventory_digest)
+    return not any(
+        _declared_differs(declared, inventory_digest)
+        for declared in (card_digest, manifest_digest)
+    )
 
 
 def _repo_declarations_conflict(

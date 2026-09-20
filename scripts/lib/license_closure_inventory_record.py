@@ -38,16 +38,21 @@ def record_repo(record: dict[str, Any]) -> str:
     return _text(record.get("repo")) or _nested_record_repo(record)
 
 
+def _top_repo_invalid(record: dict[str, Any]) -> bool:
+    if "repo" not in record:
+        return False
+    value = record["repo"]
+    return not isinstance(value, str) or not value.strip()
+
+
 def record_repo_identities_conflict(record: dict[str, Any]) -> bool:
-    if "repo" in record:
-        value = record["repo"]
-        if not isinstance(value, str) or not value.strip():
-            return True
-    if _nested_identity_invalid(record):
+    if _top_repo_invalid(record) or _nested_identity_invalid(record):
         return True
     top = _text(record.get("repo"))
     nested = _nested_record_repo(record)
-    return bool(top and nested and top.casefold() != nested.casefold())
+    if not top or not nested:
+        return False
+    return top.casefold() != nested.casefold()
 
 
 def _supplied_record_id(record: dict[str, Any]) -> str:
@@ -67,13 +72,19 @@ def record_ids_conflict(record: dict[str, Any]) -> bool:
             return True
     record_key = _text(record.get("id"))
     trajectory_key = _text(record.get("trajectory_id"))
-    return bool(record_key and trajectory_key and record_key != trajectory_key)
+    if not all((record_key, trajectory_key)):
+        return False
+    return record_key != trajectory_key
+
+
+def _valid_pr_number(value: Any) -> bool:
+    return type(value) is int and value >= 1
 
 
 def _derived_record_id(record: dict[str, Any]) -> str:
     repo = record_repo(record)
     pr_number = record.get("pr_number")
-    if repo and type(pr_number) is int and pr_number >= 1:
+    if repo and _valid_pr_number(pr_number):
         return f"{repo.replace('/', '-')}#{pr_number}"
     return repo or "unknown-record"
 

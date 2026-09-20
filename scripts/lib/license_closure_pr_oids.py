@@ -82,24 +82,30 @@ def _code_state_matches_inventory_pr(
 def _pr_inventory_reasons(
     record: dict[str, Any],
     repos: list[str],
-    pr_number: int | None,
-    pull_requests: dict[tuple[str, int], dict[str, Any]] | None,
-    repository: dict[str, Any] | None = None,
+    provenance: tuple[int | None, dict[tuple[str, int], dict[str, Any]] | None, dict[str, Any] | None],
 ) -> list[str]:
+    pr_number, pull_requests, repository = provenance
     if pull_requests is None:
         return []
     names = [name for name in repos if name]
     if not names or pr_number is None:
         return ["snapshot_provenance_missing"]
     inventory_id = _text((repository or {}).get("repository_id"))
-    matched = _matching_inventory_prs(
-        names, pr_number, pull_requests, inventory_id
-    )
-    if matched is None:
+    matched = _matching_inventory_prs(names, pr_number, pull_requests, inventory_id)
+    return _matched_pr_reasons(record, names, pr_number, matched)
+
+
+def _matched_pr_reasons(
+    record: dict[str, Any],
+    names: list[str],
+    pr_number: int,
+    matched: list[dict[str, Any]] | None,
+) -> list[str]:
+    if not matched:
         return ["snapshot_provenance_missing"]
     if len(matched) > 1:
         raise ValueError(f"Duplicate inventory pull request {names[0]}#{pr_number}")
-    if matched and _code_state_matches_inventory_pr(record, matched[0]):
+    if _code_state_matches_inventory_pr(record, matched[0]):
         return []
     return ["snapshot_provenance_missing"]
 
@@ -134,7 +140,7 @@ def _matching_inventory_prs(
         if inventory_pr is None:
             continue
         pr_id = _text(inventory_pr.get("repository_id"))
-        if inventory_id and pr_id and inventory_id != pr_id:
+        if _repository_ids_conflict(inventory_id, pr_id):
             return None
         evidence = _pr_evidence_fingerprint(inventory_pr)
         if evidence in seen_evidence:
@@ -144,28 +150,46 @@ def _matching_inventory_prs(
     return matched
 
 
+def _repository_ids_conflict(inventory_id: str, pr_id: str) -> bool:
+    return all((inventory_id, pr_id)) and inventory_id != pr_id
+
+
+def _pr_row_key(row: dict[str, Any]) -> tuple[str, int]:
+    if not isinstance(row, dict):
+        raise ValueError("pull-request inventory rows must be objects")
+    repo = _text(row.get("repository_name_with_owner")).casefold()
+    number = row.get("number")
+    if not repo:
+        raise ValueError(
+            "pull-request inventory row is missing a repository name or PR number"
+        )
+    if type(number) is not int or number < 1:
+        raise ValueError(
+            "pull-request inventory row is missing a repository name or PR number"
+        )
+    return repo, number
+
+
+def _index_pull_request_row(
+    index: dict[tuple[str, int], dict[str, Any]], row: dict[str, Any]
+) -> None:
+    key = _pr_row_key(row)
+    declared = _sha256_or_none(row.get("source_hash"))
+    if declared is None or declared != pr_inventory_row_source_hash(row):
+        raise ValueError(
+            "pull-request inventory source_hash does not match the published row"
+        )
+    if key in index:
+        raise ValueError(f"Duplicate inventory pull request {key[0]}#{key[1]}")
+    index[key] = row
+
+
 def _index_pull_requests(
     pull_requests: list[dict[str, Any]] | None,
 ) -> dict[tuple[str, int], dict[str, Any]]:
     index: dict[tuple[str, int], dict[str, Any]] = {}
     for row in pull_requests or []:
-        if not isinstance(row, dict):
-            raise ValueError("pull-request inventory rows must be objects")
-        repo = _text(row.get("repository_name_with_owner")).casefold()
-        number = row.get("number")
-        if not repo or type(number) is not int or number < 1:
-            raise ValueError(
-                "pull-request inventory row is missing a repository name or PR number"
-            )
-        declared = _sha256_or_none(row.get("source_hash"))
-        if declared is None or declared != pr_inventory_row_source_hash(row):
-            raise ValueError(
-                "pull-request inventory source_hash does not match the published row"
-            )
-        key = (repo, number)
-        if key in index:
-            raise ValueError(f"Duplicate inventory pull request {repo}#{number}")
-        index[key] = row
+        _index_pull_request_row(index, row)
     return index
 
 

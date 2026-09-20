@@ -46,13 +46,13 @@ def _folded_value_conflicts(mapped: Any, coerce: Callable[[Any], str | None]) ->
     return False
 
 
+_MappingSpec = tuple[str, str, Callable[[Any], str | None]]
+
+
 def _mapped_value_for_names(
-    container: dict[str, Any],
-    names: list[str],
-    singular: str,
-    plural: str,
-    coerce: Callable[[Any], str | None],
+    container: dict[str, Any], names: list[str], spec: _MappingSpec
 ) -> str | None:
+    singular, plural, coerce = spec
     folded = _folded_mapping(container.get(plural))
     for name in names:
         if not name or name.casefold() not in folded:
@@ -94,12 +94,9 @@ def _malformed_present_value(
 
 
 def _singular_map_conflict(
-    container: dict[str, Any],
-    repo: str,
-    singular: str,
-    plural: str,
-    coerce: Callable[[Any], str | None],
+    container: dict[str, Any], repo: str, spec: _MappingSpec
 ) -> bool:
+    singular, plural, coerce = spec
     if _malformed_present_value(container, singular, coerce):
         return True
     folded = _folded_mapping(container.get(plural))
@@ -164,7 +161,7 @@ def _any_singular_conflicts(
     repos: list[str],
 ) -> bool:
     return any(
-        _singular_map_conflict(container, repo, singular, plural, coerce)
+        _singular_map_conflict(container, repo, (singular, plural, coerce))
         for container, singular, plural, coerce in checks
         for repo in repos
     )
@@ -209,14 +206,16 @@ def _mapping_license(
     container: dict[str, Any], names: list[str], singular: str, plural: str
 ) -> str | None:
     return _mapped_value_for_names(
-        container, names, singular, plural, _declared_license_id
+        container, names, (singular, plural, _declared_license_id)
     )
 
 
 def _mapping_digest(
     container: dict[str, Any], names: list[str], singular: str, plural: str
 ) -> str | None:
-    return _mapped_value_for_names(container, names, singular, plural, _sha256_or_none)
+    return _mapped_value_for_names(
+        container, names, (singular, plural, _sha256_or_none)
+    )
 
 
 def card_license_for_repo(card: dict[str, Any], names: list[str]) -> str | None:

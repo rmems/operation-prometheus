@@ -125,7 +125,7 @@ def test_inventory_row_may_repeat_its_own_name_as_alias():
 def test_uppercase_snapshot_digest_is_emitted_lowercase():
     bundle = spdx_known_bundle()
     report = build_license_closure_report(
-        **{
+        {
             **report_kwargs(bundle),
             "snapshot_sha256": bundle["snapshot_sha256"].upper(),
         }

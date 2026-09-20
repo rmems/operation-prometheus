@@ -38,9 +38,11 @@ def test_unmatched_custom_on_spdx_released_row_cannot_validate():
         row["repo"],
         row["repository_source_hash"],
         row["snapshot_sha256"],
-        record_id=row["record_id"],
-        pr_number=row["pr_number"],
-        evidence_digest=digest,
+        {
+            "record_id": row["record_id"],
+            "pr_number": row["pr_number"],
+            "evidence_digest": digest,
+        },
     )
     report["evidence_digests"][0]["digest"] = digest
     errors = validate_positive_release(report)

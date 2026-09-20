@@ -21,23 +21,20 @@ MERGE_OID = "3" * 40
 WRONG_HEAD_OID = "4" * 40
 
 
-def repository(
-    name: str,
-    *,
-    spdx_id: str | None,
-    license_name: str | None = None,
-    url: str | None = None,
-    custom: dict[str, Any] | None = None,
-    source_hash: str | None = None,
-) -> dict[str, Any]:
+def repository(name: str, **spec: Any) -> dict[str, Any]:
+    spdx_id = spec.get("spdx_id")
     row: dict[str, Any] = {
         "name_with_owner": name,
-        "license": {"spdx_id": spdx_id, "name": license_name or spdx_id, "url": url},
+        "license": {
+            "spdx_id": spdx_id,
+            "name": spec.get("license_name") or spdx_id,
+            "url": spec.get("url"),
+        },
         "visibility": "public",
     }
-    if custom is not None:
-        row["custom_license"] = custom
-    row["source_hash"] = source_hash or inventory_row_source_hash(row)
+    if spec.get("custom") is not None:
+        row["custom_license"] = spec["custom"]
+    row["source_hash"] = spec.get("source_hash") or inventory_row_source_hash(row)
     return row
 
 
@@ -60,15 +57,9 @@ def inventory_alias(name: str, *refs: str) -> dict[str, Any]:
     }
 
 
-def record(
-    repo: str,
-    pr_number: int,
-    license_id: str | None,
-    *,
-    record_id: str | None = None,
-) -> dict[str, Any]:
+def record(repo: str, pr_number: int, license_id: str | None, **spec) -> dict[str, Any]:
     row: dict[str, Any] = {
-        "id": record_id or f"{repo.replace('/', '-')}-{pr_number}",
+        "id": spec.get("record_id") or f"{repo.replace('/', '-')}-{pr_number}",
         "repo": repo,
         "pr_number": pr_number,
         "source_urls": [f"https://github.com/{repo}/pull/{pr_number}"],
@@ -78,35 +69,22 @@ def record(
     return row
 
 
-def with_code_state(
-    row: dict[str, Any],
-    *,
-    base_oid: str = BASE_OID,
-    head_oid: str = HEAD_OID,
-    commit_oid: str = MERGE_OID,
-) -> dict[str, Any]:
+def with_code_state(row: dict[str, Any], **oids: str) -> dict[str, Any]:
     updated = dict(row)
     updated["repository"] = {
-        "base_oid": base_oid,
-        "head_oid": head_oid,
-        "commit_oid": commit_oid,
+        "base_oid": oids.get("base_oid", BASE_OID),
+        "head_oid": oids.get("head_oid", HEAD_OID),
+        "commit_oid": oids.get("commit_oid", MERGE_OID),
     }
     return updated
 
 
-def inventory_pr(
-    repo: str,
-    number: int,
-    *,
-    base_oid: str = BASE_OID,
-    head_oid: str = HEAD_OID,
-    merge_commit_oid: str = MERGE_OID,
-) -> dict[str, Any]:
+def inventory_pr(repo: str, number: int, **oids: str) -> dict[str, Any]:
     return bind_pr_source_hash(
         {
-            "base_oid": base_oid,
-            "head_oid": head_oid,
-            "merge_commit_oid": merge_commit_oid,
+            "base_oid": oids.get("base_oid", BASE_OID),
+            "head_oid": oids.get("head_oid", HEAD_OID),
+            "merge_commit_oid": oids.get("merge_commit_oid", MERGE_OID),
             "number": number,
             "repository_name_with_owner": repo,
         }
@@ -114,11 +92,9 @@ def inventory_pr(
 
 
 def card(
-    repo: str | list[str],
-    license_id: str | dict[str, str] | None,
-    *,
-    digest: str | dict[str, str] | None = None,
+    repo: str | list[str], license_id: str | dict[str, str] | None, **extra: Any
 ) -> dict[str, Any]:
+    digest = extra.get("digest")
     payload: dict[str, Any] = {"name": "fixture"}
     if isinstance(repo, list):
         payload["source_repos"] = repo
@@ -136,18 +112,13 @@ def card(
 
 
 def manifest(
-    repo: str | list[str],
-    license_id: str | dict[str, str] | None,
-    *,
-    digest: str | dict[str, str] | None = None,
-    families: list[str] | None = None,
-    unresolved: int | None = None,
+    repo: str | list[str], license_id: str | dict[str, str] | None, **extra: Any
 ) -> dict[str, Any]:
-    payload = card(repo, license_id, digest=digest)
-    if families is not None:
-        payload["license_families"] = families
-    if unresolved is not None:
-        payload["unresolved_license_count"] = unresolved
+    payload = card(repo, license_id, digest=extra.get("digest"))
+    if extra.get("families") is not None:
+        payload["license_families"] = extra["families"]
+    if extra.get("unresolved") is not None:
+        payload["unresolved_license_count"] = extra["unresolved"]
     return payload
 
 
@@ -160,15 +131,13 @@ def _bundle(
     manifest_payload: dict[str, Any],
     records: list[dict[str, Any]],
     repositories: list[dict[str, Any]],
-    *,
-    markdown: str | None = None,
-    prior_repositories: list[dict[str, Any]] | None = None,
+    **extra: Any,
 ) -> dict[str, Any]:
     return {
         "card": card_payload,
         "manifest": manifest_payload,
-        "markdown": markdown,
-        "prior_repositories": prior_repositories,
+        "markdown": extra.get("markdown"),
+        "prior_repositories": extra.get("prior_repositories"),
         "records": records,
         "repositories": repositories,
         "snapshot_sha256": SNAPSHOT_SHA256,
@@ -179,27 +148,22 @@ def _single_repo_bundle(
     repo_name: str,
     license_id: str | None,
     repo: dict[str, Any],
-    pr_number: int,
-    *,
-    digest: str | None = None,
-    families: list[str] | None = None,
-    unresolved: int | None = None,
-    markdown: str | None = None,
-    prior_repositories: list[dict[str, Any]] | None = None,
+    spec: dict[str, Any],
 ) -> dict[str, Any]:
+    digest = spec.get("digest")
     return _bundle(
         card(repo_name, license_id, digest=digest),
         manifest(
             repo_name,
             license_id,
             digest=digest,
-            families=families,
-            unresolved=unresolved,
+            families=spec.get("families"),
+            unresolved=spec.get("unresolved"),
         ),
-        [record(repo_name, pr_number, license_id)],
+        [record(repo_name, spec["pr_number"], license_id)],
         [repo],
-        markdown=markdown,
-        prior_repositories=prior_repositories,
+        markdown=spec.get("markdown"),
+        prior_repositories=spec.get("prior_repositories"),
     )
 
 
@@ -214,14 +178,16 @@ def spdx_known_bundle() -> dict[str, Any]:
         "rmems/widget",
         "MIT",
         repo,
-        1,
-        digest=digest_for(repo),
-        families=["spdx"],
-        unresolved=0,
-        markdown=(
-            "## License / provenance\n\n"
-            "- **Source repository license:** MIT (rmems/widget)\n"
-        ),
+        {
+            "pr_number": 1,
+            "digest": digest_for(repo),
+            "families": ["spdx"],
+            "unresolved": 0,
+            "markdown": (
+                "## License / provenance\n\n"
+                "- **Source repository license:** MIT (rmems/widget)\n"
+            ),
+        },
     )
 
 
@@ -232,7 +198,14 @@ def license_ref_without_digest_bundle() -> dict[str, Any]:
         spdx_id=identifier,
         license_name="TemporalFocus custom license",
     )
-    return _single_repo_bundle("rmems/TemporalFocus.jl", identifier, repo, 7)
+    return _single_repo_bundle(
+        "rmems/TemporalFocus.jl",
+        identifier,
+        repo,
+        {
+            "pr_number": 7,
+        },
+    )
 
 
 def custom_license_bundle() -> dict[str, Any]:
@@ -251,10 +224,12 @@ def custom_license_bundle() -> dict[str, Any]:
         "rmems/TemporalFocus.jl",
         identifier,
         repo,
-        7,
-        digest=digest_for(repo),
-        families=["custom"],
-        unresolved=0,
+        {
+            "pr_number": 7,
+            "digest": digest_for(repo),
+            "families": ["custom"],
+            "unresolved": 0,
+        },
     )
 
 
@@ -271,13 +246,23 @@ def mismatched_custom_identifier_bundle() -> dict[str, Any]:
         },
     )
     return _single_repo_bundle(
-        "rmems/TemporalFocus.jl", identifier, repo, 7, digest=digest_for(repo)
+        "rmems/TemporalFocus.jl",
+        identifier,
+        repo,
+        {"pr_number": 7, "digest": digest_for(repo)},
     )
 
 
 def missing_license_bundle() -> dict[str, Any]:
     repo = repository("rmems/unlicensed", spdx_id=None, license_name=None)
-    return _single_repo_bundle("rmems/unlicensed", None, repo, 3)
+    return _single_repo_bundle(
+        "rmems/unlicensed",
+        None,
+        repo,
+        {
+            "pr_number": 3,
+        },
+    )
 
 
 def changed_license_bundle() -> dict[str, Any]:
@@ -297,15 +282,22 @@ def changed_license_bundle() -> dict[str, Any]:
         "rmems/widget",
         "Apache-2.0",
         current,
-        1,
-        digest=digest_for(current),
-        prior_repositories=[prior],
+        {
+            "pr_number": 1,
+            "digest": digest_for(current),
+            "prior_repositories": [prior],
+        },
     )
 
 
 def stale_digest_bundle() -> dict[str, Any]:
     repo = repository("rmems/widget", spdx_id="MIT", license_name="MIT License")
-    return _single_repo_bundle("rmems/widget", "MIT", repo, 1, digest=STALE_DIGEST)
+    return _single_repo_bundle(
+        "rmems/widget",
+        "MIT",
+        repo,
+        {"pr_number": 1, "digest": STALE_DIGEST},
+    )
 
 
 def conflicting_card_manifest_digest_bundle() -> dict[str, Any]:
@@ -370,12 +362,26 @@ def mixed_repository_bundle() -> dict[str, Any]:
 
 def unknown_license_bundle() -> dict[str, Any]:
     repo = repository("rmems/mystery", spdx_id="NOASSERTION", license_name="Other")
-    return _single_repo_bundle("rmems/mystery", "NOASSERTION", repo, 4)
+    return _single_repo_bundle(
+        "rmems/mystery",
+        "NOASSERTION",
+        repo,
+        {
+            "pr_number": 4,
+        },
+    )
 
 
 def forge_substitution_bundle() -> dict[str, Any]:
     repo = repository("rmems/unlicensed", spdx_id=None, license_name=None)
-    return _single_repo_bundle("rmems/unlicensed", "Apache-2.0", repo, 9)
+    return _single_repo_bundle(
+        "rmems/unlicensed",
+        "Apache-2.0",
+        repo,
+        {
+            "pr_number": 9,
+        },
+    )
 
 
 def apache_source_bundle() -> dict[str, Any]:
@@ -390,10 +396,12 @@ def apache_source_bundle() -> dict[str, Any]:
         "rmems/corinth-canal",
         "Apache-2.0",
         repo,
-        142,
-        digest=digest_for(repo),
-        families=["spdx"],
-        unresolved=0,
+        {
+            "pr_number": 142,
+            "digest": digest_for(repo),
+            "families": ["spdx"],
+            "unresolved": 0,
+        },
     )
 
 

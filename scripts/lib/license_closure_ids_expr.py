@@ -16,26 +16,20 @@ from .license_closure_ids_const import (
 def _parentheses_balanced(identifier: str) -> bool:
     depth = 0
     for char in identifier:
-        if char == "(":
-            depth += 1
-        elif char == ")":
-            if depth == 0:
-                return False
-            depth -= 1
+        depth += (char == "(") - (char == ")")
+        if depth < 0:
+            return False
     return depth == 0
 
 
 def _matching_close_index(identifier: str) -> int | None:
     depth = 0
     for index, char in enumerate(identifier):
-        if char == "(":
-            depth += 1
-        elif char == ")":
-            if depth == 0:
-                return None
-            depth -= 1
-            if depth == 0:
-                return index
+        depth += (char == "(") - (char == ")")
+        if depth < 0:
+            return None
+        if char == ")" and depth == 0:
+            return index
     return None
 
 
@@ -54,6 +48,12 @@ def _unwrap_outer_parens(identifier: str) -> str | None:
     return stripped
 
 
+def _expression_separator(expression: str, index: int, depth: int):
+    if depth != 0:
+        return None
+    return EXPRESSION_SPLIT_RE.match(expression, index)
+
+
 def _top_level_expression_parts(expression: str) -> list[str] | None:
     """Split on AND/OR/WITH that are outside parentheses."""
     parts: list[str] = []
@@ -62,22 +62,18 @@ def _top_level_expression_parts(expression: str) -> list[str] | None:
     index = 0
     length = len(expression)
     while index < length:
+        match = _expression_separator(expression, index, depth)
+        if match is not None:
+            parts.append("".join(buf).strip())
+            parts.append(match.group(1).upper())
+            buf = []
+            index = match.end()
+            continue
         char = expression[index]
-        if char == "(":
-            depth += 1
-        elif char == ")":
-            if depth == 0:
-                return None
-            depth -= 1
-        elif depth == 0:
-            match = EXPRESSION_SPLIT_RE.match(expression, index)
-            if match is not None:
-                parts.append("".join(buf).strip())
-                parts.append(match.group(1).upper())
-                buf = []
-                index = match.end()
-                continue
         buf.append(char)
+        depth += (char == "(") - (char == ")")
+        if depth < 0:
+            return None
         index += 1
     if depth != 0:
         return None
@@ -138,18 +134,22 @@ def classify_license_family(
         return "unknown"
     if not tokens:
         return "missing"
-    upper_tokens = [token.upper() for token in tokens]
-    if any(token in UNKNOWN_LICENSE_IDS for token in upper_tokens):
-        return "unknown"
-    if any(LICENSE_REF_RE.fullmatch(token) for token in tokens):
-        if has_custom_evidence and all(
-            token in SPDX_LICENSE_IDS or LICENSE_REF_RE.fullmatch(token)
-            for token in tokens
-        ):
-            return "custom"
+    return _token_family(tokens, has_custom_evidence)
+
+
+def _license_token_known(token: str) -> bool:
+    return token in SPDX_LICENSE_IDS or LICENSE_REF_RE.fullmatch(token) is not None
+
+
+def _token_family(tokens: list[str], has_custom_evidence: bool) -> str:
+    if any(token.upper() in UNKNOWN_LICENSE_IDS for token in tokens):
         return "unknown"
     if all(token in SPDX_LICENSE_IDS for token in tokens):
         return "spdx"
+    if not any(LICENSE_REF_RE.fullmatch(token) for token in tokens):
+        return "unknown"
+    if has_custom_evidence and all(_license_token_known(token) for token in tokens):
+        return "custom"
     return "unknown"
 
 

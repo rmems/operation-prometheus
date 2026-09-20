@@ -22,7 +22,7 @@ def _bundle_error_strings(report: dict[str, Any]) -> list[str] | None:
 
 def _derived_closed(report: dict[str, Any], quarantined: list[dict[str, Any]]) -> bool:
     bundle_errors = _bundle_error_strings(report)
-    return not quarantined and bundle_errors is not None and not bundle_errors
+    return not quarantined and bundle_errors == []
 
 
 def _leaked_record_ids(
@@ -34,18 +34,43 @@ def _leaked_record_ids(
     )
 
 
-def _assert_row_identity(
+def _assert_no_leaks(
     released: list[dict[str, Any]], quarantined: list[dict[str, Any]]
 ) -> None:
-    if any(not _released_row_types_valid(row) for row in released):
-        raise AssertionError("released row value types are invalid")
     leaked = _leaked_record_ids(released, quarantined)
     if leaked:
         raise AssertionError(
             "Unresolved records appeared in released positives: " + ", ".join(leaked)
         )
+
+
+def _assert_row_identity(
+    released: list[dict[str, Any]], quarantined: list[dict[str, Any]]
+) -> None:
+    if any(not _released_row_types_valid(row) for row in released):
+        raise AssertionError("released row value types are invalid")
+    _assert_no_leaks(released, quarantined)
     if len({row.get("record_id") for row in released}) != len(released):
         raise AssertionError("Released record IDs are not unique")
+
+
+def _expected_counts(
+    released: list[dict[str, Any]], quarantined: list[dict[str, Any]]
+) -> dict[str, int]:
+    return {
+        "unresolved_count": len(quarantined),
+        "quarantined_count": len(quarantined),
+        "released_positive_count": len(released),
+        "record_count": len(released) + len(quarantined),
+    }
+
+
+_COUNT_MESSAGES = {
+    "unresolved_count": "Unresolved count drifted from quarantined rows",
+    "quarantined_count": "Quarantined count drifted from quarantined rows",
+    "released_positive_count": "Released positive count does not match released rows",
+    "record_count": "Record count does not match released and quarantined rows",
+}
 
 
 def _assert_counts(
@@ -56,15 +81,9 @@ def _assert_counts(
     counts = report.get("counts")
     if not isinstance(counts, dict):
         raise AssertionError("counts must be an object")
-    checks = (
-        (counts.get("unresolved_count"), len(quarantined), "Unresolved count drifted from quarantined rows"),
-        (counts.get("quarantined_count"), len(quarantined), "Quarantined count drifted from quarantined rows"),
-        (counts.get("released_positive_count"), len(released), "Released positive count does not match released rows"),
-        (counts.get("record_count"), len(released) + len(quarantined), "Record count does not match released and quarantined rows"),
-    )
-    for declared, expected, message in checks:
-        if _declared_count(declared) != expected:
-            raise AssertionError(message)
+    for key, expected in _expected_counts(released, quarantined).items():
+        if _declared_count(counts.get(key)) != expected:
+            raise AssertionError(_COUNT_MESSAGES[key])
     if any(row.get("state") != "released_positive" for row in released):
         raise AssertionError("Non-positive row listed as released")
 

@@ -54,31 +54,41 @@ def _released_row_types_valid(row: dict[str, Any]) -> bool:
     )
 
 
-def _released_evidence_bound(row: dict[str, Any], report_snapshot: str | None) -> bool:
-    snapshot = _sha256_or_none(row.get("snapshot_sha256"))
-    source_hash = _sha256_or_none(row.get("repository_source_hash"))
-    if snapshot is None or source_hash is None or snapshot != report_snapshot:
-        return False
-    if _sha256_or_none(row.get("source_provenance_digest")) != source_provenance_digest(
+def _provenance_bound(row: dict[str, Any], source_hash: str, snapshot: str) -> bool:
+    expected = source_provenance_digest(
         _text(row.get("repo")),
         source_hash,
         snapshot,
-        record_id=_text(row.get("record_id")),
-        pr_number=_released_pr_number(row.get("pr_number")),
-        evidence_digest=_sha256_or_none(row.get("evidence_digest")) or "",
-    ):
+        {
+            "record_id": _text(row.get("record_id")),
+            "pr_number": _released_pr_number(row.get("pr_number")),
+            "evidence_digest": _sha256_or_none(row.get("evidence_digest")) or "",
+        },
+    )
+    return _sha256_or_none(row.get("source_provenance_digest")) == expected
+
+
+def _custom_family_consistent(row: dict[str, Any], has_custom: bool) -> bool:
+    if row.get("license_family") == "custom":
+        return has_custom
+    return not has_custom and not isinstance(row.get("custom_license"), dict)
+
+
+def _released_evidence_bound(row: dict[str, Any], report_snapshot: str | None) -> bool:
+    snapshot = _sha256_or_none(row.get("snapshot_sha256"))
+    source_hash = _sha256_or_none(row.get("repository_source_hash"))
+    if snapshot is None or snapshot != report_snapshot:
+        return False
+    if source_hash is None:
+        return False
+    if not _provenance_bound(row, source_hash, snapshot):
         return False
     reconstructed = {
         "custom_license": row.get("custom_license"),
         "license": row.get("inventory_license"),
     }
     has_custom = inventory_has_custom_evidence(reconstructed)
-    family = row.get("license_family")
-    custom_present = isinstance(row.get("custom_license"), dict)
-    if family == "custom":
-        if not has_custom:
-            return False
-    elif has_custom or custom_present:
+    if not _custom_family_consistent(row, has_custom):
         return False
     digest = _sha256_or_none(row.get("evidence_digest"))
     if digest != evidence_digest(license_evidence_payload(reconstructed)):

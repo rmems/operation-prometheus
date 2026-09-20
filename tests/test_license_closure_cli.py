@@ -57,14 +57,16 @@ def test_existing_v0_extracts_cannot_publish_as_positives():
         (ROOT / "datasets/inventory/v0.7/manifest.json").read_text()
     )
     report = build_license_closure_report(
-        records,
-        card,
-        manifest,
-        repositories,
-        snapshot_sha256=inventory_manifest["snapshot_sha256"],
-        markdown_card=(
-            ROOT / "datasets/cards/corinth-canal-trajectories-v0.md"
-        ).read_text(),
+        {
+            "card": card,
+            "manifest": manifest,
+            "markdown_card": (
+                ROOT / "datasets/cards/corinth-canal-trajectories-v0.md"
+            ).read_text(),
+            "records": records,
+            "repositories": repositories,
+            "snapshot_sha256": inventory_manifest["snapshot_sha256"],
+        }
     )
     _assert_schema(report)
     assert_released_positives_are_closed(report)
@@ -196,5 +198,5 @@ def test_snapshot_sha256_must_be_frozen_hex():
     bundle = spdx_known_bundle()
     with pytest.raises(ValueError, match="snapshot_sha256"):
         build_license_closure_report(
-            **{**report_kwargs(bundle), "snapshot_sha256": "not-a-digest"}
+            {**report_kwargs(bundle), "snapshot_sha256": "not-a-digest"}
         )

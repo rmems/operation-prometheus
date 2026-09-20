@@ -72,9 +72,11 @@ def test_non_positive_released_pr_number_cannot_validate(pr_number):
         row["repo"],
         row["repository_source_hash"],
         row["snapshot_sha256"],
-        record_id=row["record_id"],
-        pr_number=pr_number,
-        evidence_digest=row["evidence_digest"],
+        {
+            "record_id": row["record_id"],
+            "pr_number": pr_number,
+            "evidence_digest": row["evidence_digest"],
+        },
     )
     errors = validate_positive_release(report)
     assert errors
