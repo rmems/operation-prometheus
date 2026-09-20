@@ -338,8 +338,63 @@ def build_parser() -> argparse.ArgumentParser:
     return parser
 
 
-def main(argv: list[str] | None = None) -> int:
-    args = build_parser().parse_args(argv)
+def _read_optional(path: Path | None) -> bytes | None:
+    return path.read_bytes() if path is not None else None
+
+
+def _frozen_inputs(args: argparse.Namespace) -> dict[str, Any]:
+    raws = {
+        "records": args.records.read_bytes(),
+        "card": args.card.read_bytes(),
+        "manifest": args.manifest.read_bytes(),
+        "inventory": args.inventory.read_bytes(),
+        "inventory_manifest": _read_optional(args.inventory_manifest),
+        "prior_inventory": _read_optional(args.prior_inventory),
+        "prior_inventory_manifest": _read_optional(args.prior_inventory_manifest),
+        "markdown_card": _read_optional(args.markdown_card),
+    }
+    parsed = {
+        "records": _parse_jsonl(raws["records"], args.records),
+        "card": _require_object(_parse_json(raws["card"], args.card), args.card),
+        "manifest": _require_object(
+            _parse_json(raws["manifest"], args.manifest), args.manifest
+        ),
+        "inventory": _parse_jsonl(raws["inventory"], args.inventory),
+        "inventory_manifest": (
+            _parse_json(raws["inventory_manifest"], args.inventory_manifest)
+            if raws["inventory_manifest"] is not None
+            else None
+        ),
+        "prior_inventory_manifest": (
+            _parse_json(
+                raws["prior_inventory_manifest"], args.prior_inventory_manifest
+            )
+            if raws["prior_inventory_manifest"] is not None
+            else None
+        ),
+        "prior_inventory": (
+            _parse_jsonl(raws["prior_inventory"], args.prior_inventory)
+            if raws["prior_inventory"] is not None
+            else None
+        ),
+        "markdown_card": (
+            _decode_utf8(raws["markdown_card"], args.markdown_card)
+            if raws["markdown_card"] is not None
+            else None
+        ),
+    }
+    parsed["snapshot_sha256"] = _snapshot_sha256(
+        args.snapshot_sha256,
+        parsed["inventory_manifest"]
+        if isinstance(parsed["inventory_manifest"], dict)
+        else None,
+        args.inventory_manifest,
+    )
+    parsed["raws"] = raws
+    return parsed
+
+
+def _check_args(args: argparse.Namespace) -> int:
     colliding = _out_collides_with_frozen_inputs(args)
     if colliding is not None:
         print(
@@ -353,81 +408,30 @@ def main(argv: list[str] | None = None) -> int:
             file=sys.stderr,
         )
         return 2
+    return 0
 
-    try:
-        records_raw = args.records.read_bytes()
-        card_raw = args.card.read_bytes()
-        manifest_raw = args.manifest.read_bytes()
-        inventory_raw = args.inventory.read_bytes()
-        inventory_manifest_raw = (
-            args.inventory_manifest.read_bytes()
-            if args.inventory_manifest is not None
-            else None
-        )
-        prior_raw = args.prior_inventory.read_bytes() if args.prior_inventory else None
-        prior_inventory_manifest_raw = (
-            args.prior_inventory_manifest.read_bytes()
-            if args.prior_inventory_manifest is not None
-            else None
-        )
-        markdown_raw = args.markdown_card.read_bytes() if args.markdown_card else None
-        records = _parse_jsonl(records_raw, args.records)
-        card = _require_object(_parse_json(card_raw, args.card), args.card)
-        manifest = _require_object(
-            _parse_json(manifest_raw, args.manifest), args.manifest
-        )
-        inventory = _parse_jsonl(inventory_raw, args.inventory)
-        inventory_manifest = (
-            _parse_json(inventory_manifest_raw, args.inventory_manifest)
-            if inventory_manifest_raw is not None
-            else None
-        )
-        prior_inventory_manifest = (
-            _parse_json(prior_inventory_manifest_raw, args.prior_inventory_manifest)
-            if prior_inventory_manifest_raw is not None
-            else None
-        )
-        snapshot_sha256 = _snapshot_sha256(
-            args.snapshot_sha256,
-            inventory_manifest if isinstance(inventory_manifest, dict) else None,
-            args.inventory_manifest,
-        )
-        report = build_license_closure_report(
-            records,
-            card,
-            manifest,
-            inventory,
-            snapshot_sha256=snapshot_sha256,
-            prior_repositories=(
-                _parse_jsonl(prior_raw, args.prior_inventory)
-                if prior_raw is not None
-                else None
-            ),
-            markdown_card=(
-                _decode_utf8(markdown_raw, args.markdown_card)
-                if markdown_raw is not None
-                else None
-            ),
-        )
-    except (OSError, UnicodeDecodeError, ValueError, json.JSONDecodeError) as exc:
-        print(f"ERROR: {exc}", file=sys.stderr)
-        return 2
 
+def _apply_binding_errors(
+    report: dict[str, Any], args: argparse.Namespace, inputs: dict[str, Any]
+) -> None:
+    raws = inputs["raws"]
     binding_errors = _publication_binding_errors(
         records_path=args.records,
-        records_digest=_sha256_bytes(records_raw),
+        records_digest=_sha256_bytes(raws["records"]),
         record_count=report["counts"]["record_count"],
-        dataset_manifest=manifest,
+        dataset_manifest=inputs["manifest"],
         dataset_manifest_path=args.manifest,
         inventory_path=args.inventory,
-        inventory_digest=_sha256_bytes(inventory_raw),
-        inventory_manifest=inventory_manifest,
+        inventory_digest=_sha256_bytes(raws["inventory"]),
+        inventory_manifest=inputs["inventory_manifest"],
         inventory_manifest_path=args.inventory_manifest,
         prior_inventory_path=args.prior_inventory,
         prior_inventory_digest=(
-            _sha256_bytes(prior_raw) if prior_raw is not None else None
+            _sha256_bytes(raws["prior_inventory"])
+            if raws["prior_inventory"] is not None
+            else None
         ),
-        prior_inventory_manifest=prior_inventory_manifest,
+        prior_inventory_manifest=inputs["prior_inventory_manifest"],
         prior_inventory_manifest_path=args.prior_inventory_manifest,
     )
     if binding_errors:
@@ -436,19 +440,24 @@ def main(argv: list[str] | None = None) -> int:
         )
         report["closed"] = False
 
+
+def _check_schema(report: dict[str, Any]) -> int:
     validator = _schema_validator()
     schema_errors = sorted(
         validator.iter_errors(report), key=lambda error: list(error.path)
     )
-    if schema_errors:
-        print(
-            "ERROR: license-closure manifest failed schema validation:", file=sys.stderr
-        )
-        for error in schema_errors:
-            path = ".".join(str(part) for part in error.absolute_path) or "(root)"
-            print(f"  [{path}] {error.message}", file=sys.stderr)
-        return 1
+    if not schema_errors:
+        return 0
+    print(
+        "ERROR: license-closure manifest failed schema validation:", file=sys.stderr
+    )
+    for error in schema_errors:
+        path = ".".join(str(part) for part in error.absolute_path) or "(root)"
+        print(f"  [{path}] {error.message}", file=sys.stderr)
+    return 1
 
+
+def _emit_report(report: dict[str, Any], args: argparse.Namespace) -> int:
     rendered = render_json(report)
     if args.check and args.out:
         current = args.out.read_bytes() if args.out.exists() else b""
@@ -464,7 +473,10 @@ def main(argv: list[str] | None = None) -> int:
         print(f"Wrote {args.out} ({SCHEMA_VERSION}).")
     elif not args.out:
         sys.stdout.buffer.write(rendered)
+    return 0
 
+
+def _report_errors(report: dict[str, Any]) -> int:
     errors = validate_positive_release(report)
     if errors:
         print("License-closure FAILED:", file=sys.stderr)
@@ -478,6 +490,33 @@ def main(argv: list[str] | None = None) -> int:
         file=sys.stderr,
     )
     return 0
+
+
+def main(argv: list[str] | None = None) -> int:
+    args = build_parser().parse_args(argv)
+    early = _check_args(args)
+    if early:
+        return early
+    try:
+        inputs = _frozen_inputs(args)
+        report = build_license_closure_report(
+            inputs["records"],
+            inputs["card"],
+            inputs["manifest"],
+            inputs["inventory"],
+            snapshot_sha256=inputs["snapshot_sha256"],
+            prior_repositories=inputs["prior_inventory"],
+            markdown_card=inputs["markdown_card"],
+        )
+    except (OSError, UnicodeDecodeError, ValueError, json.JSONDecodeError) as exc:
+        print(f"ERROR: {exc}", file=sys.stderr)
+        return 2
+    _apply_binding_errors(report, args, inputs)
+    if _check_schema(report):
+        return 1
+    if _emit_report(report, args):
+        return 1
+    return _report_errors(report)
 
 
 if __name__ == "__main__":

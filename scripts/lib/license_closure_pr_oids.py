@@ -92,6 +92,36 @@ def _pr_inventory_reasons(
     if not names or pr_number is None:
         return ["snapshot_provenance_missing"]
     inventory_id = _text((repository or {}).get("repository_id"))
+    matched = _matching_inventory_prs(
+        names, pr_number, pull_requests, inventory_id
+    )
+    if matched is None:
+        return ["snapshot_provenance_missing"]
+    if len(matched) > 1:
+        raise ValueError(f"Duplicate inventory pull request {names[0]}#{pr_number}")
+    if matched and _code_state_matches_inventory_pr(record, matched[0]):
+        return []
+    return ["snapshot_provenance_missing"]
+
+
+def _pr_evidence_fingerprint(inventory_pr: dict[str, Any]) -> str:
+    return sha256_json(
+        {
+            "base_oid": inventory_pr.get("base_oid"),
+            "head_oid": inventory_pr.get("head_oid"),
+            "merge_commit_oid": inventory_pr.get("merge_commit_oid"),
+            "number": inventory_pr.get("number"),
+        }
+    )
+
+
+def _matching_inventory_prs(
+    names: list[str],
+    pr_number: int,
+    pull_requests: dict[tuple[str, int], dict[str, Any]],
+    inventory_id: str,
+) -> list[dict[str, Any]] | None:
+    """Return matched PR rows, or None when a repository-id mismatch fails closed."""
     seen: set[str] = set()
     matched: list[dict[str, Any]] = []
     seen_evidence: set[str] = set()
@@ -105,24 +135,13 @@ def _pr_inventory_reasons(
             continue
         pr_id = _text(inventory_pr.get("repository_id"))
         if inventory_id and pr_id and inventory_id != pr_id:
-            return ["snapshot_provenance_missing"]
-        evidence = sha256_json(
-            {
-                "base_oid": inventory_pr.get("base_oid"),
-                "head_oid": inventory_pr.get("head_oid"),
-                "merge_commit_oid": inventory_pr.get("merge_commit_oid"),
-                "number": inventory_pr.get("number"),
-            }
-        )
+            return None
+        evidence = _pr_evidence_fingerprint(inventory_pr)
         if evidence in seen_evidence:
             continue
         seen_evidence.add(evidence)
         matched.append(inventory_pr)
-    if len(matched) > 1:
-        raise ValueError(f"Duplicate inventory pull request {names[0]}#{pr_number}")
-    if matched and _code_state_matches_inventory_pr(record, matched[0]):
-        return []
-    return ["snapshot_provenance_missing"]
+    return matched
 
 
 def _index_pull_requests(
@@ -158,15 +177,25 @@ def _declared_repos(container: dict[str, Any]) -> set[str]:
     return {name.casefold() for name in names if name}
 
 
+def _singular_source_repo_invalid(container: dict[str, Any]) -> bool:
+    if "source_repo" not in container:
+        return False
+    singular = container.get("source_repo")
+    return not isinstance(singular, str) or not singular.strip()
+
+
+def _plural_source_repos_invalid(container: dict[str, Any]) -> bool:
+    if "source_repos" not in container:
+        return False
+    extra = container.get("source_repos")
+    if not isinstance(extra, list):
+        return True
+    return any(not isinstance(item, str) or not item.strip() for item in extra)
+
+
 def _source_coverage_invalid(container: dict[str, Any]) -> bool:
-    if "source_repo" in container:
-        singular = container.get("source_repo")
-        if not isinstance(singular, str) or not singular.strip():
-            return True
-    if "source_repos" in container:
-        extra = container.get("source_repos")
-        if not isinstance(extra, list):
-            return True
-        if any(not isinstance(item, str) or not item.strip() for item in extra):
-            return True
+    if _singular_source_repo_invalid(container):
+        return True
+    if _plural_source_repos_invalid(container):
+        return True
     return not _declared_repos(container)

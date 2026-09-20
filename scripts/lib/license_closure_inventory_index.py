@@ -19,35 +19,53 @@ from .license_closure_inventory_maps import (
 )
 
 
+def _repository_row_name(row: Any) -> str:
+    if not isinstance(row, dict):
+        raise ValueError("repository inventory rows must be objects")
+    name = _text(row.get("name_with_owner"))
+    if not name:
+        raise ValueError("repository inventory row is missing a canonical name")
+    if _repository_id_invalid(row):
+        raise ValueError(
+            f"repository inventory row {name} has a malformed repository_id"
+        )
+    return name
+
+
+def _check_repository_id(
+    row: dict[str, Any], folded: str, seen_ids: dict[str, str]
+) -> None:
+    repo_id = _text(row.get("repository_id"))
+    if not repo_id:
+        return
+    previous = seen_ids.get(repo_id)
+    if previous is not None and previous != folded:
+        raise ValueError(f"Duplicate inventory repository id {repo_id}")
+    seen_ids[repo_id] = folded
+
+
+def _index_row_aliases(
+    index: dict[str, dict[str, Any]], row: dict[str, Any], name: str
+) -> None:
+    for alias in _alias_entries(row, name):
+        alias_name = _alias_name(alias, name).casefold()
+        existing = index.get(alias_name)
+        if existing is not None and existing is not row:
+            raise ValueError(f"Duplicate inventory alias {alias_name}")
+        index[alias_name] = row
+
+
 def index_repositories(repositories: list[dict[str, Any]]) -> dict[str, dict[str, Any]]:
     index: dict[str, dict[str, Any]] = {}
     seen_ids: dict[str, str] = {}
     for row in repositories:
-        if not isinstance(row, dict):
-            raise ValueError("repository inventory rows must be objects")
-        name = _text(row.get("name_with_owner"))
-        if not name:
-            raise ValueError("repository inventory row is missing a canonical name")
-        if _repository_id_invalid(row):
-            raise ValueError(
-                f"repository inventory row {name} has a malformed repository_id"
-            )
+        name = _repository_row_name(row)
         folded = name.casefold()
         if folded in index:
             raise ValueError(f"Duplicate inventory repository {name}")
-        repo_id = _text(row.get("repository_id"))
-        if repo_id:
-            previous = seen_ids.get(repo_id)
-            if previous is not None and previous != folded:
-                raise ValueError(f"Duplicate inventory repository id {repo_id}")
-            seen_ids[repo_id] = folded
+        _check_repository_id(row, folded, seen_ids)
         index[folded] = row
-        for alias in _alias_entries(row, name):
-            alias_name = _alias_name(alias, name).casefold()
-            existing = index.get(alias_name)
-            if existing is not None and existing is not row:
-                raise ValueError(f"Duplicate inventory alias {alias_name}")
-            index[alias_name] = row
+        _index_row_aliases(index, row, name)
     return index
 
 
@@ -178,6 +196,56 @@ def _prior_repository(
     return None
 
 
+def _licenses_agree(
+    card_license: str | None, manifest_license: str | None, inventory_license: str
+) -> bool:
+    declared = (card_license, manifest_license)
+    if any(item is None for item in declared):
+        return False
+    if not _same_license(card_license, manifest_license):
+        return False
+    return all(_same_license(item, inventory_license) for item in declared)
+
+
+def _digests_agree(
+    card_digest: str | None, manifest_digest: str | None, inventory_digest: str | None
+) -> bool:
+    if (
+        card_digest is not None
+        and manifest_digest is not None
+        and card_digest != manifest_digest
+    ):
+        return False
+    if card_digest is not None and card_digest != inventory_digest:
+        return False
+    return not (manifest_digest is not None and manifest_digest != inventory_digest)
+
+
+def _repo_declarations_conflict(
+    card: dict[str, Any],
+    manifest: dict[str, Any],
+    inventory: dict[str, Any] | None,
+    names: list[str],
+) -> bool:
+    if _declaration_map_conflicts(card, manifest, names):
+        return True
+    card_license = card_license_for_repo(card, names)
+    manifest_license = manifest_license_for_repo(manifest, names)
+    inventory_license = normalize_license_id(inventory_license_object(inventory))
+    if not _licenses_agree(card_license, manifest_license, inventory_license):
+        return True
+    inventory_digest = (
+        evidence_digest(license_evidence_payload(inventory))
+        if isinstance(inventory, dict)
+        else None
+    )
+    return not _digests_agree(
+        declared_digest_for_repo(card, names),
+        declared_digest_for_repo(manifest, names),
+        inventory_digest,
+    )
+
+
 def _declared_source_maps_conflict(
     card: dict[str, Any],
     manifest: dict[str, Any],
@@ -187,38 +255,6 @@ def _declared_source_maps_conflict(
     for name in declared_repos:
         inventory = _inventory_for_repo(inventory_index, name)
         names = _identity_names(inventory, name)
-        if _declaration_map_conflicts(card, manifest, names):
-            return True
-        card_license = card_license_for_repo(card, names)
-        manifest_license = manifest_license_for_repo(manifest, names)
-        if card_license is None or manifest_license is None:
-            return True
-        if not _same_license(card_license, manifest_license):
-            return True
-        inventory_license = normalize_license_id(inventory_license_object(inventory))
-        if card_license is not None and not _same_license(
-            card_license, inventory_license
-        ):
-            return True
-        if manifest_license is not None and not _same_license(
-            manifest_license, inventory_license
-        ):
-            return True
-        card_digest = declared_digest_for_repo(card, names)
-        manifest_digest = declared_digest_for_repo(manifest, names)
-        if (
-            card_digest is not None
-            and manifest_digest is not None
-            and card_digest != manifest_digest
-        ):
-            return True
-        inventory_digest = (
-            evidence_digest(license_evidence_payload(inventory))
-            if isinstance(inventory, dict)
-            else None
-        )
-        if card_digest is not None and card_digest != inventory_digest:
-            return True
-        if manifest_digest is not None and manifest_digest != inventory_digest:
+        if _repo_declarations_conflict(card, manifest, inventory, names):
             return True
     return False

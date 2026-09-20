@@ -25,14 +25,21 @@ def _derived_closed(report: dict[str, Any], quarantined: list[dict[str, Any]]) -
     return not quarantined and bundle_errors is not None and not bundle_errors
 
 
+def _leaked_record_ids(
+    released: list[dict[str, Any]], quarantined: list[dict[str, Any]]
+) -> list[str]:
+    return sorted(
+        {row["record_id"] for row in released}
+        & {row["record_id"] for row in quarantined}
+    )
+
+
 def _assert_row_identity(
     released: list[dict[str, Any]], quarantined: list[dict[str, Any]]
 ) -> None:
     if any(not _released_row_types_valid(row) for row in released):
         raise AssertionError("released row value types are invalid")
-    leaked = sorted(
-        {row["record_id"] for row in released} & {row["record_id"] for row in quarantined}
-    )
+    leaked = _leaked_record_ids(released, quarantined)
     if leaked:
         raise AssertionError(
             "Unresolved records appeared in released positives: " + ", ".join(leaked)

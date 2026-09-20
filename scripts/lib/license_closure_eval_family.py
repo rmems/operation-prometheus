@@ -75,8 +75,21 @@ def _add_forge_reason(acc: EvalAcc, present: list[str]) -> None:
 
 
 def _add_change_reasons(acc: EvalAcc) -> None:
-    if _declared_digest_changed(acc) or _prior_digest_changed(acc) or _prior_id_changed(acc):
+    changed = (
+        _declared_digest_changed(acc)
+        or _prior_digest_changed(acc)
+        or _prior_id_changed(acc)
+    )
+    if changed:
         acc.reasons.append("source_license_changed")
+
+
+def _prior_digest_changed(acc: EvalAcc) -> bool:
+    return (
+        acc.prior_digest is not None
+        and acc.digest is not None
+        and acc.prior_digest != acc.digest
+    )
 
 
 def _declared_digest_changed(acc: EvalAcc) -> bool:
@@ -86,10 +99,6 @@ def _declared_digest_changed(acc: EvalAcc) -> bool:
         declared is not None and declared != acc.digest
         for declared in (acc.card_digest, acc.manifest_digest)
     )
-
-
-def _prior_digest_changed(acc: EvalAcc) -> bool:
-    return acc.prior_digest is not None and acc.digest is not None and acc.prior_digest != acc.digest
 
 
 def _prior_id_changed(acc: EvalAcc) -> bool:

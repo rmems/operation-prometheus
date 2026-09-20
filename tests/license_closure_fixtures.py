@@ -155,6 +155,54 @@ def digest_for(repo_row: dict[str, Any]) -> str:
     return evidence_digest(license_evidence_payload(repo_row))
 
 
+def _bundle(
+    card_payload: dict[str, Any],
+    manifest_payload: dict[str, Any],
+    records: list[dict[str, Any]],
+    repositories: list[dict[str, Any]],
+    *,
+    markdown: str | None = None,
+    prior_repositories: list[dict[str, Any]] | None = None,
+) -> dict[str, Any]:
+    return {
+        "card": card_payload,
+        "manifest": manifest_payload,
+        "markdown": markdown,
+        "prior_repositories": prior_repositories,
+        "records": records,
+        "repositories": repositories,
+        "snapshot_sha256": SNAPSHOT_SHA256,
+    }
+
+
+def _single_repo_bundle(
+    repo_name: str,
+    license_id: str | None,
+    repo: dict[str, Any],
+    pr_number: int,
+    *,
+    digest: str | None = None,
+    families: list[str] | None = None,
+    unresolved: int | None = None,
+    markdown: str | None = None,
+    prior_repositories: list[dict[str, Any]] | None = None,
+) -> dict[str, Any]:
+    return _bundle(
+        card(repo_name, license_id, digest=digest),
+        manifest(
+            repo_name,
+            license_id,
+            digest=digest,
+            families=families,
+            unresolved=unresolved,
+        ),
+        [record(repo_name, pr_number, license_id)],
+        [repo],
+        markdown=markdown,
+        prior_repositories=prior_repositories,
+    )
+
+
 def spdx_known_bundle() -> dict[str, Any]:
     repo = repository(
         "rmems/widget",
@@ -162,25 +210,19 @@ def spdx_known_bundle() -> dict[str, Any]:
         license_name="MIT License",
         url="https://api.github.com/licenses/mit",
     )
-    digest = digest_for(repo)
-    return {
-        "card": card("rmems/widget", "MIT", digest=digest),
-        "manifest": manifest(
-            "rmems/widget",
-            "MIT",
-            digest=digest,
-            families=["spdx"],
-            unresolved=0,
-        ),
-        "markdown": (
+    return _single_repo_bundle(
+        "rmems/widget",
+        "MIT",
+        repo,
+        1,
+        digest=digest_for(repo),
+        families=["spdx"],
+        unresolved=0,
+        markdown=(
             "## License / provenance\n\n"
             "- **Source repository license:** MIT (rmems/widget)\n"
         ),
-        "prior_repositories": None,
-        "records": [record("rmems/widget", 1, "MIT")],
-        "repositories": [repo],
-        "snapshot_sha256": SNAPSHOT_SHA256,
-    }
+    )
 
 
 def license_ref_without_digest_bundle() -> dict[str, Any]:
@@ -190,15 +232,7 @@ def license_ref_without_digest_bundle() -> dict[str, Any]:
         spdx_id=identifier,
         license_name="TemporalFocus custom license",
     )
-    return {
-        "card": card("rmems/TemporalFocus.jl", identifier),
-        "manifest": manifest("rmems/TemporalFocus.jl", identifier),
-        "markdown": None,
-        "prior_repositories": None,
-        "records": [record("rmems/TemporalFocus.jl", 7, identifier)],
-        "repositories": [repo],
-        "snapshot_sha256": SNAPSHOT_SHA256,
-    }
+    return _single_repo_bundle("rmems/TemporalFocus.jl", identifier, repo, 7)
 
 
 def custom_license_bundle() -> dict[str, Any]:
@@ -213,22 +247,15 @@ def custom_license_bundle() -> dict[str, Any]:
             "text_sha256": CUSTOM_TEXT_SHA256,
         },
     )
-    digest = digest_for(repo)
-    return {
-        "card": card("rmems/TemporalFocus.jl", identifier, digest=digest),
-        "manifest": manifest(
-            "rmems/TemporalFocus.jl",
-            identifier,
-            digest=digest,
-            families=["custom"],
-            unresolved=0,
-        ),
-        "markdown": None,
-        "prior_repositories": None,
-        "records": [record("rmems/TemporalFocus.jl", 7, identifier)],
-        "repositories": [repo],
-        "snapshot_sha256": SNAPSHOT_SHA256,
-    }
+    return _single_repo_bundle(
+        "rmems/TemporalFocus.jl",
+        identifier,
+        repo,
+        7,
+        digest=digest_for(repo),
+        families=["custom"],
+        unresolved=0,
+    )
 
 
 def mismatched_custom_identifier_bundle() -> dict[str, Any]:
@@ -243,29 +270,14 @@ def mismatched_custom_identifier_bundle() -> dict[str, Any]:
             "text_sha256": CUSTOM_TEXT_SHA256,
         },
     )
-    digest = digest_for(repo)
-    return {
-        "card": card("rmems/TemporalFocus.jl", identifier, digest=digest),
-        "manifest": manifest("rmems/TemporalFocus.jl", identifier, digest=digest),
-        "markdown": None,
-        "prior_repositories": None,
-        "records": [record("rmems/TemporalFocus.jl", 7, identifier)],
-        "repositories": [repo],
-        "snapshot_sha256": SNAPSHOT_SHA256,
-    }
+    return _single_repo_bundle(
+        "rmems/TemporalFocus.jl", identifier, repo, 7, digest=digest_for(repo)
+    )
 
 
 def missing_license_bundle() -> dict[str, Any]:
     repo = repository("rmems/unlicensed", spdx_id=None, license_name=None)
-    return {
-        "card": card("rmems/unlicensed", None),
-        "manifest": manifest("rmems/unlicensed", None),
-        "markdown": None,
-        "prior_repositories": None,
-        "records": [record("rmems/unlicensed", 3, None)],
-        "repositories": [repo],
-        "snapshot_sha256": SNAPSHOT_SHA256,
-    }
+    return _single_repo_bundle("rmems/unlicensed", None, repo, 3)
 
 
 def changed_license_bundle() -> dict[str, Any]:
@@ -281,57 +293,40 @@ def changed_license_bundle() -> dict[str, Any]:
         license_name="Apache License 2.0",
         url="https://api.github.com/licenses/apache-2.0",
     )
-    digest = digest_for(current)
-    return {
-        "card": card("rmems/widget", "Apache-2.0", digest=digest),
-        "manifest": manifest("rmems/widget", "Apache-2.0", digest=digest),
-        "markdown": None,
-        "prior_repositories": [prior],
-        "records": [record("rmems/widget", 1, "Apache-2.0")],
-        "repositories": [current],
-        "snapshot_sha256": SNAPSHOT_SHA256,
-    }
+    return _single_repo_bundle(
+        "rmems/widget",
+        "Apache-2.0",
+        current,
+        1,
+        digest=digest_for(current),
+        prior_repositories=[prior],
+    )
 
 
 def stale_digest_bundle() -> dict[str, Any]:
     repo = repository("rmems/widget", spdx_id="MIT", license_name="MIT License")
-    return {
-        "card": card("rmems/widget", "MIT", digest=STALE_DIGEST),
-        "manifest": manifest("rmems/widget", "MIT", digest=STALE_DIGEST),
-        "markdown": None,
-        "prior_repositories": None,
-        "records": [record("rmems/widget", 1, "MIT")],
-        "repositories": [repo],
-        "snapshot_sha256": SNAPSHOT_SHA256,
-    }
+    return _single_repo_bundle("rmems/widget", "MIT", repo, 1, digest=STALE_DIGEST)
 
 
 def conflicting_card_manifest_digest_bundle() -> dict[str, Any]:
     repo = repository("rmems/widget", spdx_id="MIT", license_name="MIT License")
-    digest = digest_for(repo)
-    return {
-        "card": card("rmems/widget", "MIT", digest=digest),
-        "manifest": manifest("rmems/widget", "MIT", digest=STALE_DIGEST),
-        "markdown": None,
-        "prior_repositories": None,
-        "records": [record("rmems/widget", 1, "MIT")],
-        "repositories": [repo],
-        "snapshot_sha256": SNAPSHOT_SHA256,
-    }
+    return _bundle(
+        card("rmems/widget", "MIT", digest=digest_for(repo)),
+        manifest("rmems/widget", "MIT", digest=STALE_DIGEST),
+        [record("rmems/widget", 1, "MIT")],
+        [repo],
+    )
 
 
 def conflicting_card_manifest_bundle() -> dict[str, Any]:
     repo = repository("rmems/widget", spdx_id="MIT", license_name="MIT License")
     digest = digest_for(repo)
-    return {
-        "card": card("rmems/widget", "MIT", digest=digest),
-        "manifest": manifest("rmems/widget", "Apache-2.0", digest=digest),
-        "markdown": None,
-        "prior_repositories": None,
-        "records": [record("rmems/widget", 1, "MIT")],
-        "repositories": [repo],
-        "snapshot_sha256": SNAPSHOT_SHA256,
-    }
+    return _bundle(
+        card("rmems/widget", "MIT", digest=digest),
+        manifest("rmems/widget", "Apache-2.0", digest=digest),
+        [record("rmems/widget", 1, "MIT")],
+        [repo],
+    )
 
 
 def mixed_repository_bundle() -> dict[str, Any]:
@@ -356,50 +351,31 @@ def mixed_repository_bundle() -> dict[str, Any]:
         "Limen-Neural/axon-encoder": digest_for(apache),
     }
     repos = ["rmems/widget", "Limen-Neural/axon-encoder"]
-    return {
-        "card": card(repos, licenses, digest=digests),
-        "manifest": manifest(
+    return _bundle(
+        card(repos, licenses, digest=digests),
+        manifest(
             repos,
             licenses,
             digest=digests,
             families=["spdx"],
             unresolved=0,
         ),
-        "markdown": None,
-        "prior_repositories": None,
-        "records": [
+        [
             record("rmems/widget", 1, "MIT"),
             record("Limen-Neural/axon-encoder", 37, "Apache-2.0"),
         ],
-        "repositories": [mit, apache],
-        "snapshot_sha256": SNAPSHOT_SHA256,
-    }
+        [mit, apache],
+    )
 
 
 def unknown_license_bundle() -> dict[str, Any]:
     repo = repository("rmems/mystery", spdx_id="NOASSERTION", license_name="Other")
-    return {
-        "card": card("rmems/mystery", "NOASSERTION"),
-        "manifest": manifest("rmems/mystery", "NOASSERTION"),
-        "markdown": None,
-        "prior_repositories": None,
-        "records": [record("rmems/mystery", 4, "NOASSERTION")],
-        "repositories": [repo],
-        "snapshot_sha256": SNAPSHOT_SHA256,
-    }
+    return _single_repo_bundle("rmems/mystery", "NOASSERTION", repo, 4)
 
 
 def forge_substitution_bundle() -> dict[str, Any]:
     repo = repository("rmems/unlicensed", spdx_id=None, license_name=None)
-    return {
-        "card": card("rmems/unlicensed", "Apache-2.0"),
-        "manifest": manifest("rmems/unlicensed", "Apache-2.0"),
-        "markdown": None,
-        "prior_repositories": None,
-        "records": [record("rmems/unlicensed", 9, "Apache-2.0")],
-        "repositories": [repo],
-        "snapshot_sha256": SNAPSHOT_SHA256,
-    }
+    return _single_repo_bundle("rmems/unlicensed", "Apache-2.0", repo, 9)
 
 
 def apache_source_bundle() -> dict[str, Any]:
@@ -410,22 +386,15 @@ def apache_source_bundle() -> dict[str, Any]:
         license_name="Apache License 2.0",
         url="https://api.github.com/licenses/apache-2.0",
     )
-    digest = digest_for(repo)
-    return {
-        "card": card("rmems/corinth-canal", "Apache-2.0", digest=digest),
-        "manifest": manifest(
-            "rmems/corinth-canal",
-            "Apache-2.0",
-            digest=digest,
-            families=["spdx"],
-            unresolved=0,
-        ),
-        "markdown": None,
-        "prior_repositories": None,
-        "records": [record("rmems/corinth-canal", 142, "Apache-2.0")],
-        "repositories": [repo],
-        "snapshot_sha256": SNAPSHOT_SHA256,
-    }
+    return _single_repo_bundle(
+        "rmems/corinth-canal",
+        "Apache-2.0",
+        repo,
+        142,
+        digest=digest_for(repo),
+        families=["spdx"],
+        unresolved=0,
+    )
 
 
 def report_kwargs(bundle: dict[str, Any]) -> dict[str, Any]:

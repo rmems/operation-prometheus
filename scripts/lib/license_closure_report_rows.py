@@ -22,6 +22,14 @@ def _released_pr_number(value: Any) -> int | None:
     return None
 
 
+def _optional_str(value: Any) -> bool:
+    return value is None or isinstance(value, str)
+
+
+def _optional_dict(value: Any) -> bool:
+    return value is None or isinstance(value, dict)
+
+
 def _released_row_types_valid(row: dict[str, Any]) -> bool:
     pr_number = row.get("pr_number")
     if pr_number is not None and _released_pr_number(pr_number) is None:
@@ -39,19 +47,11 @@ def _released_row_types_valid(row: dict[str, Any]) -> bool:
         )
     ):
         return False
-    spdx_id = row.get("spdx_id")
-    if spdx_id is not None and not isinstance(spdx_id, str):
+    if not _optional_str(row.get("spdx_id")) or not _optional_str(row.get("state")):
         return False
-    state = row.get("state")
-    if state is not None and not isinstance(state, str):
-        return False
-    inventory = row.get("inventory_license")
-    if inventory is not None and not isinstance(inventory, dict):
-        return False
-    custom = row.get("custom_license")
-    if custom is not None and not isinstance(custom, dict):
-        return False
-    return True
+    return _optional_dict(row.get("inventory_license")) and _optional_dict(
+        row.get("custom_license")
+    )
 
 
 def _released_evidence_bound(row: dict[str, Any], report_snapshot: str | None) -> bool:

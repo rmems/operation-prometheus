@@ -23,6 +23,12 @@ def _malformed_plural_field(container: dict[str, Any], plural: str) -> bool:
     return not isinstance(container.get(plural), dict)
 
 
+def _declared_values_conflict(previous: str | None, coerced: str | None) -> bool:
+    if previous is None or coerced is None:
+        return previous != coerced
+    return previous.casefold() != coerced.casefold()
+
+
 def _folded_value_conflicts(mapped: Any, coerce: Callable[[Any], str | None]) -> bool:
     if not isinstance(mapped, dict):
         return False
@@ -35,12 +41,7 @@ def _folded_value_conflicts(mapped: Any, coerce: Callable[[Any], str | None]) ->
         if folded not in seen:
             seen[folded] = coerced
             continue
-        previous = seen[folded]
-        if previous is None or coerced is None:
-            if previous != coerced:
-                return True
-            continue
-        if previous.casefold() != coerced.casefold():
+        if _declared_values_conflict(seen[folded], coerced):
             return True
     return False
 
@@ -123,11 +124,10 @@ def _digest_declaration_invalid(container: dict[str, Any], repo: str) -> bool:
     return any(_sha256_or_none(value) is None for value in candidates)
 
 
-def _declaration_map_conflicts(
-    card: dict[str, Any], manifest: dict[str, Any], names: list[str]
-) -> bool:
-    repos = [name for name in names if name] or [""]
-    checks = (
+def _declaration_checks(
+    card: dict[str, Any], manifest: dict[str, Any]
+) -> tuple[tuple[dict[str, Any], str, str, Callable[[Any], str | None]], ...]:
+    return (
         (card, "source_license", "source_licenses", _declared_license_id),
         (manifest, "source_license", "source_licenses", _declared_license_id),
         (card, "license_evidence_digest", "license_evidence_digests", _sha256_or_none),
@@ -138,32 +138,71 @@ def _declaration_map_conflicts(
             _sha256_or_none,
         ),
     )
-    if any(
+
+
+def _any_digest_invalid(
+    card: dict[str, Any], manifest: dict[str, Any], repos: list[str]
+) -> bool:
+    return any(
         _digest_declaration_invalid(container, repo)
         for container in (card, manifest)
         for repo in repos
-    ):
-        return True
-    if any(
+    )
+
+
+def _any_plural_malformed(
+    checks: tuple[tuple[dict[str, Any], str, str, Callable[[Any], str | None]], ...]
+) -> bool:
+    return any(
         _malformed_plural_field(container, plural)
         for container, _singular, plural, _coerce in checks
-    ):
-        return True
-    if any(
+    )
+
+
+def _any_singular_conflicts(
+    checks: tuple[tuple[dict[str, Any], str, str, Callable[[Any], str | None]], ...],
+    repos: list[str],
+) -> bool:
+    return any(
         _singular_map_conflict(container, repo, singular, plural, coerce)
         for container, singular, plural, coerce in checks
         for repo in repos
-    ):
-        return True
-    if any(
+    )
+
+
+def _any_folded_conflicts(
+    checks: tuple[tuple[dict[str, Any], str, str, Callable[[Any], str | None]], ...]
+) -> bool:
+    return any(
         _folded_value_conflicts(container.get(plural), coerce)
         for container, _singular, plural, coerce in checks
-    ):
-        return True
+    )
+
+
+def _any_alias_group_conflicts(
+    checks: tuple[tuple[dict[str, Any], str, str, Callable[[Any], str | None]], ...],
+    repos: list[str],
+) -> bool:
     return any(
         _alias_group_value_conflicts(container.get(plural), repos, coerce)
         for container, _singular, plural, coerce in checks
     )
+
+
+def _declaration_map_conflicts(
+    card: dict[str, Any], manifest: dict[str, Any], names: list[str]
+) -> bool:
+    repos = [name for name in names if name] or [""]
+    checks = _declaration_checks(card, manifest)
+    if _any_digest_invalid(card, manifest, repos):
+        return True
+    if _any_plural_malformed(checks):
+        return True
+    if _any_singular_conflicts(checks, repos):
+        return True
+    if _any_folded_conflicts(checks):
+        return True
+    return _any_alias_group_conflicts(checks, repos)
 
 
 def _mapping_license(

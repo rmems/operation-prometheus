@@ -98,11 +98,7 @@ class _VisibleHtmlText(HTMLParser):
         return False
 
     def handle_starttag(self, tag: str, attrs: list[tuple[str, str | None]]) -> None:
-        if self._skip:
-            if tag not in _VOID_HTML_TAGS:
-                self._skip.append(tag)
-            return
-        if self._hides(tag, attrs):
+        if self._skip or self._hides(tag, attrs):
             if tag not in _VOID_HTML_TAGS:
                 self._skip.append(tag)
             return
@@ -124,6 +120,27 @@ class _VisibleHtmlText(HTMLParser):
             self.parts.append(data)
 
 
+def _tick_run_length(markdown: str, index: int) -> int:
+    run = 1
+    while index + run < len(markdown) and markdown[index + run] == "`":
+        run += 1
+    return run
+
+
+def _code_span_close(markdown: str, index: int, tick_len: int) -> int | None:
+    scan = index + tick_len
+    length = len(markdown)
+    while scan < length:
+        if markdown[scan] != "`":
+            scan += 1
+            continue
+        run = _tick_run_length(markdown, scan)
+        if run == tick_len:
+            return scan
+        scan += run
+    return None
+
+
 def _protect_inline_code_spans(markdown: str) -> str:
     """Keep inline-code angle brackets from being parsed as HTML tags."""
     result: list[str] = []
@@ -134,22 +151,8 @@ def _protect_inline_code_spans(markdown: str) -> str:
             result.append(markdown[index])
             index += 1
             continue
-        tick_len = 1
-        while index + tick_len < length and markdown[index + tick_len] == "`":
-            tick_len += 1
-        scan = index + tick_len
-        found: int | None = None
-        while scan < length:
-            if markdown[scan] != "`":
-                scan += 1
-                continue
-            run = 1
-            while scan + run < length and markdown[scan + run] == "`":
-                run += 1
-            if run == tick_len:
-                found = scan
-                break
-            scan += run
+        tick_len = _tick_run_length(markdown, index)
+        found = _code_span_close(markdown, index, tick_len)
         if found is None:
             result.append(markdown[index : index + tick_len])
             index += tick_len

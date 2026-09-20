@@ -65,17 +65,11 @@ def _top_level_expression_parts(expression: str) -> list[str] | None:
         char = expression[index]
         if char == "(":
             depth += 1
-            buf.append(char)
-            index += 1
-            continue
-        if char == ")":
+        elif char == ")":
             if depth == 0:
                 return None
             depth -= 1
-            buf.append(char)
-            index += 1
-            continue
-        if depth == 0:
+        elif depth == 0:
             match = EXPRESSION_SPLIT_RE.match(expression, index)
             if match is not None:
                 parts.append("".join(buf).strip())
@@ -89,6 +83,24 @@ def _top_level_expression_parts(expression: str) -> list[str] | None:
         return None
     parts.append("".join(buf).strip())
     return parts
+
+
+def _nested_piece_tokens(token: str, depth: int) -> list[str] | None:
+    if not (token.startswith("(") and token.endswith(")")):
+        return None
+    inner = _unwrap_outer_parens(token)
+    if inner is None or inner == token:
+        return None
+    return _expression_tokens(inner, depth + 1)
+
+
+def _piece_tokens(piece: str, operator: str, depth: int) -> list[str] | None:
+    token = piece.strip()
+    if not token or operator == "WITH":
+        return None
+    if "(" in token or ")" in token:
+        return _nested_piece_tokens(token, depth)
+    return [token]
 
 
 def _expression_tokens(identifier: str, depth: int = 0) -> list[str] | None:
@@ -107,24 +119,11 @@ def _expression_tokens(identifier: str, depth: int = 0) -> list[str] | None:
     for index, piece in enumerate(parts):
         if index % 2 == 1:
             continue
-        token = piece.strip()
-        if not token:
-            return None
         operator = parts[index - 1].upper() if index else ""
-        if operator == "WITH":
+        piece_tokens = _piece_tokens(piece, operator, depth)
+        if piece_tokens is None:
             return None
-        if "(" in token or ")" in token:
-            if not (token.startswith("(") and token.endswith(")")):
-                return None
-            inner = _unwrap_outer_parens(token)
-            if inner is None or inner == token:
-                return None
-            nested = _expression_tokens(inner, depth + 1)
-            if nested is None:
-                return None
-            tokens.extend(nested)
-            continue
-        tokens.append(token)
+        tokens.extend(piece_tokens)
     return tokens
 
 

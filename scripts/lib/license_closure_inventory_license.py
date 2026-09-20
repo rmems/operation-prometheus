@@ -50,15 +50,23 @@ def _custom_license_digest(custom: dict[str, Any]) -> str | None:
     return from_text or from_evidence
 
 
+def _custom_evidence_identifier(custom: dict[str, Any]) -> str | None:
+    identifier = _custom_license_identifier(custom)
+    if not identifier or not LICENSE_REF_RE.fullmatch(identifier):
+        return None
+    if not _custom_license_digest(custom):
+        return None
+    return identifier
+
+
 def inventory_has_custom_evidence(repository: dict[str, Any] | None) -> bool:
     if not isinstance(repository, dict):
         return False
     custom = repository.get("custom_license")
     if not isinstance(custom, dict):
         return False
-    identifier = _custom_license_identifier(custom)
-    digest = _custom_license_digest(custom)
-    if not identifier or not LICENSE_REF_RE.fullmatch(identifier) or not digest:
+    identifier = _custom_evidence_identifier(custom)
+    if identifier is None:
         return False
     inventory_id = normalize_license_id(inventory_license_object(repository))
     return _same_license(identifier, inventory_id)
@@ -118,15 +126,18 @@ def inventory_row_source_hash(repository: dict[str, Any]) -> str:
     )
 
 
+_PRODUCER_BOOL_KEYS = ("archived", "disabled", "fork")
+
+
 def _producer_scalars_invalid(repository: dict[str, Any]) -> bool:
-    for key in ("archived", "disabled", "fork"):
-        if key in repository and type(repository[key]) is not bool:
-            return True
-    if "pull_request_total_count" in repository:
-        value = repository["pull_request_total_count"]
-        if type(value) is not int:
-            return True
-    return False
+    if any(
+        key in repository and type(repository[key]) is not bool
+        for key in _PRODUCER_BOOL_KEYS
+    ):
+        return True
+    if "pull_request_total_count" not in repository:
+        return False
+    return type(repository["pull_request_total_count"]) is not int
 
 
 def _repository_id_invalid(row: dict[str, Any]) -> bool:

@@ -70,15 +70,16 @@ def record_ids_conflict(record: dict[str, Any]) -> bool:
     return bool(record_key and trajectory_key and record_key != trajectory_key)
 
 
-def record_id(record: dict[str, Any]) -> str:
-    supplied = _supplied_record_id(record)
-    if supplied:
-        return supplied
+def _derived_record_id(record: dict[str, Any]) -> str:
     repo = record_repo(record)
     pr_number = record.get("pr_number")
     if repo and type(pr_number) is int and pr_number >= 1:
         return f"{repo.replace('/', '-')}#{pr_number}"
     return repo or "unknown-record"
+
+
+def record_id(record: dict[str, Any]) -> str:
+    return _supplied_record_id(record) or _derived_record_id(record)
 
 
 def record_pr_number(record: dict[str, Any]) -> int | None:

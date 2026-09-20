@@ -68,56 +68,67 @@ def _skip_markdown_link_title(markdown: str, index: int) -> int | None:
     return None
 
 
-def _inline_link_close(markdown: str, start: int) -> int | None:
-    index = start
+def _skip_spaces(markdown: str, index: int) -> int:
     length = len(markdown)
     while index < length and markdown[index] in " \t":
         index += 1
+    return index
+
+
+def _angle_destination_end(markdown: str, index: int) -> int | None:
+    scan = index + 1
+    length = len(markdown)
+    while scan < length:
+        char = markdown[scan]
+        if char == "\\":
+            scan += 2
+            continue
+        if char == "\n":
+            return None
+        if char == ">":
+            return scan + 1
+        scan += 1
+    return None
+
+
+def _bare_destination_end(markdown: str, index: int) -> int | None:
+    depth = 0
+    length = len(markdown)
+    while index < length:
+        char = markdown[index]
+        if char == "\\":
+            index += 2
+            continue
+        if char == "\n":
+            return None
+        if char in " \t" and depth == 0:
+            return index
+        if char == "(":
+            depth += 1
+        elif char == ")":
+            if depth == 0:
+                return index
+            depth -= 1
+        index += 1
+    return None
+
+
+def _inline_link_close(markdown: str, start: int) -> int | None:
+    length = len(markdown)
+    index = _skip_spaces(markdown, start)
     if index >= length:
         return None
     if markdown[index] == "<":
-        scan = index + 1
-        while scan < length:
-            char = markdown[scan]
-            if char == "\\":
-                scan += 2
-                continue
-            if char == "\n":
-                return None
-            if char == ">":
-                index = scan + 1
-                break
-            scan += 1
-        else:
-            return None
+        index = _angle_destination_end(markdown, index)
     else:
-        depth = 0
-        while index < length:
-            char = markdown[index]
-            if char == "\\":
-                index += 2
-                continue
-            if char == "\n":
-                return None
-            if char in " \t" and depth == 0:
-                break
-            if char == "(":
-                depth += 1
-            elif char == ")":
-                if depth == 0:
-                    return index
-                depth -= 1
-            index += 1
-        else:
-            return None
-    while index < length and markdown[index] in " \t":
-        index += 1
+        index = _bare_destination_end(markdown, index)
+    if index is None:
+        return None
+    index = _skip_spaces(markdown, index)
     titled = _skip_markdown_link_title(markdown, index)
     if titled is None:
         return None
-    index = titled
-    while index < length and markdown[index] in " \t":
-        index += 1
+    index = _skip_spaces(markdown, titled)
     if index < length and markdown[index] == ")":
         return index
     return None

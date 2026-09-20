@@ -48,6 +48,16 @@ def validate_positive_release(report: dict[str, Any]) -> list[str]:
     return errors
 
 
+def _quarantine_row_error(row: dict[str, Any]) -> str:
+    try:
+        return (
+            f"  {row['record_id']} [{row['primary_reason']}] "
+            f"reasons={','.join(row['reason_codes'])}"
+        )
+    except (KeyError, TypeError):
+        return "  quarantined row is missing required fields"
+
+
 def _quarantine_errors(report: dict[str, Any]) -> list[str]:
     try:
         _released, quarantined = _report_rows(report)
@@ -61,12 +71,5 @@ def _quarantine_errors(report: dict[str, Any]) -> list[str]:
         f"license closure is fail-closed: {len(quarantined)} unresolved record(s) "
         "cannot be published as positives"
     ]
-    for row in quarantined:
-        try:
-            errors.append(
-                f"  {row['record_id']} [{row['primary_reason']}] "
-                f"reasons={','.join(row['reason_codes'])}"
-            )
-        except (KeyError, TypeError):
-            errors.append("  quarantined row is missing required fields")
+    errors.extend(_quarantine_row_error(row) for row in quarantined)
     return errors

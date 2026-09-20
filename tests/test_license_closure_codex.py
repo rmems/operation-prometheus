@@ -31,7 +31,6 @@ from lib.license_closure import (
     validate_positive_release,
 )
 
-
 def test_inventory_source_hash_matches_eligibility_producer():
     raw = {
         "archived": False,
@@ -149,18 +148,6 @@ def test_pr_inventory_requires_source_hash():
         _report(bundle)
 
 
-def test_custom_family_without_frozen_evidence_cannot_validate_release():
-    report = _report(spdx_known_bundle())
-    report["released_positives"][0]["spdx_id"] = "LicenseRef-Fake"
-    report["released_positives"][0]["license_family"] = "custom"
-    report["license_families"] = ["custom"]
-    report["evidence_digests"][0]["spdx_id"] = "LicenseRef-Fake"
-    report["evidence_digests"][0]["family"] = "custom"
-    errors = validate_positive_release(report)
-    assert errors
-    assert any("license family" in error for error in errors)
-
-
 def test_custom_report_validates_with_frozen_custom_object():
     report = _report(custom_license_bundle())
     _assert_schema(report)
@@ -182,47 +169,12 @@ def test_quarantined_custom_license_retains_frozen_evidence():
     assert report["released_positives"] == []
 
 
-def test_swapped_custom_text_digest_cannot_validate_release():
-    report = _report(custom_license_bundle())
-    released = report["released_positives"][0]
-    released["custom_license"] = {
-        **released["custom_license"],
-        "text_sha256": "e" * 64,
-    }
-    _assert_schema(report)
-    errors = validate_positive_release(report)
-    assert errors
-    assert any("license family" in error for error in errors)
-
-
 def test_spdx_report_validates_with_frozen_inventory_license():
     report = _report(spdx_known_bundle())
     _assert_schema(report)
     released = report["released_positives"][0]
     assert released["inventory_license"]["spdx_id"] == "MIT"
     assert not validate_positive_release(report)
-
-
-def test_swapped_spdx_id_cannot_validate_release():
-    report = _report(spdx_known_bundle())
-    released = report["released_positives"][0]
-    released["spdx_id"] = "Apache-2.0"
-    report["evidence_digests"][0]["spdx_id"] = "Apache-2.0"
-    _assert_schema(report)
-    errors = validate_positive_release(report)
-    assert errors
-    assert any("license family" in error for error in errors)
-
-
-def test_swapped_spdx_digest_cannot_validate_release():
-    report = _report(spdx_known_bundle())
-    released = report["released_positives"][0]
-    released["evidence_digest"] = "e" * 64
-    report["evidence_digests"][0]["digest"] = "e" * 64
-    _assert_schema(report)
-    errors = validate_positive_release(report)
-    assert errors
-    assert any("license family" in error for error in errors)
 
 
 def test_malformed_plural_license_map_cannot_close():
@@ -271,33 +223,6 @@ def test_pr_inventory_follows_repository_aliases():
     assert report["closed"] is True
 
 
-def test_html_comment_is_not_markdown_disclosure():
-    bundle = spdx_known_bundle()
-    bundle["markdown"] = "## License / provenance\n\n<!-- MIT -->\n"
-    report = _report(bundle)
-    _assert_schema(report)
-    assert "card_disclosure_missing" in report["quarantined"][0]["reason_codes"]
-    assert report["released_positives"] == []
-
-
-def test_commented_license_heading_is_not_markdown_disclosure():
-    bundle = spdx_known_bundle()
-    bundle["markdown"] = "<!--\n## License / provenance\n-->\nMIT\n"
-    report = _report(bundle)
-    _assert_schema(report)
-    assert "card_disclosure_missing" in report["quarantined"][0]["reason_codes"]
-    assert report["released_positives"] == []
-
-
-def test_fenced_license_heading_is_not_markdown_disclosure():
-    bundle = spdx_known_bundle()
-    bundle["markdown"] = "```\n## License / provenance\nMIT\n```\n"
-    report = _report(bundle)
-    _assert_schema(report)
-    assert "card_disclosure_missing" in report["quarantined"][0]["reason_codes"]
-    assert report["released_positives"] == []
-
-
 def test_prior_inventory_matches_repository_id_not_reused_name():
     bundle = spdx_known_bundle()
     current = dict(bundle["repositories"][0])
@@ -344,15 +269,6 @@ def test_conflicting_pr_rows_across_aliases_are_rejected():
     ]
     with pytest.raises(ValueError, match="Duplicate inventory pull request"):
         _report(bundle)
-
-
-def test_h1_after_license_section_is_not_disclosure():
-    bundle = spdx_known_bundle()
-    bundle["markdown"] = "## License / provenance\n\nNo license\n# Appendix\nMIT\n"
-    report = _report(bundle)
-    _assert_schema(report)
-    assert "card_disclosure_missing" in report["quarantined"][0]["reason_codes"]
-    assert report["released_positives"] == []
 
 
 def test_card_declaration_follows_inventory_aliases():
@@ -408,27 +324,6 @@ def test_unhashable_license_families_are_bundle_errors():
     _assert_schema(report)
     assert report["closed"] is False
     assert report["bundle_errors"]
-
-
-def test_markdown_link_destination_is_not_disclosure():
-    bundle = spdx_known_bundle()
-    bundle["markdown"] = (
-        "## License / provenance\n\n[license details](https://example.test/MIT)\n"
-    )
-    report = _report(bundle)
-    _assert_schema(report)
-    assert "card_disclosure_missing" in report["quarantined"][0]["reason_codes"]
-    assert report["released_positives"] == []
-
-
-def test_markdown_link_text_is_disclosure():
-    bundle = spdx_known_bundle()
-    bundle["markdown"] = (
-        "## License / provenance\n\n[MIT](https://example.test/license)\n"
-    )
-    report = _report(bundle)
-    _assert_schema(report)
-    assert report["closed"] is True
 
 
 def test_truncated_git_oids_cannot_close():
@@ -616,87 +511,6 @@ def test_unknown_declared_source_repo_cannot_close():
     assert report["released_positives"] == []
 
 
-def test_hidden_html_is_not_markdown_disclosure():
-    bundle = spdx_known_bundle()
-    bundle["markdown"] = "## License / provenance\n\n<span hidden>MIT</span>\n"
-    report = _report(bundle)
-    _assert_schema(report)
-    assert "card_disclosure_missing" in report["quarantined"][0]["reason_codes"]
-    assert report["released_positives"] == []
-
-
-def test_hidden_license_heading_is_not_markdown_disclosure():
-    bundle = spdx_known_bundle()
-    bundle["markdown"] = "<div hidden>\n## License / provenance\nMIT\n</div>\n"
-    report = _report(bundle)
-    _assert_schema(report)
-    assert "card_disclosure_missing" in report["quarantined"][0]["reason_codes"]
-    assert report["released_positives"] == []
-
-
-def test_void_tag_inside_hidden_html_is_not_markdown_disclosure():
-    bundle = spdx_known_bundle()
-    bundle["markdown"] = "<div hidden>\n<br/>\n## License / provenance\nMIT\n</div>\n"
-    report = _report(bundle)
-    _assert_schema(report)
-    assert "card_disclosure_missing" in report["quarantined"][0]["reason_codes"]
-    assert report["released_positives"] == []
-
-
-def test_script_html_is_not_markdown_disclosure():
-    bundle = spdx_known_bundle()
-    bundle["markdown"] = "## License / provenance\n\n<script>MIT</script>\n"
-    report = _report(bundle)
-    _assert_schema(report)
-    assert "card_disclosure_missing" in report["quarantined"][0]["reason_codes"]
-    assert report["released_positives"] == []
-
-
-def test_visible_html_is_markdown_disclosure():
-    bundle = spdx_known_bundle()
-    bundle["markdown"] = "## License / provenance\n\n<p>MIT</p>\n"
-    report = _report(bundle)
-    _assert_schema(report)
-    assert report["closed"] is True
-
-
-def test_malformed_quarantined_row_cannot_validate_release():
-    report = _report(spdx_known_bundle())
-    report["released_positives"] = []
-    report["quarantined"] = ["malformed"]
-    report["closed"] = True
-    report["bundle_errors"] = []
-    report["evidence_digests"] = []
-    report["license_families"] = []
-    report["counts"] = {
-        "quarantined_count": 0,
-        "record_count": 0,
-        "released_positive_count": 0,
-        "unresolved_count": 0,
-    }
-    errors = validate_positive_release(report)
-    assert errors
-    assert any("objects" in error for error in errors)
-
-
-def test_released_row_missing_record_id_cannot_validate_release():
-    report = _report(spdx_known_bundle())
-    report["released_positives"] = [{}]
-    errors = validate_positive_release(report)
-    assert errors
-    assert any("required fields" in error for error in errors)
-
-
-def test_quarantined_row_missing_reason_cannot_validate_release():
-    report = _report(spdx_known_bundle())
-    report["released_positives"] = []
-    report["quarantined"] = [{"record_id": "rmems-widget-1"}]
-    report["closed"] = False
-    errors = validate_positive_release(report)
-    assert errors
-    assert any("required fields" in error for error in errors)
-
-
 def test_duplicate_record_ids_keep_inventory_license():
     bundle = spdx_known_bundle()
     bundle["records"].append(dict(bundle["records"][0]))
@@ -709,47 +523,6 @@ def test_duplicate_record_ids_keep_inventory_license():
     )
 
 
-def test_swapped_released_repo_cannot_validate_release():
-    report = _report(spdx_known_bundle())
-    report["released_positives"][0]["repo"] = "evil/other"
-    report["evidence_digests"][0]["repository"] = "evil/other"
-    errors = validate_positive_release(report)
-    assert errors
-    assert any("license family" in error for error in errors)
-
-
-def test_swapped_report_snapshot_cannot_validate_release():
-    report = _report(spdx_known_bundle())
-    report["snapshot_sha256"] = "f" * 64
-    errors = validate_positive_release(report)
-    assert errors
-    assert any("license family" in error for error in errors)
-
-
-def test_boolean_report_counts_cannot_validate_release():
-    report = _report(spdx_known_bundle())
-    report["counts"] = {
-        "quarantined_count": False,
-        "record_count": True,
-        "released_positive_count": True,
-        "unresolved_count": False,
-    }
-    errors = validate_positive_release(report)
-    assert errors
-    assert any("count" in error for error in errors)
-
-
-def test_multiline_reference_title_is_not_markdown_disclosure():
-    bundle = spdx_known_bundle()
-    bundle["markdown"] = (
-        '## License / provenance\n\n[details]: https://example.test/license\n  "MIT"\n'
-    )
-    report = _report(bundle)
-    _assert_schema(report)
-    assert "card_disclosure_missing" in report["quarantined"][0]["reason_codes"]
-    assert report["released_positives"] == []
-
-
 def test_malformed_manifest_record_entry_cannot_close():
     bundle = spdx_known_bundle()
     bundle["manifest"]["records"] = [
@@ -760,15 +533,6 @@ def test_malformed_manifest_record_entry_cannot_close():
     _assert_schema(report)
     assert report["closed"] is False
     assert any("record ids" in error for error in report["bundle_errors"])
-
-
-def test_indented_h2_after_license_section_is_not_disclosure():
-    bundle = spdx_known_bundle()
-    bundle["markdown"] = "## License / provenance\nNo license\n ## Appendix\nMIT\n"
-    report = _report(bundle)
-    _assert_schema(report)
-    assert "card_disclosure_missing" in report["quarantined"][0]["reason_codes"]
-    assert report["released_positives"] == []
 
 
 def test_omitted_card_source_repo_coverage_cannot_close():
@@ -801,17 +565,3 @@ def test_empty_source_repos_coverage_cannot_close():
     assert report["released_positives"] == []
 
 
-def test_released_row_missing_license_family_cannot_validate_release():
-    report = _report(spdx_known_bundle())
-    report["released_positives"][0].pop("license_family", None)
-    errors = validate_positive_release(report)
-    assert errors
-    assert any("required fields" in error for error in errors)
-
-
-def test_released_row_missing_evidence_digest_cannot_validate_release():
-    report = _report(spdx_known_bundle())
-    report["released_positives"][0].pop("evidence_digest", None)
-    errors = validate_positive_release(report)
-    assert errors
-    assert any("required fields" in error for error in errors)

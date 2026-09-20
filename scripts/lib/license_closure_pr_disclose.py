@@ -14,29 +14,32 @@ from .license_closure_pr_html import (
 )
 from .license_closure_pr_links import _strip_inline_links, _strip_reference_definitions
 
+def _closes_fence(line: str, fence_char: str, fence_len: int) -> bool:
+    stripped = line.rstrip("\n")
+    leading = len(stripped) - len(stripped.lstrip(" "))
+    rest = stripped.lstrip(" ")
+    if leading > 3 or not rest.startswith(fence_char * fence_len):
+        return False
+    return rest[fence_len:].lstrip(fence_char).strip() == ""
+
+
 def _strip_fenced_code(markdown: str) -> str:
     kept: list[str] = []
     fence_char: str | None = None
     fence_len = 0
     for line in markdown.splitlines(keepends=True):
-        if fence_char is None:
-            match = FENCE_OPEN_RE.match(line)
-            if match is not None:
-                marker = match.group(2)
-                fence_char = marker[0]
-                fence_len = len(marker)
-                continue
-            kept.append(line)
-            continue
-        stripped = line.rstrip("\n")
-        leading = len(stripped) - len(stripped.lstrip(" "))
-        rest = stripped.lstrip(" ")
-        if leading <= 3 and rest.startswith(fence_char * fence_len):
-            after = rest[fence_len:].lstrip(fence_char)
-            if after.strip() == "":
+        if fence_char is not None:
+            if _closes_fence(line, fence_char, fence_len):
                 fence_char = None
                 fence_len = 0
-                continue
+            continue
+        match = FENCE_OPEN_RE.match(line)
+        if match is None:
+            kept.append(line)
+            continue
+        marker = match.group(2)
+        fence_char = marker[0]
+        fence_len = len(marker)
     return "".join(kept)
 
 

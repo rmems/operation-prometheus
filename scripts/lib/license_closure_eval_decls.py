@@ -85,22 +85,29 @@ def _add_snapshot_reasons(acc: EvalAcc) -> None:
         acc.reasons.append("snapshot_provenance_missing")
 
 
+def _declared_repo_sets_disagree(
+    acc: EvalAcc, card_repos: set[str], manifest_repos: set[str]
+) -> bool:
+    if not card_repos or not manifest_repos:
+        return False
+    return _canonical_declared_repos(
+        card_repos, acc.inventory_index
+    ) != _canonical_declared_repos(manifest_repos, acc.inventory_index)
+
+
 def _add_declared_repo_reasons(
     acc: EvalAcc, card_repos: set[str], manifest_repos: set[str]
 ) -> None:
     declared_repos = card_repos | manifest_repos
-    if _declared_source_maps_conflict(
-        acc.card, acc.manifest, declared_repos, acc.inventory_index
-    ):
-        acc.reasons.append("declarations_disagree")
-    if any(
-        _inventory_for_repo(acc.inventory_index, repo) is None for repo in declared_repos
-    ):
-        acc.reasons.append("declarations_disagree")
-    if (
-        card_repos
-        and manifest_repos
-        and _canonical_declared_repos(card_repos, acc.inventory_index)
-        != _canonical_declared_repos(manifest_repos, acc.inventory_index)
-    ):
+    disagree = (
+        _declared_source_maps_conflict(
+            acc.card, acc.manifest, declared_repos, acc.inventory_index
+        )
+        or any(
+            _inventory_for_repo(acc.inventory_index, repo) is None
+            for repo in declared_repos
+        )
+        or _declared_repo_sets_disagree(acc, card_repos, manifest_repos)
+    )
+    if disagree:
         acc.reasons.append("declarations_disagree")
