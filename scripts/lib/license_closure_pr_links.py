@@ -115,7 +115,9 @@ def _bare_destination_end(markdown: str, index: int) -> int | None:
         if char == "\n":
             return None
         depth += (char == "(") - (char == ")")
-        if depth < 0 or (char in " \t" and depth == 0):
+        if depth < 0:
+            return cursor
+        if char in " \t" and depth == 0:
             return cursor
     return None
 

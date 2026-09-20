@@ -104,11 +104,9 @@ def _assert_closed_flag(report: dict[str, Any], quarantined: list[dict[str, Any]
 
 def _assert_summaries(report: dict[str, Any], released: list[dict[str, Any]]) -> None:
     families, evidence = _released_evidence_summary(released)
-    declared_families = report.get("license_families")
-    if not isinstance(declared_families, list) or declared_families != families:
+    if report.get("license_families") != families:
         raise AssertionError("license_families do not match released rows")
-    declared_evidence = report.get("evidence_digests")
-    if not isinstance(declared_evidence, list) or declared_evidence != evidence:
+    if report.get("evidence_digests") != evidence:
         raise AssertionError("evidence_digests do not match released rows")
 
 

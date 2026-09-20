@@ -53,37 +53,27 @@ def _unwrap_outer_parens(identifier: str) -> str | None:
     return stripped
 
 
-def _expression_separator(expression: str, index: int, depth: int):
-    if depth != 0:
-        return None
-    return EXPRESSION_SPLIT_RE.match(expression, index)
-
-
 def _top_level_expression_parts(expression: str) -> list[str] | None:
     """Split on AND/OR/WITH that are outside parentheses."""
-    parts: list[str] = []
-    buf: list[str] = []
-    depth = 0
-    index = 0
-    length = len(expression)
-    while index < length:
-        match = _expression_separator(expression, index, depth)
-        if match is not None:
-            parts.append("".join(buf).strip())
-            parts.append(match.group(1).upper())
-            buf = []
-            index = match.end()
-            continue
-        char = expression[index]
-        buf.append(char)
-        depth += (char == "(") - (char == ")")
-        if depth < 0:
-            return None
-        index += 1
-    if depth != 0:
+    depths = _paren_depths(expression)
+    if not _depths_valid(depths):
         return None
-    parts.append("".join(buf).strip())
+    parts: list[str] = []
+    start = 0
+    for match in EXPRESSION_SPLIT_RE.finditer(expression):
+        if any(depths[i] for i in range(match.start(), match.end())):
+            continue
+        parts.append(expression[start : match.start()].strip())
+        parts.append(match.group(1).upper())
+        start = match.end()
+    parts.append(expression[start:].strip())
     return parts
+
+
+def _depths_valid(depths: list[int]) -> bool:
+    if any(value < 0 for value in depths):
+        return False
+    return not depths or depths[-1] == 0
 
 
 def _nested_piece_tokens(token: str, depth: int) -> list[str] | None:
