@@ -127,12 +127,12 @@ def digest_for(repo_row: dict[str, Any]) -> str:
 
 
 def _bundle(
-    card_payload: dict[str, Any],
-    manifest_payload: dict[str, Any],
+    docs: tuple[dict[str, Any], dict[str, Any]],
     records: list[dict[str, Any]],
     repositories: list[dict[str, Any]],
     **extra: Any,
 ) -> dict[str, Any]:
+    card_payload, manifest_payload = docs
     return {
         "card": card_payload,
         "manifest": manifest_payload,
@@ -152,19 +152,31 @@ def _single_repo_bundle(
 ) -> dict[str, Any]:
     digest = spec.get("digest")
     return _bundle(
-        card(repo_name, license_id, digest=digest),
-        manifest(
-            repo_name,
-            license_id,
-            digest=digest,
-            families=spec.get("families"),
-            unresolved=spec.get("unresolved"),
+        (
+            card(repo_name, license_id, digest=digest),
+            manifest(
+                repo_name,
+                license_id,
+                digest=digest,
+                families=spec.get("families"),
+                unresolved=spec.get("unresolved"),
+            ),
         ),
         [record(repo_name, spec["pr_number"], license_id)],
         [repo],
         markdown=spec.get("markdown"),
         prior_repositories=spec.get("prior_repositories"),
     )
+
+
+def _repo_bundle(
+    repo_name: str,
+    license_id: str | None,
+    repo_spec: dict[str, Any],
+    spec: dict[str, Any],
+) -> dict[str, Any]:
+    repo = repository(repo_name, **repo_spec)
+    return _single_repo_bundle(repo_name, license_id, repo, spec)
 
 
 def spdx_known_bundle() -> dict[str, Any]:
@@ -193,33 +205,26 @@ def spdx_known_bundle() -> dict[str, Any]:
 
 def license_ref_without_digest_bundle() -> dict[str, Any]:
     identifier = "LicenseRef-TemporalFocus"
-    repo = repository(
-        "rmems/TemporalFocus.jl",
-        spdx_id=identifier,
-        license_name="TemporalFocus custom license",
-    )
-    return _single_repo_bundle(
+    return _repo_bundle(
         "rmems/TemporalFocus.jl",
         identifier,
-        repo,
-        {
-            "pr_number": 7,
-        },
+        {"spdx_id": identifier, "license_name": "TemporalFocus custom license"},
+        {"pr_number": 7},
     )
 
 
 def custom_license_bundle() -> dict[str, Any]:
     identifier = "LicenseRef-TemporalFocus"
-    repo = repository(
-        "rmems/TemporalFocus.jl",
-        spdx_id=identifier,
-        license_name="TemporalFocus custom license",
-        custom={
+    repo_spec = {
+        "spdx_id": identifier,
+        "license_name": "TemporalFocus custom license",
+        "custom": {
             "identifier": identifier,
             "name": "TemporalFocus custom license",
             "text_sha256": CUSTOM_TEXT_SHA256,
         },
-    )
+    }
+    repo = repository("rmems/TemporalFocus.jl", **repo_spec)
     return _single_repo_bundle(
         "rmems/TemporalFocus.jl",
         identifier,
@@ -234,10 +239,9 @@ def custom_license_bundle() -> dict[str, Any]:
 
 
 def mismatched_custom_identifier_bundle() -> dict[str, Any]:
-    identifier = "LicenseRef-TemporalFocus"
     repo = repository(
         "rmems/TemporalFocus.jl",
-        spdx_id=identifier,
+        spdx_id="LicenseRef-TemporalFocus",
         license_name="TemporalFocus custom license",
         custom={
             "identifier": "LicenseRef-Other",
@@ -247,21 +251,15 @@ def mismatched_custom_identifier_bundle() -> dict[str, Any]:
     )
     return _single_repo_bundle(
         "rmems/TemporalFocus.jl",
-        identifier,
+        "LicenseRef-TemporalFocus",
         repo,
         {"pr_number": 7, "digest": digest_for(repo)},
     )
 
 
 def missing_license_bundle() -> dict[str, Any]:
-    repo = repository("rmems/unlicensed", spdx_id=None, license_name=None)
-    return _single_repo_bundle(
-        "rmems/unlicensed",
-        None,
-        repo,
-        {
-            "pr_number": 3,
-        },
+    return _repo_bundle(
+        "rmems/unlicensed", None, {"spdx_id": None}, {"pr_number": 3}
     )
 
 
@@ -303,8 +301,10 @@ def stale_digest_bundle() -> dict[str, Any]:
 def conflicting_card_manifest_digest_bundle() -> dict[str, Any]:
     repo = repository("rmems/widget", spdx_id="MIT", license_name="MIT License")
     return _bundle(
-        card("rmems/widget", "MIT", digest=digest_for(repo)),
-        manifest("rmems/widget", "MIT", digest=STALE_DIGEST),
+        (
+            card("rmems/widget", "MIT", digest=digest_for(repo)),
+            manifest("rmems/widget", "MIT", digest=STALE_DIGEST),
+        ),
         [record("rmems/widget", 1, "MIT")],
         [repo],
     )
@@ -314,8 +314,10 @@ def conflicting_card_manifest_bundle() -> dict[str, Any]:
     repo = repository("rmems/widget", spdx_id="MIT", license_name="MIT License")
     digest = digest_for(repo)
     return _bundle(
-        card("rmems/widget", "MIT", digest=digest),
-        manifest("rmems/widget", "Apache-2.0", digest=digest),
+        (
+            card("rmems/widget", "MIT", digest=digest),
+            manifest("rmems/widget", "Apache-2.0", digest=digest),
+        ),
         [record("rmems/widget", 1, "MIT")],
         [repo],
     )
@@ -344,13 +346,15 @@ def mixed_repository_bundle() -> dict[str, Any]:
     }
     repos = ["rmems/widget", "Limen-Neural/axon-encoder"]
     return _bundle(
-        card(repos, licenses, digest=digests),
-        manifest(
-            repos,
-            licenses,
-            digest=digests,
-            families=["spdx"],
-            unresolved=0,
+        (
+            card(repos, licenses, digest=digests),
+            manifest(
+                repos,
+                licenses,
+                digest=digests,
+                families=["spdx"],
+                unresolved=0,
+            ),
         ),
         [
             record("rmems/widget", 1, "MIT"),
@@ -361,26 +365,17 @@ def mixed_repository_bundle() -> dict[str, Any]:
 
 
 def unknown_license_bundle() -> dict[str, Any]:
-    repo = repository("rmems/mystery", spdx_id="NOASSERTION", license_name="Other")
-    return _single_repo_bundle(
+    return _repo_bundle(
         "rmems/mystery",
         "NOASSERTION",
-        repo,
-        {
-            "pr_number": 4,
-        },
+        {"spdx_id": "NOASSERTION", "license_name": "Other"},
+        {"pr_number": 4},
     )
 
 
 def forge_substitution_bundle() -> dict[str, Any]:
-    repo = repository("rmems/unlicensed", spdx_id=None, license_name=None)
-    return _single_repo_bundle(
-        "rmems/unlicensed",
-        "Apache-2.0",
-        repo,
-        {
-            "pr_number": 9,
-        },
+    return _repo_bundle(
+        "rmems/unlicensed", "Apache-2.0", {"spdx_id": None}, {"pr_number": 9}
     )
 
 

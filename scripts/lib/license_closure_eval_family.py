@@ -14,14 +14,18 @@ from .license_closure_ids import (
 from .license_closure_pr import _markdown_discloses
 
 
-def add_family_reasons(acc: EvalAcc) -> None:
-    _add_disclosure_reasons(acc)
-    identifiers = [
+def _declared_identifiers(acc: EvalAcc) -> list[str | None]:
+    return [
         acc.declared_record,
         acc.declared_card,
         acc.declared_manifest,
         acc.inventory_id,
     ]
+
+
+def add_family_reasons(acc: EvalAcc) -> None:
+    _add_disclosure_reasons(acc)
+    identifiers = _declared_identifiers(acc)
     present = [item for item in identifiers if item is not None]
     _add_missing_identifier_reasons(acc, identifiers, present)
     if present and len({item.casefold() for item in present}) > 1:

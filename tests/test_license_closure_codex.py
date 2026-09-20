@@ -297,17 +297,6 @@ def test_card_declaration_follows_inventory_aliases():
     assert report["closed"] is True
 
 
-def test_base_only_record_does_not_satisfy_pr_provenance():
-    bundle = spdx_known_bundle()
-    bundle["records"][0] = with_code_state(bundle["records"][0])
-    bundle["records"][0]["repository"] = {"base_oid": BASE_OID}
-    bundle["pull_requests"] = [inventory_pr("rmems/widget", 1)]
-    report = _report(bundle)
-    _assert_schema(report)
-    assert "snapshot_provenance_missing" in report["quarantined"][0]["reason_codes"]
-    assert report["released_positives"] == []
-
-
 def test_non_string_license_families_are_bundle_errors():
     bundle = spdx_known_bundle()
     bundle["card"]["license_families"] = ["spdx", 1]
@@ -324,44 +313,6 @@ def test_unhashable_license_families_are_bundle_errors():
     _assert_schema(report)
     assert report["closed"] is False
     assert report["bundle_errors"]
-
-
-def test_truncated_git_oids_cannot_close():
-    bundle = spdx_known_bundle()
-    bundle["records"][0] = with_code_state(
-        bundle["records"][0],
-        base_oid="abc",
-        head_oid="def",
-        commit_oid="123",
-    )
-    bundle["pull_requests"] = [
-        inventory_pr(
-            "rmems/widget",
-            1,
-            base_oid="abc",
-            head_oid="def",
-            merge_commit_oid="123",
-        )
-    ]
-    report = _report(bundle)
-    _assert_schema(report)
-    assert "snapshot_provenance_missing" in report["quarantined"][0]["reason_codes"]
-    assert report["released_positives"] == []
-
-
-def test_present_malformed_role_oids_cannot_close_on_merge_match():
-    bundle = spdx_known_bundle()
-    bundle["records"][0] = with_code_state(
-        bundle["records"][0],
-        base_oid="abc",
-        head_oid="def",
-        commit_oid=MERGE_OID,
-    )
-    bundle["pull_requests"] = [inventory_pr("rmems/widget", 1)]
-    report = _report(bundle)
-    _assert_schema(report)
-    assert "snapshot_provenance_missing" in report["quarantined"][0]["reason_codes"]
-    assert report["released_positives"] == []
 
 
 def test_uppercase_record_oid_matches_inventory_pr():
@@ -389,40 +340,126 @@ def test_uppercase_record_oid_matches_inventory_pr():
     assert report["closed"] is True
 
 
-def test_card_and_manifest_source_repos_must_agree():
+_DECLARATION_EDITS = (
+    pytest.param(
+        [("card", "source_repos", ["rmems/widget", "a/one"]),
+         ("manifest", "source_repos", ["rmems/widget", "b/two"])],
+        id="card-manifest-repos-disagree",
+    ),
+    pytest.param([("card", "source_repos", {})], id="malformed-plural-map"),
+    pytest.param(
+        [("card", "source_repos", ["rmems/widget", 1])],
+        id="non-string-element",
+    ),
+    pytest.param(
+        [("card", "source_repos", ["rmems/widget", "  "])],
+        id="blank-element",
+    ),
+    pytest.param(
+        [("card", "source_repos", ["rmems/widget", "evil/unknown"]),
+         ("manifest", "source_repos", ["rmems/widget", "evil/unknown"])],
+        id="unknown-repo",
+    ),
+    pytest.param(
+        [("card", "source_repo", {}), ("card", "source_repos", ["rmems/widget"]),
+         ("manifest", "source_repo", {}), ("manifest", "source_repos", ["rmems/widget"])],
+        id="malformed-singular",
+    ),
+    pytest.param(
+        [("card", "source_repo", None), ("card", "source_repos", None)],
+        id="omitted-card-coverage",
+    ),
+    pytest.param(
+        [("manifest", "source_repo", None), ("manifest", "source_repos", None)],
+        id="omitted-manifest-coverage",
+    ),
+    pytest.param(
+        [("card", "source_repo", None), ("card", "source_repos", [])],
+        id="empty-coverage",
+    ),
+)
+
+
+@pytest.mark.parametrize("edits", _DECLARATION_EDITS)
+def test_conflicting_source_repo_declarations_cannot_close(edits):
     bundle = spdx_known_bundle()
-    bundle["card"]["source_repos"] = ["rmems/widget", "a/one"]
-    bundle["manifest"]["source_repos"] = ["rmems/widget", "b/two"]
+    for doc, key, value in edits:
+        if value is None:
+            bundle[doc].pop(key, None)
+        else:
+            bundle[doc][key] = value
     report = _report(bundle)
     _assert_schema(report)
     assert "declarations_disagree" in report["quarantined"][0]["reason_codes"]
     assert report["released_positives"] == []
 
 
-def test_malformed_source_repos_cannot_close():
+def _record_with_base_only(bundle: dict) -> None:
+    bundle["records"][0] = with_code_state(bundle["records"][0])
+    bundle["records"][0]["repository"] = {"base_oid": BASE_OID}
+    bundle["pull_requests"] = [inventory_pr("rmems/widget", 1)]
+
+
+def _record_with_truncated_oids(bundle: dict) -> None:
+    bundle["records"][0] = with_code_state(
+        bundle["records"][0], base_oid="abc", head_oid="def", commit_oid="123"
+    )
+    bundle["pull_requests"] = [
+        inventory_pr("rmems/widget", 1, base_oid="abc", head_oid="def",
+                     merge_commit_oid="123")
+    ]
+
+
+def _record_with_malformed_role_oids(bundle: dict) -> None:
+    bundle["records"][0] = with_code_state(
+        bundle["records"][0], base_oid="abc", head_oid="def",
+        commit_oid=MERGE_OID,
+    )
+    bundle["pull_requests"] = [inventory_pr("rmems/widget", 1)]
+
+
+def _pr_row_repo_id_mismatch(bundle: dict) -> None:
+    current = dict(bundle["repositories"][0])
+    current["repository_id"] = "R_kgDOwidget"
+    bundle["repositories"] = [bind_source_hash(current)]
+    bundle["records"][0] = with_code_state(bundle["records"][0])
+    pr = inventory_pr("rmems/widget", 1)
+    pr["repository_id"] = "R_kgDOother"
+    bundle["pull_requests"] = [bind_pr_source_hash(pr)]
+
+
+def _alias_pr_repo_id_mismatch(bundle: dict) -> None:
+    _pr_row_repo_id_mismatch(bundle)
+    current = dict(bundle["repositories"][0])
+    current["aliases"] = [inventory_alias("rmems/widget-old")]
+    bundle["repositories"] = [bind_source_hash(current)]
+    canonical = bundle["pull_requests"][0]
+    alias = inventory_pr("rmems/widget-old", 1)
+    alias["repository_id"] = "R_kgDOother"
+    bundle["pull_requests"] = [
+        canonical,
+        bind_pr_source_hash(alias),
+    ]
+
+
+@pytest.mark.parametrize(
+    "mutate",
+    [
+        pytest.param(_record_with_base_only, id="base-only-record"),
+        pytest.param(_record_with_truncated_oids, id="truncated-oids"),
+        pytest.param(
+            _record_with_malformed_role_oids, id="malformed-role-oids"
+        ),
+        pytest.param(_pr_row_repo_id_mismatch, id="pr-repo-id-mismatch"),
+        pytest.param(_alias_pr_repo_id_mismatch, id="alias-repo-id-mismatch"),
+    ],
+)
+def test_provenance_blocked_records_quarantine(mutate):
     bundle = spdx_known_bundle()
-    bundle["card"]["source_repos"] = {}
+    mutate(bundle)
     report = _report(bundle)
     _assert_schema(report)
-    assert "declarations_disagree" in report["quarantined"][0]["reason_codes"]
-    assert report["released_positives"] == []
-
-
-def test_non_string_source_repos_elements_cannot_close():
-    bundle = spdx_known_bundle()
-    bundle["card"]["source_repos"] = ["rmems/widget", 1]
-    report = _report(bundle)
-    _assert_schema(report)
-    assert "declarations_disagree" in report["quarantined"][0]["reason_codes"]
-    assert report["released_positives"] == []
-
-
-def test_blank_source_repos_elements_cannot_close():
-    bundle = spdx_known_bundle()
-    bundle["card"]["source_repos"] = ["rmems/widget", "  "]
-    report = _report(bundle)
-    _assert_schema(report)
-    assert "declarations_disagree" in report["quarantined"][0]["reason_codes"]
+    assert "snapshot_provenance_missing" in report["quarantined"][0]["reason_codes"]
     assert report["released_positives"] == []
 
 
@@ -438,55 +475,6 @@ def test_card_and_manifest_source_repos_follow_aliases():
     assert report["closed"] is True
 
 
-def test_malformed_singular_source_repo_cannot_close():
-    bundle = spdx_known_bundle()
-    bundle["card"]["source_repo"] = {}
-    bundle["card"]["source_repos"] = ["rmems/widget"]
-    bundle["manifest"]["source_repo"] = {}
-    bundle["manifest"]["source_repos"] = ["rmems/widget"]
-    report = _report(bundle)
-    _assert_schema(report)
-    assert "declarations_disagree" in report["quarantined"][0]["reason_codes"]
-    assert report["released_positives"] == []
-
-
-def test_pr_inventory_repository_id_mismatch_cannot_close():
-    bundle = spdx_known_bundle()
-    current = dict(bundle["repositories"][0])
-    current["repository_id"] = "R_kgDOwidget"
-    bundle["repositories"] = [bind_source_hash(current)]
-    bundle["records"][0] = with_code_state(bundle["records"][0])
-    pr = inventory_pr("rmems/widget", 1)
-    pr["repository_id"] = "R_kgDOother"
-    bundle["pull_requests"] = [bind_pr_source_hash(pr)]
-    report = _report(bundle)
-    _assert_schema(report)
-    assert "snapshot_provenance_missing" in report["quarantined"][0]["reason_codes"]
-    assert report["released_positives"] == []
-
-
-def test_pr_inventory_alias_repository_id_mismatch_cannot_close():
-    bundle = spdx_known_bundle()
-    current = dict(bundle["repositories"][0])
-    current["repository_id"] = "R_kgDOwidget"
-    current["aliases"] = [inventory_alias("rmems/widget-old")]
-    bundle["repositories"] = [bind_source_hash(current)]
-    bundle["records"][0] = with_code_state(bundle["records"][0])
-    canonical = inventory_pr("rmems/widget", 1)
-    canonical["repository_id"] = "R_kgDOwidget"
-    alias = inventory_pr("rmems/widget-old", 1)
-    alias["repository_id"] = "R_kgDOother"
-    bundle["pull_requests"] = [
-        bind_pr_source_hash(canonical),
-        bind_pr_source_hash(alias),
-    ]
-    report = _report(bundle)
-    _assert_schema(report)
-    assert "snapshot_provenance_missing" in report["quarantined"][0]["reason_codes"]
-    assert report["released_positives"] == []
-    assert report["closed"] is False
-
-
 def test_pr_inventory_repository_id_match_can_close():
     bundle = spdx_known_bundle()
     current = dict(bundle["repositories"][0])
@@ -499,16 +487,6 @@ def test_pr_inventory_repository_id_match_can_close():
     report = _report(bundle)
     _assert_schema(report)
     assert report["closed"] is True
-
-
-def test_unknown_declared_source_repo_cannot_close():
-    bundle = spdx_known_bundle()
-    bundle["card"]["source_repos"] = ["rmems/widget", "evil/unknown"]
-    bundle["manifest"]["source_repos"] = ["rmems/widget", "evil/unknown"]
-    report = _report(bundle)
-    _assert_schema(report)
-    assert "declarations_disagree" in report["quarantined"][0]["reason_codes"]
-    assert report["released_positives"] == []
 
 
 def test_duplicate_record_ids_keep_inventory_license():
@@ -533,35 +511,5 @@ def test_malformed_manifest_record_entry_cannot_close():
     _assert_schema(report)
     assert report["closed"] is False
     assert any("record ids" in error for error in report["bundle_errors"])
-
-
-def test_omitted_card_source_repo_coverage_cannot_close():
-    bundle = spdx_known_bundle()
-    bundle["card"].pop("source_repo", None)
-    bundle["card"].pop("source_repos", None)
-    report = _report(bundle)
-    _assert_schema(report)
-    assert "declarations_disagree" in report["quarantined"][0]["reason_codes"]
-    assert report["released_positives"] == []
-
-
-def test_omitted_manifest_source_repo_coverage_cannot_close():
-    bundle = spdx_known_bundle()
-    bundle["manifest"].pop("source_repo", None)
-    bundle["manifest"].pop("source_repos", None)
-    report = _report(bundle)
-    _assert_schema(report)
-    assert "declarations_disagree" in report["quarantined"][0]["reason_codes"]
-    assert report["released_positives"] == []
-
-
-def test_empty_source_repos_coverage_cannot_close():
-    bundle = spdx_known_bundle()
-    bundle["card"].pop("source_repo", None)
-    bundle["card"]["source_repos"] = []
-    report = _report(bundle)
-    _assert_schema(report)
-    assert "declarations_disagree" in report["quarantined"][0]["reason_codes"]
-    assert report["released_positives"] == []
 
 

@@ -9,19 +9,21 @@ from .license_closure_pr_html import (
 )
 
 
-def _reference_definition_kind(line: str) -> str | None:
-    index = 0
-    while index < len(line) and line[index] in " \t":
-        index += 1
-    if index >= len(line) or line[index] != "[":
+def _label_colon_index(line: str, index: int) -> int | None:
+    if line[index : index + 1] != "[":
         return None
     close = _markdown_label_close(line, index + 1)
-    if close is None or close + 1 >= len(line) or line[close + 1] != ":":
+    if close is None or line[close + 1 : close + 2] != ":":
         return None
-    rest = line[close + 2 :]
-    if not rest.strip():
-        return "label_only"
-    return "full"
+    return close
+
+
+def _reference_definition_kind(line: str) -> str | None:
+    index = len(line) - len(line.lstrip(" \t"))
+    close = _label_colon_index(line, index)
+    if close is None:
+        return None
+    return "full" if line[close + 2 :].strip() else "label_only"
 
 
 def _title_line_end(lines: list[str], index: int) -> int:
@@ -94,22 +96,27 @@ def _angle_destination_end(markdown: str, index: int) -> int | None:
     return _escaped_span_end(markdown, index + 1, ">")
 
 
+def _escaped_positions(markdown: str) -> frozenset[int]:
+    positions: set[int] = set()
+    cursor = markdown.find("\\")
+    while -1 < cursor < len(markdown) - 1:
+        positions.add(cursor + 1)
+        cursor = markdown.find("\\", cursor + 2)
+    return frozenset(positions)
+
+
 def _bare_destination_end(markdown: str, index: int) -> int | None:
+    escaped = _escaped_positions(markdown)
     depth = 0
-    length = len(markdown)
-    while index < length:
-        char = markdown[index]
-        if char == "\\":
-            index += 2
+    for cursor in range(index, len(markdown)):
+        if cursor in escaped:
             continue
+        char = markdown[cursor]
         if char == "\n":
             return None
-        if char in " \t" and depth == 0:
-            return index
         depth += (char == "(") - (char == ")")
-        if depth < 0:
-            return index
-        index += 1
+        if depth < 0 or (char in " \t" and depth == 0):
+            return cursor
     return None
 
 
@@ -213,13 +220,17 @@ def _strip_inline_links(markdown: str, *, keep_openers: bool = False) -> str:
             result.append(markdown[index])
             index += 1
             continue
-        text_start, close, dest_close = span
-        if keep_openers:
-            result.append("[")
-        result.append(
-            _strip_inline_links(
-                markdown[text_start:close], keep_openers=keep_openers
-            )
-        )
-        index = dest_close + 1
+        index = _emit_link_text(result, markdown, span, keep_openers)
     return "".join(result)
+
+
+def _emit_link_text(
+    result: list[str], markdown: str, span: tuple[int, int, int], keep_openers: bool
+) -> int:
+    text_start, close, dest_close = span
+    if keep_openers:
+        result.append("[")
+    result.append(
+        _strip_inline_links(markdown[text_start:close], keep_openers=keep_openers)
+    )
+    return dest_close + 1

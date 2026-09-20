@@ -73,6 +73,16 @@ _COUNT_MESSAGES = {
 }
 
 
+def _assert_count(counts: dict[str, Any], key: str, expected: int) -> None:
+    if _declared_count(counts.get(key)) != expected:
+        raise AssertionError(_COUNT_MESSAGES[key])
+
+
+def _assert_released_states(released: list[dict[str, Any]]) -> None:
+    if any(row.get("state") != "released_positive" for row in released):
+        raise AssertionError("Non-positive row listed as released")
+
+
 def _assert_counts(
     report: dict[str, Any],
     released: list[dict[str, Any]],
@@ -82,10 +92,8 @@ def _assert_counts(
     if not isinstance(counts, dict):
         raise AssertionError("counts must be an object")
     for key, expected in _expected_counts(released, quarantined).items():
-        if _declared_count(counts.get(key)) != expected:
-            raise AssertionError(_COUNT_MESSAGES[key])
-    if any(row.get("state") != "released_positive" for row in released):
-        raise AssertionError("Non-positive row listed as released")
+        _assert_count(counts, key, expected)
+    _assert_released_states(released)
 
 
 def _assert_closed_flag(report: dict[str, Any], quarantined: list[dict[str, Any]]) -> None:

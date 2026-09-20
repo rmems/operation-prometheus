@@ -62,6 +62,10 @@ def add_coverage_reasons(acc: EvalAcc) -> None:
     _add_coverage_mismatch_reasons(acc, card_repos, manifest_repos)
     _add_declared_repo_reasons(acc, card_repos, manifest_repos)
     _add_snapshot_reasons(acc)
+    _add_pr_reasons(acc)
+
+
+def _add_pr_reasons(acc: EvalAcc) -> None:
     acc.reasons.extend(
         _pr_inventory_reasons(
             acc.record,
@@ -84,9 +88,13 @@ def _add_coverage_mismatch_reasons(
 
 
 def _add_snapshot_reasons(acc: EvalAcc) -> None:
-    if not acc.repo or acc.repository is None:
-        acc.reasons.append("snapshot_provenance_missing")
-    if not _sha256_or_none(acc.snapshot_sha256) or acc.source_hash is None:
+    missing = (
+        not acc.repo,
+        acc.repository is None,
+        not _sha256_or_none(acc.snapshot_sha256),
+        acc.source_hash is None,
+    )
+    if any(missing):
         acc.reasons.append("snapshot_provenance_missing")
 
 

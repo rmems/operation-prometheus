@@ -13,23 +13,28 @@ from .license_closure_ids_const import (
     _MAX_EXPRESSION_DEPTH,
 )
 
-def _parentheses_balanced(identifier: str) -> bool:
+def _paren_depths(identifier: str) -> list[int]:
     depth = 0
+    depths: list[int] = []
     for char in identifier:
         depth += (char == "(") - (char == ")")
-        if depth < 0:
-            return False
-    return depth == 0
+        depths.append(depth)
+    return depths
+
+
+def _parentheses_balanced(identifier: str) -> bool:
+    depths = _paren_depths(identifier)
+    if not depths:
+        return True
+    return all(value >= 0 for value in depths) and depths[-1] == 0
 
 
 def _matching_close_index(identifier: str) -> int | None:
-    depth = 0
-    for index, char in enumerate(identifier):
-        depth += (char == "(") - (char == ")")
+    for index, depth in enumerate(_paren_depths(identifier)):
         if depth < 0:
             return None
-        if char == ")" and depth == 0:
-            return index
+        if depth == 0:
+            return index if identifier[index] == ")" else None
     return None
 
 
@@ -141,16 +146,20 @@ def _license_token_known(token: str) -> bool:
     return token in SPDX_LICENSE_IDS or LICENSE_REF_RE.fullmatch(token) is not None
 
 
-def _token_family(tokens: list[str], has_custom_evidence: bool) -> str:
-    if any(token.upper() in UNKNOWN_LICENSE_IDS for token in tokens):
-        return "unknown"
-    if all(token in SPDX_LICENSE_IDS for token in tokens):
-        return "spdx"
+def _ref_family(tokens: list[str], has_custom_evidence: bool) -> str:
     if not any(LICENSE_REF_RE.fullmatch(token) for token in tokens):
         return "unknown"
     if has_custom_evidence and all(_license_token_known(token) for token in tokens):
         return "custom"
     return "unknown"
+
+
+def _token_family(tokens: list[str], has_custom_evidence: bool) -> str:
+    if any(token.upper() in UNKNOWN_LICENSE_IDS for token in tokens):
+        return "unknown"
+    if all(token in SPDX_LICENSE_IDS for token in tokens):
+        return "spdx"
+    return _ref_family(tokens, has_custom_evidence)
 
 
 def _closed_release_family(

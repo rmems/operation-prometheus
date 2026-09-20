@@ -119,16 +119,23 @@ _RELEASED_ROW_KEYS = (
 _QUARANTINED_ROW_KEYS = ("record_id", "primary_reason", "reason_codes")
 
 
+def _row_missing_required(row: dict[str, Any], required: tuple[str, ...]) -> bool:
+    return any(row.get(key) is None for key in required)
+
+
+def _assert_string_ids(rows: list[dict[str, Any]], field: str) -> None:
+    if any(not isinstance(row.get("record_id"), str) for row in rows):
+        raise AssertionError(f"{field} record_id values must be strings")
+
+
 def _rows_with_keys(
     value: Any, field: str, required: tuple[str, ...]
 ) -> list[dict[str, Any]]:
     rows = _object_rows(value, field)
-    if any(key not in row or row[key] is None for row in rows for key in required):
+    if any(_row_missing_required(row, required) for row in rows):
         raise AssertionError(f"{field} rows are missing required fields")
-    if "record_id" in required and any(
-        not isinstance(row.get("record_id"), str) for row in rows
-    ):
-        raise AssertionError(f"{field} record_id values must be strings")
+    if "record_id" in required:
+        _assert_string_ids(rows, field)
     return rows
 
 

@@ -53,6 +53,27 @@ def _present_role_oid_invalid(record: dict[str, Any], key: str) -> bool:
     return _present_oid_invalid(record.get("repository"), key)
 
 
+def _role_oids_match(
+    record: dict[str, Any], pr_oids: dict[str, str | None], roles: tuple[str, str]
+) -> bool:
+    record_key, pr_key = roles
+    if _present_role_oid_invalid(record, record_key):
+        return False
+    record_oids = _record_role_oids(record, record_key)
+    expected = pr_oids[pr_key]
+    if not record_oids:
+        return True
+    return expected is not None and record_oids == {expected}
+
+
+def _record_oid_roles(record: dict[str, Any]) -> list[str]:
+    return [
+        pr_key
+        for record_key, pr_key in _RECORD_TO_PR_ROLE
+        if _record_role_oids(record, record_key)
+    ]
+
+
 def _code_state_matches_inventory_pr(
     record: dict[str, Any],
     inventory_pr: dict[str, Any],
@@ -62,21 +83,12 @@ def _code_state_matches_inventory_pr(
     pr_oids = {key: _valid_oid(inventory_pr.get(key)) for key in _PR_OID_KEYS}
     if not any(pr_oids.values()):
         return False
-    saw_record_oid = False
-    saw_merge = False
-    for record_key, pr_key in _RECORD_TO_PR_ROLE:
-        if _present_role_oid_invalid(record, record_key):
-            return False
-        record_oids = _record_role_oids(record, record_key)
-        if not record_oids:
-            continue
-        saw_record_oid = True
-        if pr_key == "merge_commit_oid":
-            saw_merge = True
-        expected = pr_oids[pr_key]
-        if expected is None or any(oid != expected for oid in record_oids):
-            return False
-    return saw_record_oid and saw_merge
+    if not all(
+        _role_oids_match(record, pr_oids, roles) for roles in _RECORD_TO_PR_ROLE
+    ):
+        return False
+    matched_roles = _record_oid_roles(record)
+    return bool(matched_roles) and "merge_commit_oid" in matched_roles
 
 
 def _pr_inventory_reasons(

@@ -46,14 +46,21 @@ def _require_snapshot(snapshot_sha256: str) -> str:
     return digest
 
 
-def _require_objects(card: object, manifest: object, records: list[object]) -> None:
-    if not isinstance(card, dict):
-        raise ValueError("card must be an object")
-    if not isinstance(manifest, dict):
-        raise ValueError("manifest must be an object")
-    if not isinstance(records, list) or any(
-        not isinstance(record, dict) for record in records
-    ):
+def _require_dict(value: object, label: str) -> None:
+    if not isinstance(value, dict):
+        raise ValueError(f"{label} must be an object")
+
+
+def _records_are_objects(records: object) -> bool:
+    return isinstance(records, list) and all(
+        isinstance(record, dict) for record in records
+    )
+
+
+def _require_objects(card: object, manifest: object, records: object) -> None:
+    _require_dict(card, "card")
+    _require_dict(manifest, "manifest")
+    if not _records_are_objects(records):
         raise ValueError("trajectory records must be objects")
 
 
