@@ -12,45 +12,10 @@ from .license_closure_ids_const import (
     UNKNOWN_LICENSE_IDS,
     _MAX_EXPRESSION_DEPTH,
 )
-
-def _paren_depths(identifier: str) -> list[int]:
-    depth = 0
-    depths: list[int] = []
-    for char in identifier:
-        depth += (char == "(") - (char == ")")
-        depths.append(depth)
-    return depths
-
-
-def _parentheses_balanced(identifier: str) -> bool:
-    depths = _paren_depths(identifier)
-    if not depths:
-        return True
-    return all(value >= 0 for value in depths) and depths[-1] == 0
-
-
-def _matching_close_index(identifier: str) -> int | None:
-    for index, depth in enumerate(_paren_depths(identifier)):
-        if depth < 0:
-            return None
-        if depth == 0:
-            return index if identifier[index] == ")" else None
-    return None
-
-
-def _unwrap_outer_parens(identifier: str) -> str | None:
-    stripped = identifier.strip()
-    if not stripped or not _parentheses_balanced(stripped):
-        return None
-    while stripped.startswith("("):
-        close = _matching_close_index(stripped)
-        if close is None or close != len(stripped) - 1:
-            break
-        inner = stripped[1:-1].strip()
-        if not inner or not _parentheses_balanced(inner):
-            return None
-        stripped = inner
-    return stripped
+from .license_closure_expr_parens import (
+    _paren_depths,
+    _unwrap_outer_parens,
+)
 
 
 def _top_level_expression_parts(expression: str) -> list[str] | None:
@@ -107,11 +72,9 @@ def _expression_tokens(identifier: str, depth: int = 0) -> list[str] | None:
     if parts is None:
         return None
     tokens: list[str] = []
-    for index, piece in enumerate(parts):
-        if index % 2 == 1:
-            continue
+    for index in range(0, len(parts), 2):
         operator = parts[index - 1].upper() if index else ""
-        piece_tokens = _piece_tokens(piece, operator, depth)
+        piece_tokens = _piece_tokens(parts[index], operator, depth)
         if piece_tokens is None:
             return None
         tokens.extend(piece_tokens)
@@ -122,11 +85,9 @@ def classify_license_family(
     identifier: str | None, *, has_custom_evidence: bool = False
 ) -> str:
     """Classify a declared identifier without guessing a replacement license."""
-    if identifier is None:
-        return "missing"
-    tokens = _expression_tokens(identifier)
+    tokens = _expression_tokens(identifier) if identifier is not None else None
     if tokens is None:
-        return "unknown"
+        return "unknown" if identifier is not None else "missing"
     if not tokens:
         return "missing"
     return _token_family(tokens, has_custom_evidence)
