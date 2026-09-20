@@ -4,7 +4,8 @@ from __future__ import annotations
 
 from typing import Any
 
-from .license_closure_expr_parens import _expression_tokens, _token_family
+from .license_closure_expr_family import _token_family
+from .license_closure_expr_tokens import _expression_tokens
 from .license_closure_ids_const import CLOSED_FAMILIES
 
 
