@@ -63,17 +63,33 @@ def _fallback_disproved(admission: dict[str, Any]) -> bool:
     provider = admission.get("provider")
     config = provider.get("config") if isinstance(provider, dict) else None
     fallback = admission.get("fallback_evidence")
-    if not isinstance(config, dict) or not isinstance(fallback, dict):
-        return False
     return (
         admission.get("cloud_fallback_allowed") is False
-        and config.get("no_cloud") is True
-        and config.get("cloud_fallback_allowed") is False
-        and fallback.get("no_cloud") is True
+        and _local_only_config(config)
+        and _clean_fallback_evidence(fallback)
+    )
+
+
+def _local_only_config(config: Any) -> bool:
+    if not isinstance(config, dict):
+        return False
+    return (
+        config.get("no_cloud") is True and config.get("cloud_fallback_allowed") is False
+    )
+
+
+def _clean_fallback_evidence(fallback: Any) -> bool:
+    if not isinstance(fallback, dict):
+        return False
+    flags = (
+        fallback.get("no_cloud") is True
         and fallback.get("cloud_fallback_allowed") is False
-        and fallback.get("unsanitized_keys") == []
+    )
+    empty_exposure = (
+        fallback.get("unsanitized_keys") == []
         and fallback.get("remote_endpoints") == []
     )
+    return flags and empty_exposure
 
 
 def _workspace_errors(manifest: dict[str, Any]) -> list[str]:
