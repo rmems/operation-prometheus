@@ -103,5 +103,6 @@ Quarantine (incomplete evidence): `rights_evidence_missing`,
 
 Envelope/integrity: `model_invalid`, `candidate_unknown_fields`,
 `candidate_unsanitized`, `foreign_provider_declared`,
-`upstream_revision_mismatch`, `inputs_manifest_mismatch`, `bundle_error`,
+`upstream_revision_mismatch`, `upstream_revision_unbound`,
+`unsanitized_evidence`, `inputs_manifest_mismatch`, `bundle_error`,
 `no_candidates`.

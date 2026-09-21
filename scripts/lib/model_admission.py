@@ -18,6 +18,7 @@ from .model_admission_check_fields import (
     envelope_reasons,
     model_identity_reasons,
     runtime_reasons,
+    unsanitized_field_reasons,
 )
 from .model_admission_check_probe import probe_reasons
 from .model_admission_check_rights import rights_reasons
@@ -57,7 +58,7 @@ def _rights_row(rights: Any, model: str) -> Any:
 def _upstream_revision_reasons(
     candidate: dict[str, Any], rights_row: Any
 ) -> tuple[list[str], list[str]]:
-    """When frozen evidence supplies an upstream revision, it must match."""
+    """A claimed revision must be bound to frozen evidence, else quarantine."""
     declared = _text(candidate.get("upstream_revision"))
     frozen = (
         _text(rights_row.get("upstream_revision"))
@@ -66,7 +67,24 @@ def _upstream_revision_reasons(
     )
     if declared is not None and frozen is not None and declared != frozen:
         return ["upstream_revision_mismatch"], []
+    if declared is not None and frozen is None:
+        return [], ["upstream_revision_unbound"]
     return [], []
+
+
+def _bound_revision(
+    candidate: dict[str, Any], rights_row: Any
+) -> str | None:
+    """Only a revision attested by frozen evidence may be emitted."""
+    declared = _text(candidate.get("upstream_revision"))
+    frozen = (
+        _text(rights_row.get("upstream_revision"))
+        if isinstance(rights_row, dict)
+        else None
+    )
+    if frozen is not None and (declared is None or declared == frozen):
+        return frozen
+    return None
 
 
 def _provider_config(candidate: dict[str, Any]) -> Any:
@@ -129,6 +147,7 @@ def evaluate_admission(candidate: Any, *, inputs: AdmissionInputs) -> dict:
     r_rej, r_quar, family, terms = rights_reasons(rights_license, rights_row)
     rejected += r_rej
     quarantined += r_quar
+    rejected += unsanitized_field_reasons(candidate, rights_row)
     rej, quar = _upstream_revision_reasons(candidate, rights_row)
     rejected += rej
     quarantined += quar
@@ -214,8 +233,7 @@ def _decision_report(row: dict[str, Any], inputs: AdmissionInputs) -> dict:
                 candidate.get("ollama_digest")
             ),
             "quantization": _text(candidate.get("quantization")),
-            "upstream_revision": _text(candidate.get("upstream_revision"))
-            or _text(rights_row.get("upstream_revision")),
+            "upstream_revision": _bound_revision(candidate, rights_row),
         },
         "runtime": {
             "name": _text(candidate.get("runtime")),
@@ -253,11 +271,17 @@ def _rows_by_disposition(rows: list[dict[str, Any]]) -> dict[str, list]:
     }
 
 
+def _evaluate_rows(
+    candidates: list[Any], inputs: AdmissionInputs
+) -> list[dict[str, Any]]:
+    return [evaluate_admission(c, inputs=inputs) for c in candidates]
+
+
 def build_admission_report(
     candidates: list[Any], inputs: AdmissionInputs
 ) -> dict[str, Any]:
     """Build the bundle report wrapping each singular decision report."""
-    rows = [evaluate_admission(c, inputs=inputs) for c in candidates]
+    rows = _evaluate_rows(candidates, inputs)
     grouped = _rows_by_disposition(rows)
     decisions = [r["report"] for r in rows]
     errors = list(inputs.bundle_errors or [])

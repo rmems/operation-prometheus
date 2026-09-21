@@ -535,3 +535,72 @@ def test_nested_allowlisted_mapping_rejected():
         )
     )
     assert row["disposition"] == "rejected"
+
+
+# --- untrusted emitted strings / revision binding / endpoint form ------------
+
+@pytest.mark.parametrize(
+    "field,value",
+    [
+        ("quantization", "Authorization: Basic ordinarysecretvalue123"),
+        ("upstream_revision", "unverified-arbitrary-revision"),
+    ],
+)
+def test_untrusted_emitted_fields_sanitized(field, value):
+    row = _evaluate(_candidate(**{field: value}))
+    _assert_never_accepted(row)
+
+
+def test_terms_source_with_credential_url_rejected():
+    rights = _rights()
+    rights["models"][MODEL][
+        "terms_source"
+    ] = "https://rights.example/LICENSE?access_token=ordinarysecretvalue123"
+    row = _evaluate(rights=rights)
+    _assert_never_accepted(row)
+
+
+@pytest.mark.parametrize(
+    "value",
+    [
+        '{"X-API-Key":"ordinarysecretvalue123"}',
+        "file:///home/example/.ollama",
+        "Authorization: Bearer abcdef123456",
+    ],
+)
+def test_unsafe_strings_in_stop_list_rejected(value):
+    row = _evaluate(
+        _candidate(
+            provider_config={
+                "no_cloud": True,
+                "cloud_fallback_allowed": False,
+                "stop": [value],
+            }
+        )
+    )
+    assert row["disposition"] == "rejected"
+
+
+def test_trailing_slash_endpoint_equivalent():
+    probe = _probe(endpoint="http://127.0.0.1:11434/")
+    row = _evaluate(probe=probe)
+    assert row["disposition"] == "accepted"
+    assert row["report"]["runtime"]["endpoint"] == "http://127.0.0.1:11434"
+
+
+def test_forged_rejected_with_empty_reasons_fails_contract():
+    import jsonschema
+
+    report = json.loads((FIXTURE_DIR / "accepted_report.json").read_text())
+    forged = dict(report)
+    forged["decision"] = "rejected"
+    forged["reasons"] = []
+    forged.pop("evidence_digest")
+    forged["evidence_digest"] = hashlib.sha256(
+        json.dumps(
+            {k: v for k, v in forged.items() if k != "evidence_digest"},
+            ensure_ascii=False, sort_keys=True, separators=(",", ":"),
+        ).encode("utf-8")
+    ).hexdigest()
+    with pytest.raises(jsonschema.ValidationError):
+        jsonschema.validate(forged, ROOT_SCHEMA)

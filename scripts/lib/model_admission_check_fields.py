@@ -7,6 +7,11 @@ from typing import Any
 import re
 
 from .model_admission_evidence import (
+    _ENDPOINT_KEYS,
+    _credential_string,
+    _SECRET_KEY_RE,
+    _SECRET_VALUE_RE,
+    _nonempty_secret_value,
     canonical_loopback_endpoint,
     credential_config_values,
     endpoint_host,
@@ -69,12 +74,6 @@ def envelope_reasons(candidate: dict[str, Any]) -> tuple[list[str], list[str]]:
 
 
 def _looks_secret(key: Any, value: Any) -> bool:
-    from .model_admission_evidence import (
-        _SECRET_KEY_RE,
-        _SECRET_VALUE_RE,
-        _nonempty_secret_value,
-    )
-
     if isinstance(key, str) and _SECRET_KEY_RE.search(key):
         return _nonempty_secret_value(value)
     values = value if isinstance(value, list) else [value]
@@ -85,16 +84,25 @@ def _looks_secret(key: Any, value: Any) -> bool:
 
 
 def _looks_remote_endpoint(key: Any, value: Any) -> bool:
-    from .model_admission_evidence import (
-        _ENDPOINT_KEYS,
-        canonical_loopback_endpoint,
-    )
-
     if not (isinstance(key, str) and key.strip().lower() in _ENDPOINT_KEYS):
         return False
     if not isinstance(value, str) or not value.strip():
         return False
     return canonical_loopback_endpoint(value) is None
+
+
+def _is_unsafe(value: Any) -> bool:
+    return isinstance(value, str) and _credential_string(value)
+
+
+def unsanitized_field_reasons(
+    candidate: dict[str, Any], rights_row: Any
+) -> list[str]:
+    """Emitted untrusted strings must not carry secrets/unsafe references."""
+    values = [candidate.get("quantization"), candidate.get("upstream_revision")]
+    if isinstance(rights_row, dict):
+        values.append(rights_row.get("terms_source"))
+    return ["unsanitized_evidence"] if any(_is_unsafe(v) for v in values) else []
 
 
 def runtime_reasons(candidate: dict[str, Any]) -> tuple[list[str], list[str]]:

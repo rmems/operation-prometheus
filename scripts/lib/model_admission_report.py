@@ -60,42 +60,63 @@ def _semantic_errors(report: dict[str, Any]) -> list[str]:
     clone = {k: v for k, v in report.items() if k != "evidence_digest"}
     if sha256_json(clone) != report.get("evidence_digest"):
         errors.append("evidence_digest does not recompute")
+    if report.get("decision") != "accepted" and not report.get("reasons"):
+        errors.append("non-accepted report must carry machine-readable reasons")
     return errors
 
 
-def _accepted_errors(report: dict[str, Any]) -> list[str]:
-    """Relational invariants that must hold for decision == accepted."""
-    errors = _semantic_errors(report)
+def _endpoint_errors(report: dict[str, Any]) -> list[str]:
     runtime = report.get("runtime") or {}
     probe = report.get("probe") or {}
     runtime_endpoint = canonical_loopback_endpoint(runtime.get("endpoint"))
     probe_endpoint = canonical_loopback_endpoint(probe.get("endpoint"))
     if runtime_endpoint is None or runtime_endpoint != runtime.get("endpoint"):
-        errors.append("runtime endpoint is not a canonical loopback URL")
+        return ["runtime endpoint is not a canonical loopback URL"]
     if runtime_endpoint != probe_endpoint:
-        errors.append("runtime and probe endpoints disagree")
+        return ["runtime and probe endpoints disagree"]
+    return []
+
+
+def _fallback_errors(report: dict[str, Any]) -> list[str]:
     fallback = report.get("fallback_evidence") or {}
-    if (
-        report.get("cloud_fallback_allowed") is not False
-        or fallback.get("cloud_fallback_allowed") is not False
-        or fallback.get("no_cloud") is not True
-        or fallback.get("unsanitized_keys")
-        or fallback.get("remote_endpoints")
-    ):
-        errors.append("fallback evidence is not a coherent disproof")
-    missing = [
-        name
-        for name in _REQUIRED_ACCEPTED_DIGESTS
-        if name not in (report.get("input_digests") or {})
-    ]
+    coherent = (
+        report.get("cloud_fallback_allowed") is False
+        and fallback.get("cloud_fallback_allowed") is False
+        and fallback.get("no_cloud") is True
+        and not fallback.get("unsanitized_keys")
+        and not fallback.get("remote_endpoints")
+    )
+    return [] if coherent else ["fallback evidence is not a coherent disproof"]
+
+
+def _digest_errors(report: dict[str, Any]) -> list[str]:
+    digests = report.get("input_digests") or {}
+    missing = [name for name in _REQUIRED_ACCEPTED_DIGESTS if name not in digests]
     if missing:
-        errors.append(f"missing required input digests: {missing}")
+        return [f"missing required input digests: {missing}"]
+    return []
+
+
+def _provider_errors(report: dict[str, Any]) -> list[str]:
     provider = report.get("provider") or {}
     if provider.get("name") != "hermes-agent":
-        errors.append("provider name is not hermes-agent")
-    rej, quar = config_reasons(provider.get("config"))
-    if rej or quar:
-        errors.append("provider_config fails sanitization")
+        return ["provider name is not hermes-agent"]
+    rejected, quarantined = config_reasons(provider.get("config"))
+    if rejected or quarantined:
+        return ["provider_config fails sanitization"]
+    return []
+
+
+def _accepted_errors(report: dict[str, Any]) -> list[str]:
+    """Relational invariants that must hold for decision == accepted."""
+    errors = _semantic_errors(report)
+    for check in (
+        _endpoint_errors,
+        _fallback_errors,
+        _digest_errors,
+        _provider_errors,
+    ):
+        errors += check(report)
     return errors
 
 

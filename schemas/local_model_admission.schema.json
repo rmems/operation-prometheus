@@ -20,7 +20,8 @@
   ],
   "additionalProperties": false,
   "allOf": [
-    {"$ref": "#/definitions/accepted_constraints"}
+    {"$ref": "#/definitions/accepted_constraints"},
+    {"$ref": "#/definitions/non_accepted_constraints"}
   ],
   "properties": {
     "schema_version": {"const": "local_model_admission_v1"},
@@ -209,6 +210,17 @@
               "inputs_manifest": {"$ref": "#/definitions/sha256"}
             }
           }
+        }
+      }
+    },
+    "non_accepted_constraints": {
+      "if": {
+        "properties": {"decision": {"enum": ["quarantined", "rejected"]}},
+        "required": ["decision"]
+      },
+      "then": {
+        "properties": {
+          "reasons": {"type": "array", "minItems": 1}
         }
       }
     },

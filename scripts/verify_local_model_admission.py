@@ -151,20 +151,36 @@ def _input_paths(args: argparse.Namespace) -> dict[str, Path]:
     return paths
 
 
+def _output_vs_input_error(
+    flag: str, out: Path, input_paths: dict[str, Path]
+) -> str | None:
+    for name, path in input_paths.items():
+        if paths_collide(out, path):
+            return f"{flag} collides with {name} input {path}"
+    return None
+
+
+def _output_pairs_error(out_paths: dict[str, Path]) -> str | None:
+    flags = list(out_paths)
+    pairs = (
+        (flag_a, flag_b)
+        for index, flag_a in enumerate(flags)
+        for flag_b in flags[index + 1 :]
+    )
+    for flag_a, flag_b in pairs:
+        if paths_collide(out_paths[flag_a], out_paths[flag_b]):
+            return f"{flag_a} collides with {flag_b}"
+    return None
+
+
 def _collision_error(
     input_paths: dict[str, Path], out_paths: dict[str, Path]
 ) -> str | None:
     """No output may collide with an input or another output."""
     for flag, out in out_paths.items():
-        for name, path in input_paths.items():
-            if paths_collide(out, path):
-                return f"{flag} collides with {name} input {path}"
-    flags = list(out_paths)
-    for index, flag_a in enumerate(flags):
-        for flag_b in flags[index + 1 :]:
-            if paths_collide(out_paths[flag_a], out_paths[flag_b]):
-                return f"{flag_a} collides with {flag_b}"
-    return None
+        if error := _output_vs_input_error(flag, out, input_paths):
+            return error
+    return _output_pairs_error(out_paths)
 
 
 def _load_inputs(input_paths: dict[str, Path]) -> dict[str, Any]:
@@ -287,24 +303,26 @@ def _validated_decision(report: dict[str, Any]) -> bytes | None:
     return render_report(decision)
 
 
+def _load_or_fail(input_paths: dict[str, Path]) -> dict[str, Any] | None:
+    try:
+        return _load_inputs(input_paths)
+    except (OSError, UnicodeDecodeError, json.JSONDecodeError, ValueError) as exc:
+        print(f"ERROR: {exc}", file=sys.stderr)
+        return None
+
+
 def main(argv: list[str] | None = None) -> int:
     args = build_parser().parse_args(argv)
-    if error := _check_args(args):
-        print(f"ERROR: {error}", file=sys.stderr)
-        return 2
-
     input_paths = _input_paths(args)
     out_paths = {"--out": args.out}
     if args.diagnostics is not None:
         out_paths["--diagnostics"] = args.diagnostics
-    if error := _collision_error(input_paths, out_paths):
+    if error := _check_args(args) or _collision_error(input_paths, out_paths):
         print(f"ERROR: {error}", file=sys.stderr)
         return 2
 
-    try:
-        inputs = _load_inputs(input_paths)
-    except (OSError, UnicodeDecodeError, json.JSONDecodeError, ValueError) as exc:
-        print(f"ERROR: {exc}", file=sys.stderr)
+    inputs = _load_or_fail(input_paths)
+    if inputs is None:
         return 2
 
     probe = _resolve_probe(args, inputs)

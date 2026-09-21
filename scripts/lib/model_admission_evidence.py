@@ -230,7 +230,7 @@ def canonical_loopback_endpoint(value: Any) -> str | None:
     if parsed.path not in ("", "/") or parsed.query or parsed.fragment:
         return None
     netloc = _canonical_netloc(parsed)
-    return None if netloc is None else f"http://{netloc}{parsed.path}"
+    return None if netloc is None else f"http://{netloc}"
 
 
 def endpoint_host(endpoint: Any) -> str | None:
@@ -331,11 +331,21 @@ def _value_matches_kind(value: Any, kind: str) -> bool:
 _CREDENTIAL_PARAM_RE = re.compile(
     r"(?i)(api[-_]?key|token|secret|password|credential|auth)="
 )
+_CREDENTIAL_HEADER_RE = re.compile(
+    r'(?i)(authorization\s*:\s*(?:basic|bearer)\s+\S'
+    r'|\b[a-z0-9_-]*(?:api[-_]?key|secret|token|password'
+    r'|credential)\b[\x22\x27]?\s*:\s*[\x22\x27]?\S)'
+)
+_LOCAL_REFERENCE_RE = re.compile(r"^\s*(file://|~/|/[a-zA-Z]|[A-Za-z]:\\)")
 
 
 def _credential_string(value: str) -> bool:
+    """True for credential, header-shaped, or local/file-path material."""
     return bool(
-        _SECRET_VALUE_RE.search(value) or _CREDENTIAL_PARAM_RE.search(value)
+        _SECRET_VALUE_RE.search(value)
+        or _CREDENTIAL_PARAM_RE.search(value)
+        or _CREDENTIAL_HEADER_RE.search(value)
+        or _LOCAL_REFERENCE_RE.search(value)
     )
 
 
@@ -376,20 +386,23 @@ def _is_remote_url(value: str) -> bool:
     return canonical_loopback_endpoint(text) is None
 
 
+def _endpoint_or_remote(name: str, item: str) -> bool:
+    if _is_remote_url(item):
+        return True
+    leaf_is_endpoint = name.rsplit(".", 1)[-1].lower() in _ENDPOINT_KEYS
+    return leaf_is_endpoint and canonical_loopback_endpoint(item) is None
+
+
 def remote_config_endpoints(config: Any) -> list[str]:
     """Remote/cloud URLs anywhere in the config (any key, including lists)."""
-    hits: list[str] = []
-    for name, value in _iter_config_items(config):
-        strings = value if isinstance(value, list) else [value]
-        leaf_is_endpoint = name.rsplit(".", 1)[-1].lower() in _ENDPOINT_KEYS
-        for item in strings:
-            if not isinstance(item, str) or not item.strip():
-                continue
-            if _is_remote_url(item) or (
-                leaf_is_endpoint and canonical_loopback_endpoint(item) is None
-            ):
-                hits.append(item)
-    return hits
+    return [
+        item
+        for name, value in _iter_config_items(config)
+        for item in (value if isinstance(value, list) else [value])
+        if isinstance(item, str)
+        and item.strip()
+        and _endpoint_or_remote(name, item)
+    ]
 
 
 def paths_collide(path_a: Path, path_b: Path) -> bool:
