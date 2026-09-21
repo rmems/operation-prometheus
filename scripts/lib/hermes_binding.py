@@ -213,9 +213,13 @@ def _model_bind_errors(
 
 
 def _model_field_matches(field: str, left: Any, right: Any) -> bool:
-    if field in _OPTIONAL_MODEL_FIELDS and not _present(left) and not _present(right):
-        return True
-    return left == right
+    if field not in _OPTIONAL_MODEL_FIELDS:
+        return left == right
+    if _present(left):
+        return left == right
+    if _present(right):
+        return left == right
+    return True
 
 
 def _runtime_bind_errors(
