@@ -20,7 +20,8 @@ HEAD_OID = "bbb222bbb222bbb222bbb222bbb222bbb222bbb2"
 MODEL_DIGEST = "sha256:0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef"
 TERMS_SHA256 = "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
 PRODUCER_REVISION = "c0ffee1c0ffee1c0ffee1c0ffee1c0ffee1c0ffe"
-VERIFIER_ARTIFACT = "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"
+VERIFIER_ARTIFACT_CONTENT = "synthetic verifier evidence"
+VERIFIER_ARTIFACT = hashlib.sha256(VERIFIER_ARTIFACT_CONTENT.encode("utf-8")).hexdigest()
 SYNTHETIC_GITHUB_TOKEN = "ghp_AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA"
 
 FIXTURE_VERIFIER_OUTCOMES: dict[str, str | None] = {
@@ -71,18 +72,39 @@ def default_admission(**overrides: Any) -> dict[str, Any]:
     return seal_admission(_deep_merge(payload, overrides))
 
 
-def default_verifier(*, outcome: str | None = "pass") -> dict[str, Any]:
-    artifacts = [VERIFIER_ARTIFACT] if outcome else []
+def _subject(record: dict[str, Any] | None) -> dict[str, str]:
+    fields = ("run_id", "session_id", "task_id", "raw_trace_id")
+    source = record or hermes_record(run_id="run-success")
+    if any(not isinstance(source.get(key), str) or not source.get(key) for key in fields):
+        source = hermes_record(run_id="run-success")
     return {
-        "artifact_sha256": artifacts,
+        key: str(source[key])
+        for key in fields
+    }
+
+
+def default_verifier(
+    *, outcome: str | None = "pass", subject: dict[str, Any] | None = None
+) -> dict[str, Any]:
+    artifacts = (
+        [{"content": VERIFIER_ARTIFACT_CONTENT, "sha256": VERIFIER_ARTIFACT}]
+        if outcome
+        else []
+    )
+    return {
+        "artifacts": artifacts,
         "identity": "pytest-local",
         "outcome": outcome,
+        "subject": _subject(subject),
         "version": "8.4.1",
     }
 
 
 def default_manifest(
-    *, admission_report_sha256: str, **overrides: Any
+    *,
+    admission_report_sha256: str,
+    subject: dict[str, Any] | None = None,
+    **overrides: Any,
 ) -> dict[str, Any]:
     payload: dict[str, Any] = {
         "schema_version": "hermes_run_manifest_v1",
@@ -99,6 +121,7 @@ def default_manifest(
             "upstream_revision": "synthetic-upstream-1",
         },
         "admission_report_sha256": admission_report_sha256,
+        "output_license": "Apache-2.0",
         "ollama": {
             "runtime": "ollama",
             "version": "0.11.4",
@@ -120,7 +143,7 @@ def default_manifest(
             "policy": "strip_hidden",
             "strip_tags": ["think"],
         },
-        "verifier": default_verifier(),
+        "verifier": default_verifier(subject=subject),
     }
     return _deep_merge(payload, overrides)
 
@@ -128,14 +151,14 @@ def default_manifest(
 def hermes_record(
     *,
     run_id: str,
-    completed: bool = True,
-    partial: bool = False,
     content: str | dict[str, Any] = "I'll inspect loop.py and apply a minimal fix.",
-    reasoning: str | None = None,
-    extra_message: dict[str, Any] | None = None,
-    trace_verifier: dict[str, Any] | None = None,
     **overrides: Any,
 ) -> dict[str, Any]:
+    completed = overrides.pop("completed", True)
+    partial = overrides.pop("partial", False)
+    reasoning = overrides.pop("reasoning", None)
+    extra_message = overrides.pop("extra_message", None)
+    trace_verifier = overrides.pop("trace_verifier", None)
     assistant: dict[str, Any] = {
         "role": "assistant",
         "timestamp": "2026-09-21T12:00:10Z",
@@ -213,6 +236,7 @@ def write_scenario(
     admission_bytes = write_json(admission_path, admission_payload)
     manifest = default_manifest(
         admission_report_sha256=sha256_bytes(admission_bytes),
+        subject=records[-1] if records else None,
         **(manifest_overrides or {}),
     )
     manifest_path = tmp_path / "run_manifest.json"
@@ -230,12 +254,23 @@ def write_scenario(
 
 def write_fixture_scenario(tmp_path: Path, name: str) -> dict[str, Path]:
     outcome = FIXTURE_VERIFIER_OUTCOMES[name]
+    raw = (FIXTURES / name).read_bytes()
+    records: list[dict[str, Any]] = []
+    try:
+        records = [json.loads(line) for line in raw.splitlines() if line.strip()]
+    except json.JSONDecodeError:
+        pass
     paths = write_scenario(
         tmp_path,
-        [],
-        manifest_overrides={"verifier": default_verifier(outcome=outcome)},
+        records,
+        manifest_overrides={
+            "verifier": default_verifier(
+                outcome=outcome,
+                subject=records[-1] if records else None,
+            )
+        },
     )
-    paths["input"].write_bytes((FIXTURES / name).read_bytes())
+    paths["input"].write_bytes(raw)
     return paths
 
 

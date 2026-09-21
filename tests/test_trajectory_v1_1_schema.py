@@ -89,8 +89,9 @@ def test_hermes_run_manifest_schema_binds_identities():
     required = set(schema["required"])
     for field in (
         "producer",
-        "model",
-        "admission_report_sha256",
+            "model",
+            "admission_report_sha256",
+            "output_license",
         "ollama",
         "repository",
         "workspace",
@@ -99,8 +100,16 @@ def test_hermes_run_manifest_schema_binds_identities():
     ):
         assert field in required
     verifier = schema["properties"]["verifier"]["required"]
-    for field in ("identity", "version", "outcome", "artifact_sha256"):
+    for field in ("identity", "version", "outcome", "subject", "artifacts"):
         assert field in verifier
+    subject = schema["properties"]["verifier"]["properties"]["subject"]
+    assert subject["additionalProperties"] is False
+    assert set(subject["required"]) == {
+        "run_id",
+        "session_id",
+        "task_id",
+        "raw_trace_id",
+    }
 
 
 def test_raw_hermes_schema_requires_identities_and_booleans():

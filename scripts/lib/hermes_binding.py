@@ -1,0 +1,217 @@
+"""Manifest, admission, and schema bindings for Hermes normalization."""
+
+from __future__ import annotations
+
+import re
+from pathlib import Path
+from typing import Any
+
+from validate_jsonl import load_schema
+
+from .source_inventory_common import sha256_json
+
+try:
+    import jsonschema
+except ImportError:  # pragma: no cover - exercised at CLI startup
+    jsonschema = None
+
+REPO_ROOT = Path(__file__).resolve().parent.parent.parent
+V1_1_SCHEMA_PATH = REPO_ROOT / "schemas" / "trajectory_v1_1.schema.json"
+MANIFEST_SCHEMA_PATH = REPO_ROOT / "schemas" / "hermes_run_manifest.schema.json"
+RAW_SCHEMA_PATH = REPO_ROOT / "schemas" / "hermes_raw_trace.schema.json"
+SHA256_RE = re.compile(r"^[a-f0-9]{64}$")
+
+def _is_sha256(value: Any) -> bool:
+    return isinstance(value, str) and SHA256_RE.fullmatch(value) is not None
+
+
+def _nonempty_str(value: Any) -> bool:
+    return isinstance(value, str) and bool(value.strip())
+
+
+def _object_fields(value: Any, fields: tuple[str, ...]) -> bool:
+    if not isinstance(value, dict):
+        return False
+    return all(_nonempty_str(value.get(field)) for field in fields)
+
+
+_MODEL_BIND_FIELDS = (
+    "name",
+    "tag",
+    "ollama_digest",
+    "quantization",
+    "upstream_revision",
+)
+_OPTIONAL_MODEL_FIELDS = frozenset({"quantization", "upstream_revision"})
+_REQUIRED_INPUT_DIGESTS = ("admissions", "rights", "probe")
+
+
+def _present(value: Any) -> bool:
+    return value is not None and value != ""
+
+
+def _evidence_digest_ok(admission: dict[str, Any]) -> bool:
+    declared = admission.get("evidence_digest")
+    if not _is_sha256(declared):
+        return False
+    body = {key: value for key, value in admission.items() if key != "evidence_digest"}
+    return declared == sha256_json(body)
+
+
+def _fallback_disproved(admission: dict[str, Any]) -> bool:
+    provider = admission.get("provider")
+    config = provider.get("config") if isinstance(provider, dict) else None
+    fallback = admission.get("fallback_evidence")
+    if not isinstance(config, dict) or not isinstance(fallback, dict):
+        return False
+    return (
+        admission.get("cloud_fallback_allowed") is False
+        and config.get("no_cloud") is True
+        and config.get("cloud_fallback_allowed") is False
+        and fallback.get("no_cloud") is True
+        and fallback.get("cloud_fallback_allowed") is False
+        and fallback.get("unsanitized_keys") == []
+        and fallback.get("remote_endpoints") == []
+    )
+
+
+def _workspace_errors(manifest: dict[str, Any]) -> list[str]:
+    workspace = manifest.get("workspace")
+    if not isinstance(workspace, dict):
+        return ["workspace_not_isolated"]
+    if not _nonempty_str(workspace.get("id")) or workspace.get("kind") != "isolated":
+        return ["workspace_not_isolated"]
+    return []
+
+
+def _binding_errors(
+    manifest: dict[str, Any], admission: dict[str, Any], admission_digest: str
+) -> list[str]:
+    reasons: list[str] = []
+    expected = str(manifest.get("admission_report_sha256") or "")
+    if expected != admission_digest:
+        reasons.append("admission_digest_mismatch")
+    if admission.get("schema_version") != "local_model_admission_v1":
+        reasons.append("admission_schema")
+    if admission.get("decision") != "accepted":
+        reasons.append("admission_rejected")
+    if admission.get("reasons") != []:
+        reasons.append("admission_reasons")
+    if not _evidence_digest_ok(admission):
+        reasons.append("evidence_digest")
+    model = admission.get("model")
+    runtime = admission.get("runtime")
+    rights = admission.get("rights")
+    provider = admission.get("provider")
+    probe = admission.get("probe")
+    digests = admission.get("input_digests")
+    if not _object_fields(model, ("name", "tag", "ollama_digest", "quantization")):
+        reasons.append("admission_schema")
+    if (
+        isinstance(model, dict)
+        and "upstream_revision" in model
+        and model.get("upstream_revision") is not None
+        and not _nonempty_str(model.get("upstream_revision"))
+    ):
+        reasons.append("admission_schema")
+    if not _object_fields(runtime, ("name", "version", "endpoint")):
+        reasons.append("admission_schema")
+    if not _object_fields(rights, ("identifier", "terms_source", "terms_sha256")):
+        reasons.append("admission_schema")
+    elif rights.get("identifier") != manifest.get("output_license"):
+        reasons.append("rights_mismatch")
+    if not isinstance(provider, dict) or provider.get("name") != "hermes-agent":
+        reasons.append("provider_mismatch")
+    if not _object_fields(probe, ("timestamp", "endpoint")):
+        reasons.append("admission_schema")
+    if not isinstance(digests, dict) or any(
+        not _is_sha256(digests.get(name)) for name in _REQUIRED_INPUT_DIGESTS
+    ):
+        reasons.append("admission_schema")
+    if not _fallback_disproved(admission):
+        reasons.append("cloud_fallback")
+    reasons.extend(_cross_bind_errors(manifest, admission))
+    return reasons
+
+
+def _cross_bind_errors(manifest: dict[str, Any], admission: dict[str, Any]) -> list[str]:
+    reasons: list[str] = []
+    manifest_model = (
+        manifest.get("model") if isinstance(manifest.get("model"), dict) else {}
+    )
+    admission_model = (
+        admission.get("model") if isinstance(admission.get("model"), dict) else {}
+    )
+    for field in _MODEL_BIND_FIELDS:
+        left = manifest_model.get(field)
+        right = admission_model.get(field)
+        if field in _OPTIONAL_MODEL_FIELDS and not _present(left) and not _present(right):
+            continue
+        if left != right:
+            reasons.append("model_mismatch")
+            break
+    ollama = manifest.get("ollama") if isinstance(manifest.get("ollama"), dict) else {}
+    runtime = admission.get("runtime") if isinstance(admission.get("runtime"), dict) else {}
+    if (
+        runtime.get("name") != ollama.get("runtime")
+        or runtime.get("version") != ollama.get("version")
+        or runtime.get("endpoint") != ollama.get("endpoint")
+    ):
+        reasons.append("runtime_mismatch")
+    probe = admission.get("probe") if isinstance(admission.get("probe"), dict) else {}
+    if probe.get("endpoint") != runtime.get("endpoint") or probe.get(
+        "endpoint"
+    ) != ollama.get("endpoint"):
+        reasons.append("probe_endpoint_mismatch")
+    producer = manifest.get("producer") if isinstance(manifest.get("producer"), dict) else {}
+    provider = admission.get("provider") if isinstance(admission.get("provider"), dict) else {}
+    if provider.get("name") != producer.get("name"):
+        reasons.append("provider_mismatch")
+    return reasons
+
+
+def _schema_reason(document: Any, schema_path: Path, code: str) -> list[str]:
+    if jsonschema is None:
+        return ["jsonschema_missing"]
+    validator = jsonschema.Draft7Validator(
+        load_schema(schema_path),
+        format_checker=jsonschema.Draft7Validator.FORMAT_CHECKER,
+    )
+    errors = sorted(validator.iter_errors(document), key=lambda item: list(item.path))
+    if errors:
+        return [code]
+    return []
+
+
+def _manifest_schema_errors(manifest: dict[str, Any]) -> list[str]:
+    return _schema_reason(manifest, MANIFEST_SCHEMA_PATH, "invalid_manifest")
+
+
+def _raw_record_errors(record: dict[str, Any], validator: Any) -> list[str]:
+    if validator is None:
+        return ["jsonschema_missing"]
+    errors = sorted(validator.iter_errors(record), key=lambda item: list(item.path))
+    if errors:
+        return ["invalid_hermes_record"]
+    return []
+
+
+def _v1_1_validator() -> Any:
+    if jsonschema is None:
+        return None
+    return jsonschema.Draft7Validator(
+        load_schema(V1_1_SCHEMA_PATH),
+        format_checker=jsonschema.Draft7Validator.FORMAT_CHECKER,
+    )
+
+
+def _raw_validator() -> Any:
+    if jsonschema is None:
+        return None
+    return jsonschema.Draft7Validator(
+        load_schema(RAW_SCHEMA_PATH),
+        format_checker=jsonschema.Draft7Validator.FORMAT_CHECKER,
+    )
+
+
+

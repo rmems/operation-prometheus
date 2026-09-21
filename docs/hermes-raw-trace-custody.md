@@ -32,9 +32,10 @@ them onto `execution_provenance`:
 - repository base/head revisions and isolated-workspace identity from the
   frozen run manifest (conflicting trace values are rejected)
 - reasoning-retention policy
-- independent verifier identity, version, outcome, and artifact hashes from the
-  frozen run manifest (trace self-assertions are not authoritative; conflicts
-  are rejected)
+- the exact output license authorized by the admitted rights report
+- independent verifier identity, version, outcome, full trace-identity subject,
+  and content-verified artifact hashes from the frozen run manifest (trace
+  self-assertions are not authoritative; conflicts are rejected)
 
 It does not start Hermes, pull models, or contact a network service. Tests
 inject a local-file replay boundary; HTTP URLs are refused.

@@ -37,6 +37,11 @@ if str(_SCRIPTS) not in sys.path:
     sys.path.insert(0, str(_SCRIPTS))
 
 from lib.secrets import find_secrets  # noqa: E402
+from lib.hermes_sanitize import (  # noqa: E402
+    hidden_markup_remains,
+    is_hidden_key,
+    strip_hidden_reasoning,
+)
 
 SCHEMA_V0_PATH = (
     Path(__file__).resolve().parent.parent / "schemas" / "pr_trajectory.schema.json"
@@ -139,6 +144,19 @@ def _contains_nonfinite(obj: object) -> bool:
     return False
 
 
+def _contains_hidden_reasoning(obj: object) -> bool:
+    if isinstance(obj, str):
+        return hidden_markup_remains(obj) or strip_hidden_reasoning(obj) != obj
+    if isinstance(obj, dict):
+        return any(
+            is_hidden_key(key) or _contains_hidden_reasoning(value)
+            for key, value in obj.items()
+        )
+    if isinstance(obj, list):
+        return any(_contains_hidden_reasoning(value) for value in obj)
+    return False
+
+
 def policy_errors(record: dict, lineno: int, filename: str) -> list[str]:
     """Extra policy checks beyond JSON Schema."""
     errors: list[str] = []
@@ -146,6 +164,10 @@ def policy_errors(record: dict, lineno: int, filename: str) -> list[str]:
         return errors
 
     schema_version = record.get("schema_version")
+    if schema_version in _V1_1_VERSIONS and _contains_hidden_reasoning(record):
+        errors.append(
+            f"  {filename}:{lineno} [policy] - hidden reasoning is not allowed in v1.1"
+        )
     if schema_version in _V1_VERSIONS or schema_version in _V1_1_VERSIONS:
         events = record.get("events")
         if isinstance(events, list):
@@ -365,13 +387,14 @@ def _select_validator(
 
 def validate_file(
     filepath: Path,
-    v0_validator: jsonschema.Draft7Validator,
-    v1_validator: jsonschema.Draft7Validator,
-    *,
+    *validators: jsonschema.Draft7Validator,
     strict_policy: bool = False,
     v1_1_validator: jsonschema.Draft7Validator | None = None,
 ) -> list[str]:
     """Validate a single JSONL file. Returns list of error strings."""
+    if len(validators) != 2:
+        raise TypeError("validate_file requires v0 and v1 validators")
+    v0_validator, v1_validator = validators
     errors: list[str] = []
     count = 0
     try:

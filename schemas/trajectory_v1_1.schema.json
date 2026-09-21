@@ -57,6 +57,7 @@
     "collector_version": { "type": "string" },
     "repository": {
       "type": "object",
+      "additionalProperties": false,
       "required": ["owner", "name"],
       "properties": {
         "owner": { "type": "string" },
@@ -209,6 +210,7 @@
     },
     "evidence_quality": {
       "type": "object",
+      "additionalProperties": false,
       "properties": {
         "signal_to_noise": { "type": "number" },
         "reproducibility": { "type": "number" },
@@ -219,6 +221,7 @@
       "type": "array",
       "items": {
         "type": "object",
+        "additionalProperties": false,
         "required": ["id", "sha256", "media_type", "byte_size", "availability", "reproduction_role"],
         "properties": {
           "id": { "type": "string" },
@@ -247,12 +250,14 @@
       "minItems": 1,
       "items": {
         "type": "object",
+        "additionalProperties": false,
         "required": ["event_id", "timestamp", "actor", "event_type"],
         "properties": {
           "event_id": { "type": "string" },
           "timestamp": { "type": "string", "format": "date-time" },
           "actor": {
             "type": "object",
+            "additionalProperties": false,
             "required": ["type", "id"],
             "properties": {
               "type": { "enum": ["human", "bot", "application", "agent"] },
@@ -263,6 +268,7 @@
           "event_type": { "type": "string" },
           "code_state": {
             "type": "object",
+            "additionalProperties": false,
             "properties": {
               "commit_oid": { "type": "string" },
               "base_oid": { "type": "string" },
@@ -354,6 +360,7 @@
     },
     "lineage": {
       "type": "object",
+      "additionalProperties": false,
       "properties": {
         "supersedes": { "type": "array", "items": { "type": "string" } },
         "reverts": { "type": "array", "items": { "type": "string" } },
@@ -362,6 +369,7 @@
     },
     "software_payload": {
       "type": "object",
+      "additionalProperties": false,
       "minProperties": 1,
       "anyOf": [
         { "required": ["issue_statement"] },
@@ -380,6 +388,7 @@
     },
     "research_payload": {
       "type": "object",
+      "additionalProperties": false,
       "minProperties": 1,
       "anyOf": [
         { "required": ["hypothesis"] },

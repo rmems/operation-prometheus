@@ -43,7 +43,7 @@ _HIDDEN_TAG_TOKEN_RE = re.compile(
 )
 _HIDDEN_OPEN_RE = re.compile(rf"<({_HIDDEN_TAG})\b", re.IGNORECASE)
 _HIDDEN_CLOSE_RE = re.compile(rf"</({_HIDDEN_TAG})\b", re.IGNORECASE)
-_URL_RE = re.compile(r"https?://[^\s\"'<>]+", re.IGNORECASE)
+_URL_RE = re.compile(r"(?:https?|ftps?)://[^\s\"'<>]+", re.IGNORECASE)
 _HEADER_SECRET_RE = re.compile(
     r"(?i)\b(?:authorization|x-api-key|api[-_]?key)\b\s*[:=]"
 )
@@ -55,32 +55,63 @@ class UnsafeUrlError(ValueError):
 
 def sanitize_url(url: str) -> str:
     """Drop credentials, secret query keys, and fragments; sort remaining query."""
+    parts = _split_url(url)
+    _reject_url_credentials(parts)
+    return urllib.parse.urlunsplit(
+        (
+            parts.scheme or "https",
+            _normalized_netloc(parts),
+            parts.path or "",
+            _sanitized_query(parts.query),
+            "",
+        )
+    )
+
+
+def _split_url(url: str) -> urllib.parse.SplitResult:
     try:
         parts = urllib.parse.urlsplit(url)
-        host = parts.hostname or ""
-        port = parts.port
-        username = parts.username
-        password = parts.password
+        parts.port
     except ValueError as exc:
         raise UnsafeUrlError("invalid_url") from exc
-    if username or password:
+    return parts
+
+
+def _reject_url_credentials(parts: urllib.parse.SplitResult) -> None:
+    if parts.username or parts.password:
         raise UnsafeUrlError("credential_url")
     for segment in (parts.path or "").split("/"):
-        if urllib.parse.unquote(segment).casefold() in SECRET_QUERY_KEYS:
+        if _decoded_segment(segment).casefold() in SECRET_QUERY_KEYS:
             raise UnsafeUrlError("credential_url")
+
+
+def _decoded_segment(segment: str) -> str:
+    decoded = segment
+    for _ in range(3):
+        next_value = urllib.parse.unquote(decoded)
+        if next_value == decoded:
+            return decoded
+        decoded = next_value
+    if urllib.parse.unquote(decoded) != decoded:
+        raise UnsafeUrlError("credential_url")
+    return decoded
+
+
+def _normalized_netloc(parts: urllib.parse.SplitResult) -> str:
+    host = parts.hostname or ""
     if ":" in host and not host.startswith("["):
         host = f"[{host}]"
-    netloc = f"{host}:{port}" if port else host
+    return f"{host}:{parts.port}" if parts.port else host
+
+
+def _sanitized_query(query: str) -> str:
     query_pairs = [
         (key, value)
-        for key, value in urllib.parse.parse_qsl(parts.query, keep_blank_values=True)
+        for key, value in urllib.parse.parse_qsl(query, keep_blank_values=True)
         if key.lower() not in SECRET_QUERY_KEYS
     ]
     query_pairs.sort(key=lambda item: (item[0], item[1]))
-    scheme = parts.scheme or "https"
-    return urllib.parse.urlunsplit(
-        (scheme, netloc, parts.path or "", urllib.parse.urlencode(query_pairs), "")
-    )
+    return urllib.parse.urlencode(query_pairs)
 
 
 def sanitize_query_secrets(value: Any) -> Any:

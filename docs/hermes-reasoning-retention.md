@@ -25,7 +25,8 @@ must be JSON booleans and are copied onto `execution.producer_completed` /
 
 `terminal_disposition` is set exclusively from the frozen run-manifest
 independent verifier (identity distinct from the Hermes producer, version,
-outcome, and at least one validated artifact hash):
+outcome, an exact run/session/task/raw-trace subject, and at least one artifact
+whose supplied content matches its declared SHA-256):
 
 | Verifier outcome | `terminal_disposition` |
 | --- | --- |
