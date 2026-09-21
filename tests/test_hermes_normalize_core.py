@@ -54,6 +54,14 @@ def test_staged_output_is_removed_if_report_staging_fails(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ):
     paths = write_scenario(tmp_path, [hermes_record(run_id="run-stage-cleanup")])
+    paths["output"].write_text("old-output\n", encoding="utf-8")
+    paths["report"].write_text("old-report\n", encoding="utf-8")
+    paths["output"].chmod(0o640)
+    paths["report"].chmod(0o600)
+    previous_stats = {
+        name: (path.stat().st_ino, path.stat().st_mode, path.stat().st_mtime_ns)
+        for name, path in (("output", paths["output"]), ("report", paths["report"]))
+    }
     original_stage = hermes_normalize_module._stage_bytes
     staged_output: Path | None = None
     calls = 0
@@ -77,6 +85,13 @@ def test_staged_output_is_removed_if_report_staging_fails(
         )
     assert staged_output is not None
     assert not staged_output.exists()
+    current_stats = {
+        name: (path.stat().st_ino, path.stat().st_mode, path.stat().st_mtime_ns)
+        for name, path in (("output", paths["output"]), ("report", paths["report"]))
+    }
+    assert current_stats == previous_stats
+    assert paths["output"].read_text(encoding="utf-8") == "old-output\n"
+    assert paths["report"].read_text(encoding="utf-8") == "old-report\n"
 
 
 def test_successful_run_is_accepted_v1_1_and_binds_provenance(tmp_path: Path):

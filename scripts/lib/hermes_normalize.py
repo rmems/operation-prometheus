@@ -86,6 +86,15 @@ class _DecisionData:
     output_line: str | None = None
 
 
+@dataclass(frozen=True)
+class _StagedPair:
+    output_tmp: Path
+    output_path: Path
+    report_tmp: Path
+    report_path: Path
+    previous: dict[Path, bytes | None]
+
+
 class LocalFileBoundary:
     """Read-only local-file source. Tests may inject frozen bytes for replay."""
 
@@ -224,13 +233,26 @@ def _atomic_write_pair(
     try:
         output_tmp = _stage_bytes(output_path, output_data)
         report_tmp = _stage_bytes(report_path, report_data)
-        output_tmp.replace(output_path)
-        report_tmp.replace(report_path)
-    except Exception:
-        _restore_previous(previous)
-        raise
+        _publish_staged_pair(
+            _StagedPair(
+                output_tmp=output_tmp,
+                output_path=output_path,
+                report_tmp=report_tmp,
+                report_path=report_path,
+                previous=previous,
+            )
+        )
     finally:
         _cleanup_staged(output_tmp, report_tmp)
+
+
+def _publish_staged_pair(staged: _StagedPair) -> None:
+    try:
+        staged.output_tmp.replace(staged.output_path)
+        staged.report_tmp.replace(staged.report_path)
+    except Exception:
+        _restore_previous(staged.previous)
+        raise
 
 
 def _cleanup_staged(*paths: Path | None) -> None:
