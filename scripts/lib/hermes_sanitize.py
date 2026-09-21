@@ -37,9 +37,9 @@ HIDDEN_KEYS = frozenset(
 _HIDDEN_TAG = (
     r"(?:think|thought|thinking|analysis|reasoning|scratchpad|chain-of-thought|cot)"
 )
-_THINK_RE = re.compile(
-    rf"<({_HIDDEN_TAG})\b[^>]*>.*?</\1>",
-    re.IGNORECASE | re.DOTALL,
+_HIDDEN_TAG_TOKEN_RE = re.compile(
+    rf"<(/?)({_HIDDEN_TAG})\b[^>]*>",
+    re.IGNORECASE,
 )
 _HIDDEN_OPEN_RE = re.compile(rf"<({_HIDDEN_TAG})\b", re.IGNORECASE)
 _HIDDEN_CLOSE_RE = re.compile(rf"</({_HIDDEN_TAG})\b", re.IGNORECASE)
@@ -66,7 +66,7 @@ def sanitize_url(url: str) -> str:
     if username or password:
         raise UnsafeUrlError("credential_url")
     for segment in (parts.path or "").split("/"):
-        if segment.casefold() in SECRET_QUERY_KEYS:
+        if urllib.parse.unquote(segment).casefold() in SECRET_QUERY_KEYS:
             raise UnsafeUrlError("credential_url")
     if ":" in host and not host.startswith("["):
         host = f"[{host}]"
@@ -100,7 +100,7 @@ def is_hidden_key(key: Any) -> bool:
 
 def hidden_markup_remains(value: str) -> bool:
     """True when a hidden tag is unclosed or only partially stripped."""
-    stripped = _THINK_RE.sub("", value)
+    stripped = _strip_hidden_tag_regions(value)
     return (
         _HIDDEN_OPEN_RE.search(stripped) is not None
         or _HIDDEN_CLOSE_RE.search(stripped) is not None
@@ -114,7 +114,7 @@ def contains_header_secret(value: str) -> bool:
 def strip_hidden_reasoning(value: Any) -> Any:
     """Remove hidden-reasoning fields and producer think-tags from trainable views."""
     if isinstance(value, str):
-        return _THINK_RE.sub("", value)
+        return _strip_hidden_tag_regions(value)
     if isinstance(value, list):
         return [strip_hidden_reasoning(item) for item in value]
     if isinstance(value, dict):
@@ -124,3 +124,34 @@ def strip_hidden_reasoning(value: Any) -> Any:
             if not is_hidden_key(key)
         }
     return value
+
+
+def _strip_hidden_tag_regions(value: str) -> str:
+    """Strip balanced hidden-tag regions with a single left-to-right scan."""
+    output: list[str] = []
+    stack: list[str] = []
+    cursor = 0
+    hidden_start = 0
+    for match in _HIDDEN_TAG_TOKEN_RE.finditer(value):
+        closing, tag = match.groups()
+        normalized_tag = tag.casefold()
+        if not stack:
+            if closing:
+                continue
+            output.append(value[cursor : match.start()])
+            hidden_start = match.start()
+            stack.append(normalized_tag)
+            continue
+        if not closing:
+            stack.append(normalized_tag)
+            continue
+        if normalized_tag != stack[-1]:
+            continue
+        stack.pop()
+        if not stack:
+            cursor = match.end()
+    if stack:
+        output.append(value[hidden_start:])
+    else:
+        output.append(value[cursor:])
+    return "".join(output)

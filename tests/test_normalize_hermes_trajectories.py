@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import time
 from pathlib import Path
 
 import jsonschema
@@ -26,6 +27,7 @@ from hermes_fixtures import (
     write_fixture_scenario,
 )
 from lib.hermes_normalize import LocalFileBoundary, canonical_dumps, normalize_files
+from lib.hermes_sanitize import strip_hidden_reasoning
 from normalize_hermes_trajectories import build_parser, main
 from validate_jsonl import load_schema, validate_file
 
@@ -553,6 +555,24 @@ def test_credential_url_path_is_rejected(tmp_path: Path):
     assert report["rejected_count"] >= 1
 
 
+def test_percent_encoded_credential_url_path_is_rejected(tmp_path: Path):
+    record = hermes_record(
+        run_id="run-encoded-path-secret",
+        extra_message={
+            "role": "tool",
+            "name": "fetch",
+            "timestamp": "2026-09-21T12:00:30Z",
+            "content": "https://example.test/%74oken/ordinarysecretvalue123",
+        },
+    )
+    paths = write_scenario(tmp_path, [record])
+    assert _run(paths) == 0
+    dumped = paths["output"].read_text(encoding="utf-8")
+    assert dumped == ""
+    assert "ordinarysecretvalue123" not in dumped
+    assert _report(paths)["rejected_count"] >= 1
+
+
 def test_casefolded_hidden_reasoning_and_manifest_hidden_fields_are_rejected(
     tmp_path: Path,
 ):
@@ -815,6 +835,13 @@ def test_hidden_equivalent_tags_are_stripped_and_unclosed_are_rejected(tmp_path:
     assert open_dump == ""
     assert "private chain" not in open_dump
     assert _report(rejected)["rejected_count"] >= 1
+
+
+def test_unclosed_hidden_tags_are_scanned_in_bounded_time():
+    value = "<think>" * 20_000
+    started = time.monotonic()
+    assert strip_hidden_reasoning(value) == value
+    assert time.monotonic() - started < 1.0
 
 
 def test_repository_url_query_credential_is_not_emitted(tmp_path: Path):
