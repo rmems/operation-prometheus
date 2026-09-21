@@ -147,31 +147,47 @@ def _identity_reasons(
     return _digest_match_reasons(matches[0], candidate)
 
 
+def _quantization_reasons(
+    candidate: dict[str, Any], show: dict[str, Any]
+) -> tuple[list[str], list[str]]:
+    details = show.get("details")
+    observed = _text(show.get("quantization_level"))
+    if observed is None and isinstance(details, dict):
+        observed = _text(details.get("quantization_level"))
+    declared = _text(candidate.get("quantization"))
+    if observed is None:
+        return [], ["probe_quantization_missing"]
+    if declared is None or observed != declared:
+        return ["probe_quantization_mismatch"], []
+    return [], []
+
+
+def _license_reasons(
+    rights_license: str | None, show: dict[str, Any]
+) -> list[str]:
+    probe_license = show.get("license")
+    if _text(probe_license) is None:
+        return []
+    if rights_license is None or normalize_license_id(
+        probe_license
+    ) != rights_license:
+        return ["probe_license_conflict"]
+    return []
+
+
 def _show_reasons(
     model: str,
     candidate: dict[str, Any],
     probe: dict[str, Any],
     rights_license: str | None,
 ) -> tuple[list[str], list[str]]:
+    """Cross-check `/api/show` details against the candidate/rights row."""
     show = _show_entry(probe, model)
     if show is None:
         return [], ["probe_evidence_missing"]
-    details = show.get("details")
-    observed_level = _text(show.get("quantization_level"))
-    if observed_level is None and isinstance(details, dict):
-        observed_level = _text(details.get("quantization_level"))
-    declared_level = _text(candidate.get("quantization"))
-    if observed_level is None:
-        return [], ["probe_quantization_missing"]
-    if declared_level is None or observed_level != declared_level:
-        return ["probe_quantization_mismatch"], []
-    probe_license = show.get("license")
-    if _text(probe_license) is not None:
-        if rights_license is None or normalize_license_id(
-            probe_license
-        ) != rights_license:
-            return ["probe_license_conflict"], []
-    return [], []
+    rejected, quarantined = _quantization_reasons(candidate, show)
+    rejected += _license_reasons(rights_license, show)
+    return rejected, quarantined
 
 
 def probe_reasons(

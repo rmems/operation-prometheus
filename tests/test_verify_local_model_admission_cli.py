@@ -69,10 +69,15 @@ def test_closed_fixture_run(tmp_path):
     assert report["schema_version"] == "local_model_admission_v1"
     assert report["decision"] == "accepted"
     assert report["reasons"] == []
-    assert report["model_name"] == "hermes-3-llama-3.1-8b"
-    assert report["model_tag"] == "q4_k_m"
-    assert report["runtime"] == {"name": "ollama", "version": "0.5.4"}
-    assert report["endpoint"] == "http://127.0.0.1:11434"
+    assert report["model"]["name"] == "hermes-3-llama-3.1-8b"
+    assert report["model"]["tag"] == "q4_k_m"
+    assert report["runtime"] == {
+        "name": "ollama",
+        "version": "0.5.4",
+        "endpoint": "http://127.0.0.1:11434",
+    }
+    assert report["provider"]["name"] == "hermes-agent"
+    assert report["probe"]["endpoint"] == "http://127.0.0.1:11434"
     assert report["cloud_fallback_allowed"] is False
     assert report["input_digests"]["admissions"]
     assert report["input_digests"]["rights"]
@@ -193,3 +198,61 @@ def test_live_requires_loopback(tmp_path):
     )
     assert result.returncode == 2
     assert "loopback" in result.stderr
+
+
+def test_null_inputs_manifest_fails_closed(tmp_path):
+    manifest = tmp_path / "inputs-manifest.json"
+    manifest.write_text("null")
+    out = tmp_path / "report.json"
+    result = _run(*_args(out), "--inputs-manifest", str(manifest))
+    assert result.returncode != 0
+    report = json.loads(out.read_text())
+    assert report["decision"] != "accepted"
+    assert report["input_digests"]["inputs_manifest"]
+
+
+def test_diagnostics_colliding_with_input_rejected(tmp_path):
+    result = _run(
+        *_args(tmp_path / "report.json"),
+        "--diagnostics", str(FIXTURES / "rights.json"),
+    )
+    assert result.returncode == 2
+    assert "collides" in result.stderr
+
+
+def test_diagnostics_hard_link_to_input_rejected(tmp_path):
+    link = tmp_path / "hardlink.json"
+    link.hardlink_to(FIXTURES / "rights.json")
+    result = _run(
+        *_args(tmp_path / "report.json"),
+        "--diagnostics", str(link),
+    )
+    assert result.returncode == 2
+    assert "collides" in result.stderr
+
+
+def test_malformed_port_does_not_crash(tmp_path):
+    candidates = tmp_path / "bad.jsonl"
+    candidates.write_text(
+        json.dumps({
+            "model": "hermes-3-llama-3.1-8b:q4_k_m",
+            "ollama_digest": "sha256:" + "a" * 64,
+            "quantization": "Q4_K_M",
+            "runtime": "ollama",
+            "endpoint": "http://127.0.0.1:bad",
+            "license": "Apache-2.0",
+            "provider_config": {
+                "no_cloud": True,
+                "cloud_fallback_allowed": False,
+            },
+            "probed_at": "2026-09-21T12:00:00Z",
+        })
+        + "\n"
+    )
+    out = tmp_path / "report.json"
+    args = _args(out)
+    args[1] = str(candidates)
+    result = _run(*args)
+    assert result.returncode == 1
+    report = json.loads(out.read_text())
+    assert report["decision"] != "accepted"

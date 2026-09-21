@@ -8,7 +8,13 @@ contradictory) with explicit reason codes.
 
 `--out` is the canonical **singular** `local_model_admission_v1` decision
 report for the single candidate admitted — the exact object downstream
-consumers (e.g. #74) hash and validate. Each decision binds:
+consumers (e.g. #74) hash and validate. The structured shape is locked:
+`model: {name, tag, ollama_digest, quantization, upstream_revision}`,
+`runtime: {name, version, endpoint}`, `rights: {identifier, terms_source,
+terms_sha256}`, `provider: {name: "hermes-agent", config: <sanitized>}`,
+`probe: {timestamp, endpoint}`, plus top-level `schema_version`, `decision`,
+`reasons`, `cloud_fallback_allowed`, `fallback_evidence`, `input_digests`,
+and `evidence_digest`. Each decision binds:
 
 - distinct model name and tag plus the Ollama manifest digest
   (`sha256:` + 64 lowercase hex);
@@ -94,3 +100,8 @@ Quarantine (incomplete evidence): `rights_evidence_missing`,
 `provider_config_missing`, `no_cloud_evidence_missing`,
 `probe_timestamp_missing`, `probe_timestamp_invalid`,
 `probe_timestamp_mismatch`, `model_tag_missing`.
+
+Envelope/integrity: `model_invalid`, `candidate_unknown_fields`,
+`candidate_unsanitized`, `foreign_provider_declared`,
+`upstream_revision_mismatch`, `inputs_manifest_mismatch`, `bundle_error`,
+`no_candidates`.

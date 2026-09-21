@@ -15,6 +15,8 @@ from typing import Any, NamedTuple
 from .model_admission_check_fields import (
     config_reasons,
     endpoint_reasons,
+    envelope_reasons,
+    model_identity_reasons,
     runtime_reasons,
 )
 from .model_admission_check_probe import probe_reasons
@@ -50,6 +52,21 @@ def _rights_row(rights: Any, model: str) -> Any:
         return None
     models = rights.get("models")
     return models.get(model) if isinstance(models, dict) else None
+
+
+def _upstream_revision_reasons(
+    candidate: dict[str, Any], rights_row: Any
+) -> tuple[list[str], list[str]]:
+    """When frozen evidence supplies an upstream revision, it must match."""
+    declared = _text(candidate.get("upstream_revision"))
+    frozen = (
+        _text(rights_row.get("upstream_revision"))
+        if isinstance(rights_row, dict)
+        else None
+    )
+    if declared is not None and frozen is not None and declared != frozen:
+        return ["upstream_revision_mismatch"], []
+    return [], []
 
 
 def _provider_config(candidate: dict[str, Any]) -> Any:
@@ -98,17 +115,23 @@ def evaluate_admission(candidate: Any, *, inputs: AdmissionInputs) -> dict:
         return row
 
     model = _text(candidate.get("model")) or ""
-    rejected: list[str] = [] if model else ["model_missing"]
+    rejected: list[str] = []
     quarantined: list[str] = []
-    if model and _model_name_tag(model)[1] is None:
-        quarantined.append("model_tag_missing")
+    rej, quar = model_identity_reasons(candidate)
+    rejected += rej
+    quarantined += quar
+    rej, quar = envelope_reasons(candidate)
+    rejected += rej
+    quarantined += quar
 
     rights_license = normalize_license_id(candidate.get("license"))
-    r_rej, r_quar, family, terms = rights_reasons(
-        rights_license, _rights_row(inputs.rights, model)
-    )
+    rights_row = _rights_row(inputs.rights, model)
+    r_rej, r_quar, family, terms = rights_reasons(rights_license, rights_row)
     rejected += r_rej
     quarantined += r_quar
+    rej, quar = _upstream_revision_reasons(candidate, rights_row)
+    rejected += rej
+    quarantined += quar
 
     if model:
         p_rej, p_quar = probe_reasons(
@@ -137,6 +160,33 @@ def evaluate_admission(candidate: Any, *, inputs: AdmissionInputs) -> dict:
     return row
 
 
+BUNDLE_ERROR_REASONS = {
+    "inputs manifest": "inputs_manifest_mismatch",
+}
+
+
+def _bundle_reason_codes(errors: list[str]) -> list[str]:
+    codes = []
+    for error in errors:
+        code = next(
+            (v for k, v in BUNDLE_ERROR_REASONS.items() if k in error),
+            "bundle_error",
+        )
+        codes.append(code)
+    return sorted(set(codes))
+
+
+def _report_decision(
+    row: dict[str, Any], inputs: AdmissionInputs
+) -> tuple[str, list[str]]:
+    """Bundle/frozen-evidence errors force a non-accepted decision."""
+    reasons = list(row["reason_codes"])
+    reasons += _bundle_reason_codes(list(inputs.bundle_errors or []))
+    if reasons and row["disposition"] == "accepted":
+        return "rejected", sorted(set(reasons))
+    return row["disposition"], sorted(set(reasons))
+
+
 def _model_name_tag(model: str | None) -> tuple[str | None, str | None]:
     if not model or ":" not in model:
         return model, None
@@ -152,35 +202,44 @@ def _decision_report(row: dict[str, Any], inputs: AdmissionInputs) -> dict:
     rights_row = rights_row if isinstance(rights_row, dict) else {}
     config = _provider_config(candidate)
     model_name, model_tag = _model_name_tag(row["model"])
+    decision, reasons = _report_decision(row, inputs)
     report = {
         "schema_version": SCHEMA_VERSION,
-        "decision": row["disposition"],
-        "reasons": row["reason_codes"],
-        "model": row["model"],
-        "model_name": model_name,
-        "model_tag": model_tag,
-        "ollama_digest": ollama_digest_or_none(candidate.get("ollama_digest")),
-        "quantization": _text(candidate.get("quantization")),
-        "upstream_revision": _text(candidate.get("upstream_revision")),
+        "decision": decision,
+        "reasons": reasons,
+        "model": {
+            "name": model_name,
+            "tag": model_tag,
+            "ollama_digest": ollama_digest_or_none(
+                candidate.get("ollama_digest")
+            ),
+            "quantization": _text(candidate.get("quantization")),
+            "upstream_revision": _text(candidate.get("upstream_revision"))
+            or _text(rights_row.get("upstream_revision")),
+        },
         "runtime": {
             "name": _text(candidate.get("runtime")),
             "version": _text(probe.get("version")),
+            "endpoint": canonical_loopback_endpoint(
+                candidate.get("endpoint")
+            ),
         },
-        "endpoint": canonical_loopback_endpoint(candidate.get("endpoint")),
         "rights": {
             "identifier": normalize_license_id(rights_row.get("license")),
             "terms_source": _text(rights_row.get("terms_source")),
             "terms_sha256": row["terms"],
         },
-        "license_family": row["license_family"],
-        "provider_config": config,
+        "provider": {"name": "hermes-agent", "config": config},
         "cloud_fallback_allowed": (
             config.get("cloud_fallback_allowed")
             if isinstance(config, dict)
             else None
         ),
         "fallback_evidence": _fallback_evidence(config),
-        "probed_at": _text(probe.get("probed_at")),
+        "probe": {
+            "timestamp": _text(probe.get("probed_at")),
+            "endpoint": canonical_loopback_endpoint(probe.get("endpoint")),
+        },
         "input_digests": dict(sorted(inputs.input_digests.items())),
     }
     report["evidence_digest"] = sha256_json(report)

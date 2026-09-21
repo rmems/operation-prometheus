@@ -34,6 +34,7 @@ from lib.model_admission import (  # noqa: E402
     AdmissionInputs,
     build_admission_report,
 )
+from lib.model_admission_report import validate_decision_report  # noqa: E402
 from lib.model_admission_evidence import (  # noqa: E402
     canonical_loopback_endpoint,
     loads_strict,
@@ -150,10 +151,19 @@ def _input_paths(args: argparse.Namespace) -> dict[str, Path]:
     return paths
 
 
-def _collision_error(input_paths: dict[str, Path], out: Path) -> str | None:
-    for name, path in input_paths.items():
-        if paths_collide(out, path):
-            return f"--out collides with {name} input {path}"
+def _collision_error(
+    input_paths: dict[str, Path], out_paths: dict[str, Path]
+) -> str | None:
+    """No output may collide with an input or another output."""
+    for flag, out in out_paths.items():
+        for name, path in input_paths.items():
+            if paths_collide(out, path):
+                return f"{flag} collides with {name} input {path}"
+    flags = list(out_paths)
+    for index, flag_a in enumerate(flags):
+        for flag_b in flags[index + 1 :]:
+            if paths_collide(out_paths[flag_a], out_paths[flag_b]):
+                return f"{flag_a} collides with {flag_b}"
     return None
 
 
@@ -166,9 +176,10 @@ def _load_inputs(input_paths: dict[str, Path]) -> dict[str, Any]:
         if "probe" in input_paths
         else (None, b"")
     )
+    has_manifest = "inputs_manifest" in input_paths
     manifest, manifest_bytes = (
         read_frozen_json(input_paths["inputs_manifest"])
-        if "inputs_manifest" in input_paths
+        if has_manifest
         else (None, b"")
     )
     digests = {
@@ -177,13 +188,14 @@ def _load_inputs(input_paths: dict[str, Path]) -> dict[str, Any]:
     }
     if "probe" in input_paths:
         digests["probe"] = sha256_bytes(probe_bytes)
-    if manifest is not None:
+    if has_manifest:
         digests["inputs_manifest"] = sha256_bytes(manifest_bytes)
     return {
         "candidates": candidates,
         "rights": rights,
         "probe": probe,
         "inputs_manifest": manifest,
+        "manifest_supplied": has_manifest,
         "digests": digests,
     }
 
@@ -217,6 +229,64 @@ def _emit(args: argparse.Namespace, rendered: bytes, closed: bool) -> int:
     return 0 if closed else 1
 
 
+def _resolve_probe(
+    args: argparse.Namespace, inputs: dict[str, Any]
+) -> dict[str, Any] | None:
+    """Frozen probe, or a live loopback probe hashed into input_digests."""
+    if not args.live:
+        return inputs["probe"]
+    try:
+        probe = _resolve_live_probe(args, inputs["candidates"])
+    except ValueError as exc:
+        print(f"ERROR: {exc}", file=sys.stderr)
+        return None
+    inputs["digests"]["probe"] = sha256_bytes(render_report(probe))
+    return probe
+
+
+def _evaluate(
+    inputs: dict[str, Any], probe: dict[str, Any]
+) -> tuple[dict[str, Any], dict[str, Any]] | None:
+    """Build the aggregate report; returns (report, candidate)."""
+    candidates = inputs["candidates"]
+    if not isinstance(candidates, list) or len(candidates) != 1:
+        print(
+            "ERROR: --admissions must contain exactly one candidate "
+            "(the singular admission report covers one model)",
+            file=sys.stderr,
+        )
+        return None
+    bundle_errors = (
+        _inputs_manifest_errors(inputs["inputs_manifest"], inputs["digests"])
+        if inputs["manifest_supplied"]
+        else []
+    )
+    report = build_admission_report(
+        candidates,
+        AdmissionInputs(
+            rights=inputs["rights"],
+            probe=probe,
+            input_digests=inputs["digests"],
+            bundle_errors=bundle_errors,
+        ),
+    )
+    return report, candidates[0]
+
+
+def _validated_decision(report: dict[str, Any]) -> bytes | None:
+    """Re-validate the emitted decision through the shared contract."""
+    decision = report["decisions"][0]
+    errors = validate_decision_report(decision)
+    if errors:
+        print(
+            "ERROR: emitted decision report fails contract validation: "
+            + "; ".join(errors),
+            file=sys.stderr,
+        )
+        return None
+    return render_report(decision)
+
+
 def main(argv: list[str] | None = None) -> int:
     args = build_parser().parse_args(argv)
     if error := _check_args(args):
@@ -224,7 +294,10 @@ def main(argv: list[str] | None = None) -> int:
         return 2
 
     input_paths = _input_paths(args)
-    if error := _collision_error(input_paths, args.out):
+    out_paths = {"--out": args.out}
+    if args.diagnostics is not None:
+        out_paths["--diagnostics"] = args.diagnostics
+    if error := _collision_error(input_paths, out_paths):
         print(f"ERROR: {error}", file=sys.stderr)
         return 2
 
@@ -234,48 +307,26 @@ def main(argv: list[str] | None = None) -> int:
         print(f"ERROR: {exc}", file=sys.stderr)
         return 2
 
-    digests = inputs["digests"]
-    probe = inputs["probe"]
-    if args.live:
-        try:
-            probe = _resolve_live_probe(args, inputs["candidates"])
-        except ValueError as exc:
-            print(f"ERROR: {exc}", file=sys.stderr)
-            return 2
-        digests["probe"] = sha256_bytes(render_report(probe))
-
-    candidates = inputs["candidates"]
-    if not isinstance(candidates, list) or len(candidates) != 1:
-        print(
-            "ERROR: --admissions must contain exactly one candidate "
-            "(the singular admission report covers one model)",
-            file=sys.stderr,
-        )
+    probe = _resolve_probe(args, inputs)
+    if probe is None:
+        return 2
+    evaluated = _evaluate(inputs, probe)
+    if evaluated is None:
+        return 2
+    report, candidate = evaluated
+    decision = report["decisions"][0]
+    rendered = _validated_decision(report)
+    if rendered is None:
         return 2
 
-    bundle_errors = (
-        _inputs_manifest_errors(inputs["inputs_manifest"], digests)
-        if inputs["inputs_manifest"] is not None
-        else []
-    )
-    report = build_admission_report(
-        candidates,
-        AdmissionInputs(
-            rights=inputs["rights"],
-            probe=probe,
-            input_digests=digests,
-            bundle_errors=bundle_errors,
-        ),
-    )
-    decision = report["decisions"][0]
-    rendered = render_report(decision)
     if not args.check:
         print(
             f"{args.out.name}: decision={decision['decision']}"
             + (f" reasons={decision['reasons']}" if decision["reasons"] else "")
         )
-    if args.diagnostics is not None and not args.check:
-        args.diagnostics.write_bytes(render_report(report))
+        args.diagnostics and args.diagnostics.write_bytes(
+            render_report(report)
+        )
     return _emit(args, rendered, report["closed"])
 
 

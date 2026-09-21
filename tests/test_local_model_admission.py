@@ -220,7 +220,7 @@ def test_report_closed_when_all_accepted():
 def test_rejected_row_keeps_reason_coded_evidence():
     row = _evaluate(_candidate(endpoint="https://example.com"))
     assert row["disposition"] == "rejected"
-    assert row["report"]["endpoint"] is None
+    assert row["report"]["runtime"]["endpoint"] is None
 
 
 def test_non_object_candidate_fails_closed():

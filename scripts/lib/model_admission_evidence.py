@@ -201,7 +201,12 @@ def _canonical_netloc(parsed) -> str | None:
     netloc = parsed.netloc
     if netloc != netloc.lower() or "@" in netloc:
         return None
-    if parsed.hostname not in LOOPBACK_HOSTS or parsed.port is None:
+    try:
+        port = parsed.port
+        host = parsed.hostname
+    except ValueError:
+        return None
+    if host not in LOOPBACK_HOSTS or port is None:
         return None
     return netloc
 
@@ -216,7 +221,10 @@ def canonical_loopback_endpoint(value: Any) -> str | None:
     """
     if not _endpoint_text_ok(value):
         return None
-    parsed = urlparse(value)
+    try:
+        parsed = urlparse(value)
+    except ValueError:
+        return None
     if parsed.scheme != "http":
         return None
     if parsed.path not in ("", "/") or parsed.query or parsed.fragment:
@@ -229,7 +237,10 @@ def endpoint_host(endpoint: Any) -> str | None:
     """URL host for a syntactically valid http(s) endpoint, else None."""
     if not isinstance(endpoint, str) or not endpoint.strip():
         return None
-    parsed = urlparse(endpoint.strip())
+    try:
+        parsed = urlparse(endpoint.strip())
+    except ValueError:
+        return None
     if parsed.scheme.lower() not in ("http", "https") or not parsed.hostname:
         return None
     return parsed.hostname
@@ -287,7 +298,10 @@ def invalid_config_values(config: Any) -> list[str]:
     invalid: list[str] = []
     for name, value in _iter_config_items(config):
         leaf = name.rsplit(".", 1)[-1]
-        if leaf not in ALLOWED_CONFIG_KEYS or isinstance(value, dict):
+        if leaf not in ALLOWED_CONFIG_KEYS:
+            continue
+        if isinstance(value, dict):
+            invalid.append(name)
             continue
         kind = CONFIG_KEY_TYPES.get(leaf, "num")
         if not _value_matches_kind(value, kind):
@@ -314,13 +328,24 @@ def _value_matches_kind(value: Any, kind: str) -> bool:
     )
 
 
+_CREDENTIAL_PARAM_RE = re.compile(
+    r"(?i)(api[-_]?key|token|secret|password|credential|auth)="
+)
+
+
+def _credential_string(value: str) -> bool:
+    return bool(
+        _SECRET_VALUE_RE.search(value) or _CREDENTIAL_PARAM_RE.search(value)
+    )
+
+
 def credential_config_values(config: Any) -> list[str]:
     """Scalar values anywhere in the config matching credential patterns."""
     hits: list[str] = []
     for name, value in _iter_config_items(config):
         strings = value if isinstance(value, list) else [value]
         if any(
-            isinstance(item, str) and _SECRET_VALUE_RE.search(item)
+            isinstance(item, str) and _credential_string(item)
             for item in strings
         ):
             hits.append(name)
@@ -344,16 +369,27 @@ def unsanitized_config_keys(config: Any) -> list[str]:
     ]
 
 
+def _is_remote_url(value: str) -> bool:
+    text = value.strip()
+    if not text.startswith(("http://", "https://")):
+        return False
+    return canonical_loopback_endpoint(text) is None
+
+
 def remote_config_endpoints(config: Any) -> list[str]:
-    """Endpoint-like entries that are not canonical loopback."""
-    return [
-        value
-        for name, value in _iter_config_items(config)
-        if name.rsplit(".", 1)[-1].lower() in _ENDPOINT_KEYS
-        and isinstance(value, str)
-        and value.strip()
-        and canonical_loopback_endpoint(value) is None
-    ]
+    """Remote/cloud URLs anywhere in the config (any key, including lists)."""
+    hits: list[str] = []
+    for name, value in _iter_config_items(config):
+        strings = value if isinstance(value, list) else [value]
+        leaf_is_endpoint = name.rsplit(".", 1)[-1].lower() in _ENDPOINT_KEYS
+        for item in strings:
+            if not isinstance(item, str) or not item.strip():
+                continue
+            if _is_remote_url(item) or (
+                leaf_is_endpoint and canonical_loopback_endpoint(item) is None
+            ):
+                hits.append(item)
+    return hits
 
 
 def paths_collide(path_a: Path, path_b: Path) -> bool:

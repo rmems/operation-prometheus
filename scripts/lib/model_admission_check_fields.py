@@ -4,6 +4,8 @@ from __future__ import annotations
 
 from typing import Any
 
+import re
+
 from .model_admission_evidence import (
     canonical_loopback_endpoint,
     credential_config_values,
@@ -16,9 +18,83 @@ from .model_admission_evidence import (
 
 SUPPORTED_RUNTIME = "ollama"
 
+MODEL_IDENTITY_RE = re.compile(
+    r"^[A-Za-z0-9][A-Za-z0-9._-]*:[A-Za-z0-9][A-Za-z0-9._-]*$"
+)
+ALLOWED_CANDIDATE_KEYS = frozenset(
+    {
+        "model",
+        "ollama_digest",
+        "quantization",
+        "upstream_revision",
+        "runtime",
+        "endpoint",
+        "license",
+        "provider_config",
+        "probed_at",
+    }
+)
+_FOREIGN_PROVIDER_HINTS = frozenset(
+    {"provider", "vendor", "service", "api", "api_version"}
+)
+
 
 def _text(value: Any) -> str | None:
     return value.strip() if isinstance(value, str) and value.strip() else None
+
+
+def model_identity_reasons(candidate: dict[str, Any]) -> tuple[list[str], list[str]]:
+    """Strict ``name:tag`` grammar for the declared model identity."""
+    model = candidate.get("model")
+    if not isinstance(model, str) or not model.strip():
+        return ["model_missing"], []
+    if ":" not in model:
+        return [], ["model_tag_missing"]
+    if not MODEL_IDENTITY_RE.fullmatch(model.strip()):
+        return ["model_invalid"], []
+    return [], []
+
+
+def envelope_reasons(candidate: dict[str, Any]) -> tuple[list[str], list[str]]:
+    """Closed candidate envelope: unknown keys and foreign/secret values reject."""
+    unknown = [key for key in candidate if key not in ALLOWED_CANDIDATE_KEYS]
+    rejected = ["candidate_unknown_fields"] if unknown else []
+    for key in unknown:
+        value = candidate.get(key)
+        if _looks_secret(key, value) or _looks_remote_endpoint(key, value):
+            rejected.append("candidate_unsanitized")
+        if key.strip().lower() in _FOREIGN_PROVIDER_HINTS:
+            rejected.append("foreign_provider_declared")
+    return sorted(set(rejected)), []
+
+
+def _looks_secret(key: Any, value: Any) -> bool:
+    from .model_admission_evidence import (
+        _SECRET_KEY_RE,
+        _SECRET_VALUE_RE,
+        _nonempty_secret_value,
+    )
+
+    if isinstance(key, str) and _SECRET_KEY_RE.search(key):
+        return _nonempty_secret_value(value)
+    values = value if isinstance(value, list) else [value]
+    return any(
+        isinstance(item, str) and _SECRET_VALUE_RE.search(item)
+        for item in values
+    )
+
+
+def _looks_remote_endpoint(key: Any, value: Any) -> bool:
+    from .model_admission_evidence import (
+        _ENDPOINT_KEYS,
+        canonical_loopback_endpoint,
+    )
+
+    if not (isinstance(key, str) and key.strip().lower() in _ENDPOINT_KEYS):
+        return False
+    if not isinstance(value, str) or not value.strip():
+        return False
+    return canonical_loopback_endpoint(value) is None
 
 
 def runtime_reasons(candidate: dict[str, Any]) -> tuple[list[str], list[str]]:

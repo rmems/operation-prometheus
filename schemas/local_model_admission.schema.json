@@ -9,19 +9,12 @@
     "decision",
     "reasons",
     "model",
-    "model_name",
-    "model_tag",
-    "ollama_digest",
-    "quantization",
-    "upstream_revision",
     "runtime",
-    "endpoint",
     "rights",
-    "license_family",
-    "provider_config",
+    "provider",
     "cloud_fallback_allowed",
     "fallback_evidence",
-    "probed_at",
+    "probe",
     "input_digests",
     "evidence_digest"
   ],
@@ -36,25 +29,37 @@
       "type": "array",
       "items": {"type": "string", "minLength": 1}
     },
-    "model": {"type": ["string", "null"]},
-    "model_name": {"type": ["string", "null"]},
-    "model_tag": {"type": ["string", "null"]},
-    "ollama_digest": {
-      "type": ["string", "null"],
-      "pattern": "^sha256:[a-f0-9]{64}$"
-    },
-    "quantization": {"type": ["string", "null"]},
-    "upstream_revision": {"type": ["string", "null"]},
-    "runtime": {
+    "model": {
       "type": "object",
-      "required": ["name", "version"],
+      "required": [
+        "name",
+        "tag",
+        "ollama_digest",
+        "quantization",
+        "upstream_revision"
+      ],
       "additionalProperties": false,
       "properties": {
         "name": {"type": ["string", "null"]},
-        "version": {"type": ["string", "null"]}
+        "tag": {"type": ["string", "null"]},
+        "ollama_digest": {
+          "type": ["string", "null"],
+          "pattern": "^sha256:[a-f0-9]{64}$"
+        },
+        "quantization": {"type": ["string", "null"]},
+        "upstream_revision": {"type": ["string", "null"]}
       }
     },
-    "endpoint": {"type": ["string", "null"]},
+    "runtime": {
+      "type": "object",
+      "required": ["name", "version", "endpoint"],
+      "additionalProperties": false,
+      "properties": {
+        "name": {"type": ["string", "null"]},
+        "version": {"type": ["string", "null"]},
+        "endpoint": {"type": ["string", "null"]}
+      }
+    },
     "rights": {
       "type": "object",
       "required": ["identifier", "terms_source", "terms_sha256"],
@@ -68,10 +73,15 @@
         }
       }
     },
-    "license_family": {
-      "enum": ["spdx", "custom", "missing", "unknown"]
+    "provider": {
+      "type": "object",
+      "required": ["name", "config"],
+      "additionalProperties": false,
+      "properties": {
+        "name": {"const": "hermes-agent"},
+        "config": {"type": ["object", "null"]}
+      }
     },
-    "provider_config": {"type": ["object", "null"]},
     "cloud_fallback_allowed": {"type": ["boolean", "null"]},
     "fallback_evidence": {
       "type": "object",
@@ -95,7 +105,15 @@
         }
       }
     },
-    "probed_at": {"type": ["string", "null"]},
+    "probe": {
+      "type": "object",
+      "required": ["timestamp", "endpoint"],
+      "additionalProperties": false,
+      "properties": {
+        "timestamp": {"type": ["string", "null"]},
+        "endpoint": {"type": ["string", "null"]}
+      }
+    },
     "input_digests": {
       "type": "object",
       "additionalProperties": {"$ref": "#/definitions/sha256"}
@@ -111,6 +129,10 @@
       "type": "string",
       "pattern": "^http://(127\\.0\\.0\\.1|localhost|\\[::1\\]):[0-9]+/?$"
     },
+    "model_name_part": {
+      "type": "string",
+      "pattern": "^[A-Za-z0-9][A-Za-z0-9._-]*$"
+    },
     "accepted_constraints": {
       "if": {
         "properties": {"decision": {"const": "accepted"}},
@@ -119,22 +141,26 @@
       "then": {
         "properties": {
           "reasons": {"maxItems": 0},
-          "model": {"type": "string", "minLength": 1},
-          "model_name": {"type": "string", "minLength": 1},
-          "model_tag": {"type": "string", "minLength": 1},
-          "ollama_digest": {
-            "type": "string",
-            "pattern": "^sha256:[a-f0-9]{64}$"
+          "model": {
+            "type": "object",
+            "properties": {
+              "name": {"$ref": "#/definitions/model_name_part"},
+              "tag": {"$ref": "#/definitions/model_name_part"},
+              "ollama_digest": {
+                "type": "string",
+                "pattern": "^sha256:[a-f0-9]{64}$"
+              },
+              "quantization": {"type": "string", "minLength": 1}
+            }
           },
-          "quantization": {"type": "string", "minLength": 1},
           "runtime": {
             "type": "object",
             "properties": {
               "name": {"const": "ollama"},
-              "version": {"type": "string", "minLength": 1}
+              "version": {"type": "string", "minLength": 1},
+              "endpoint": {"$ref": "#/definitions/loopback_endpoint"}
             }
           },
-          "endpoint": {"$ref": "#/definitions/loopback_endpoint"},
           "rights": {
             "type": "object",
             "properties": {
@@ -146,39 +172,11 @@
               }
             }
           },
-          "license_family": {"enum": ["spdx", "custom"]},
-          "provider_config": {
+          "provider": {
             "type": "object",
-            "required": ["no_cloud", "cloud_fallback_allowed"],
-            "propertyNames": {
-              "enum": [
-                "no_cloud",
-                "cloud_fallback_allowed",
-                "num_ctx",
-                "num_predict",
-                "num_gpu",
-                "num_thread",
-                "num_batch",
-                "temperature",
-                "top_k",
-                "top_p",
-                "min_p",
-                "tfs_z",
-                "typical_p",
-                "seed",
-                "keep_alive",
-                "repeat_penalty",
-                "presence_penalty",
-                "frequency_penalty",
-                "mirostat",
-                "mirostat_eta",
-                "mirostat_tau",
-                "stop"
-              ]
-            },
             "properties": {
-              "no_cloud": {"const": true},
-              "cloud_fallback_allowed": {"const": false}
+              "name": {"const": "hermes-agent"},
+              "config": {"$ref": "#/definitions/closed_config"}
             }
           },
           "cloud_fallback_allowed": {"const": false},
@@ -191,13 +189,19 @@
               "remote_endpoints": {"type": "array", "maxItems": 0}
             }
           },
-          "probed_at": {
-            "type": "string",
-            "pattern": "^\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}(\\.\\d+)?(Z|[+-]\\d{2}:\\d{2})$"
+          "probe": {
+            "type": "object",
+            "properties": {
+              "timestamp": {
+                "type": "string",
+                "pattern": "^\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}(\\.\\d+)?(Z|[+-]\\d{2}:\\d{2})$"
+              },
+              "endpoint": {"$ref": "#/definitions/loopback_endpoint"}
+            }
           },
           "input_digests": {
             "type": "object",
-            "required": ["admissions", "rights"],
+            "required": ["admissions", "rights", "probe"],
             "properties": {
               "admissions": {"$ref": "#/definitions/sha256"},
               "rights": {"$ref": "#/definitions/sha256"},
@@ -205,6 +209,38 @@
               "inputs_manifest": {"$ref": "#/definitions/sha256"}
             }
           }
+        }
+      }
+    },
+    "closed_config": {
+      "type": "object",
+      "required": ["no_cloud", "cloud_fallback_allowed"],
+      "additionalProperties": false,
+      "properties": {
+        "no_cloud": {"const": true},
+        "cloud_fallback_allowed": {"const": false},
+        "num_ctx": {"type": "integer", "minimum": 0},
+        "num_predict": {"type": "integer", "minimum": 0},
+        "num_gpu": {"type": "integer", "minimum": 0},
+        "num_thread": {"type": "integer", "minimum": 0},
+        "num_batch": {"type": "integer", "minimum": 0},
+        "temperature": {"type": "number", "minimum": 0},
+        "top_k": {"type": "integer", "minimum": 0},
+        "top_p": {"type": "number", "minimum": 0},
+        "min_p": {"type": "number", "minimum": 0},
+        "tfs_z": {"type": "number", "minimum": 0},
+        "typical_p": {"type": "number", "minimum": 0},
+        "seed": {"type": "integer"},
+        "keep_alive": {"type": "string"},
+        "repeat_penalty": {"type": "number", "minimum": 0},
+        "presence_penalty": {"type": "number"},
+        "frequency_penalty": {"type": "number"},
+        "mirostat": {"type": "integer"},
+        "mirostat_eta": {"type": "number", "minimum": 0},
+        "mirostat_tau": {"type": "number", "minimum": 0},
+        "stop": {
+          "type": "array",
+          "items": {"type": "string"}
         }
       }
     }

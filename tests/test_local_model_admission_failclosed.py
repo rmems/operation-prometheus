@@ -98,11 +98,14 @@ def test_accepted_evidence_is_complete_and_bound():
     report = row["report"]
     assert report["decision"] == "accepted"
     assert report["reasons"] == []
-    assert report["runtime"] == {"name": "ollama", "version": "0.5.4"}
+    assert report["runtime"]["name"] == "ollama"
+    assert report["runtime"]["version"] == "0.5.4"
+    assert report["runtime"]["endpoint"] == "http://127.0.0.1:11434"
     assert report["rights"]["terms_source"] == "upstream/LICENSE"
     assert report["rights"]["identifier"] == "Apache-2.0"
     assert report["rights"]["terms_sha256"] == TERMS
-    assert report["provider_config"]["cloud_fallback_allowed"] is False
+    assert report["provider"]["name"] == "hermes-agent"
+    assert report["provider"]["config"]["cloud_fallback_allowed"] is False
     assert report["cloud_fallback_allowed"] is False
     assert report["fallback_evidence"]["no_cloud"] is True
     assert report["evidence_digest"]
@@ -224,7 +227,7 @@ def test_emitted_probe_timestamp_is_probe_value():
     row = _evaluate(
         _candidate(probed_at="2026-09-21T09:30:00Z"), probe=probe
     )
-    assert row["report"]["probed_at"] == "2026-09-21T09:30:00Z"
+    assert row["report"]["probe"]["timestamp"] == "2026-09-21T09:30:00Z"
 
 
 def test_missing_probe_quantization_quarantines():
@@ -305,8 +308,8 @@ def test_accepted_report_fixture_matches_locked_schema():
     jsonschema.validate(report, ROOT_SCHEMA)
     assert report["decision"] == "accepted"
     assert report["reasons"] == []
-    assert report["model_name"] == "hermes-3-llama-3.1-8b"
-    assert report["model_tag"] == "q4_k_m"
+    assert report["model"]["name"] == "hermes-3-llama-3.1-8b"
+    assert report["model"]["tag"] == "q4_k_m"
     assert report["cloud_fallback_allowed"] is False
     assert report["fallback_evidence"]["cloud_fallback_allowed"] is False
 
@@ -319,21 +322,20 @@ def test_schema_rejects_forged_accepted_with_nulls():
         "schema_version": "local_model_admission_v1",
         "decision": "accepted",
         "reasons": [],
-        "model": None,
-        "model_name": None,
-        "model_tag": None,
-        "ollama_digest": None,
-        "quantization": None,
-        "upstream_revision": None,
-        "runtime": {"name": None, "version": None},
-        "endpoint": None,
+        "model": {
+            "name": None,
+            "tag": None,
+            "ollama_digest": None,
+            "quantization": None,
+            "upstream_revision": None,
+        },
+        "runtime": {"name": None, "version": None, "endpoint": None},
         "rights": {
             "identifier": None,
             "terms_source": None,
             "terms_sha256": None,
         },
-        "license_family": "missing",
-        "provider_config": None,
+        "provider": {"name": "hermes-agent", "config": None},
         "cloud_fallback_allowed": None,
         "fallback_evidence": {
             "no_cloud": None,
@@ -341,7 +343,7 @@ def test_schema_rejects_forged_accepted_with_nulls():
             "unsanitized_keys": [],
             "remote_endpoints": [],
         },
-        "probed_at": None,
+        "probe": {"timestamp": None, "endpoint": None},
         "input_digests": {},
         "evidence_digest": "0" * 64,
     }
@@ -433,7 +435,7 @@ def test_ipv6_endpoint_emitted_with_brackets():
     candidate = _candidate(endpoint="http://[::1]:11434")
     probe = _probe(endpoint="http://[::1]:11434")
     row = _evaluate(candidate, probe=probe)
-    assert row["report"]["endpoint"] == "http://[::1]:11434"
+    assert row["report"]["runtime"]["endpoint"] == "http://[::1]:11434"
     assert row["disposition"] == "accepted"
 
 
@@ -443,3 +445,93 @@ def test_empty_candidates_fail_closed():
     report = build_admission_report([], _inputs())
     assert report["closed"] is False
     assert "no_candidates" in report["bundle_errors"]
+
+
+# --- model identity grammar ---------------------------------------------------
+
+@pytest.mark.parametrize(
+    "model,expected",
+    [
+        ("foo", "model_tag_missing"),
+        ("foo:", "model_invalid"),
+        (":tag", "model_invalid"),
+        ("foo:tag:extra", "model_invalid"),
+    ],
+)
+def test_model_identity_grammar_never_accepts(model, expected):
+    row = _evaluate(_candidate(model=model))
+    _assert_never_accepted(row)
+    assert expected in row["reason_codes"]
+
+
+def test_upstream_revision_conflict_rejected():
+    rights = _rights()
+    rights["models"][MODEL]["upstream_revision"] = "rev-a"
+    row = _evaluate(_candidate(upstream_revision="rev-b"), rights=rights)
+    assert row["disposition"] == "rejected"
+    assert "upstream_revision_mismatch" in row["reason_codes"]
+
+
+def test_upstream_revision_bound_from_frozen_evidence():
+    rights = _rights()
+    rights["models"][MODEL]["upstream_revision"] = "rev-a"
+    row = _evaluate(rights=rights)
+    assert row["report"]["model"]["upstream_revision"] == "rev-a"
+
+
+# --- closed candidate envelope -------------------------------------------------
+
+@pytest.mark.parametrize(
+    "extra",
+    [
+        {"fallback_url": "https://api.openai.com/v1"},
+        {"api_key": "sk-proj-ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789"},
+        {"cloud_fallback_allowed": True},
+        {"provider": "openai"},
+    ],
+)
+def test_unknown_candidate_fields_rejected(extra):
+    candidate = _candidate(**extra)
+    row = _evaluate(candidate)
+    assert row["disposition"] == "rejected"
+
+
+# --- config: credential-bearing URLs and nested containers --------------------
+
+def test_credential_url_in_stop_list_rejected():
+    row = _evaluate(
+        _candidate(
+            provider_config={
+                "no_cloud": True,
+                "cloud_fallback_allowed": False,
+                "stop": ["https://api.example.com/v1?api_key=supersecret"],
+            }
+        )
+    )
+    assert row["disposition"] == "rejected"
+
+
+def test_remote_url_under_arbitrary_key_rejected():
+    row = _evaluate(
+        _candidate(
+            provider_config={
+                "no_cloud": True,
+                "cloud_fallback_allowed": False,
+                "keep_alive": "https://api.example.com/v1",
+            }
+        )
+    )
+    assert row["disposition"] == "rejected"
+
+
+def test_nested_allowlisted_mapping_rejected():
+    row = _evaluate(
+        _candidate(
+            provider_config={
+                "no_cloud": True,
+                "cloud_fallback_allowed": False,
+                "num_ctx": {"temperature": 1},
+            }
+        )
+    )
+    assert row["disposition"] == "rejected"
