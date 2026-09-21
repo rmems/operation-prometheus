@@ -160,35 +160,44 @@ def _independent_terminal(
     verifier = manifest.get("verifier")
     if not isinstance(verifier, dict):
         return None, ["verifier_evidence"]
-    outcome = verifier.get("outcome")
-    if outcome is None or outcome == "":
-        return None, []
-    terminal = _terminal_disposition(str(outcome).strip().lower())
+    terminal = _verified_terminal(verifier.get("outcome"))
     if terminal not in _TERMINAL_EVIDENCE:
         return None, []
-    producer = ""
-    producer_obj = manifest.get("producer")
-    if isinstance(producer_obj, dict):
-        producer = str(producer_obj.get("name") or "")
-    identity = verifier.get("identity")
-    version = verifier.get("version")
-    hashes = _artifact_hashes(verifier.get("artifacts"))
-    subject = verifier.get("subject")
+    return terminal, _verifier_evidence_errors(verifier, manifest, record)
+
+
+def _verified_terminal(outcome: Any) -> str | None:
+    if outcome is None or outcome == "":
+        return None
+    return _terminal_disposition(str(outcome).strip().lower())
+
+
+def _verifier_evidence_errors(
+    verifier: dict[str, Any], manifest: dict[str, Any], record: dict[str, Any]
+) -> list[str]:
     expected_subject = dict(
         zip(
             ("run_id", "session_id", "task_id", "raw_trace_id"), _identity_tuple(record)
         )
     )
-    if subject != expected_subject:
-        return terminal, ["verifier_subject_mismatch"]
-    if (
-        not _nonempty_str(identity)
-        or not _nonempty_str(version)
-        or not _external_verifier_identity(str(identity), producer)
-        or len(hashes) < 1
-    ):
-        return terminal, ["verifier_evidence"]
-    return terminal, []
+    if verifier.get("subject") != expected_subject:
+        return ["verifier_subject_mismatch"]
+    valid = (
+        _nonempty_str(verifier.get("identity"))
+        and _nonempty_str(verifier.get("version"))
+        and _external_verifier_identity(
+            str(verifier.get("identity")), _producer_name(manifest)
+        )
+        and bool(_artifact_hashes(verifier.get("artifacts")))
+    )
+    return [] if valid else ["verifier_evidence"]
+
+
+def _producer_name(manifest: dict[str, Any]) -> str:
+    producer = manifest.get("producer")
+    if not isinstance(producer, dict):
+        return ""
+    return str(producer.get("name") or "")
 
 
 def _external_verifier_identity(identity: str, producer: str) -> bool:
@@ -277,7 +286,7 @@ def _emit_record(
     workspace = _workspace_from_manifest(manifest)
     producer = _pick(
         manifest.get("producer") if isinstance(manifest.get("producer"), dict) else {},
-        ("name", "version", "revision"),
+        ("name", "profile", "version", "revision"),
     )
     model = _pick(
         manifest.get("model") if isinstance(manifest.get("model"), dict) else {},

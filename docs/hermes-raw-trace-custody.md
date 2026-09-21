@@ -21,7 +21,7 @@ local path that is already gitignored.
 The normalizer is a local-file tool. It hashes the frozen input bytes and binds
 them onto `execution_provenance`:
 
-- Hermes producer name, version, and revision
+- Hermes producer name, local profile (`Local Model Lab`), version, and revision
 - nonempty run, session, task, and raw-trace identities plus the raw-trace
   SHA-256
 - the exact admitted model identity plus the SHA-256 of the `--model-admission`

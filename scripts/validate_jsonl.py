@@ -16,6 +16,7 @@ import argparse
 import hashlib
 import math
 from datetime import datetime, timezone
+from dataclasses import dataclass
 from urllib.parse import urlparse
 import json
 import re
@@ -54,6 +55,34 @@ SCHEMA_V1_1_PATH = (
 )
 _V1_VERSIONS = frozenset({"1", "1.0", "v1"})
 _V1_1_VERSIONS = frozenset({"1.1", "v1.1"})
+_SUCCESS_OUTCOMES = frozenset(
+    {"pass", "passed", "success", "successful", "verified", "ok"}
+)
+_TERMINAL_DISPOSITIONS = frozenset(
+    {
+        "successful",
+        "failed",
+        "reverted",
+        "falsified",
+        "null",
+        "invalid",
+        "interrupted",
+        "inconclusive",
+    }
+)
+
+
+@dataclass(frozen=True)
+class _LineValidationContext:
+    filename: str
+    validators: tuple[
+        jsonschema.Draft7Validator,
+        jsonschema.Draft7Validator,
+        jsonschema.Draft7Validator | None,
+    ]
+    strict_policy: bool
+
+
 HOME_PATH_RE = re.compile(
     r"("
     r"/home/[A-Za-z0-9._-]+"
@@ -267,25 +296,8 @@ def _snapshot_errors(record: dict, events: object, location: str) -> list[str]:
 
 def _terminal_errors(record: dict, events: object, location: str) -> list[str]:
     disposition = record.get("terminal_disposition")
-    payload_name = (
-        "software_payload"
-        if record.get("trajectory_type") == "software"
-        else "research_payload"
-    )
-    payload = record.get(payload_name)
-    outcome = (
-        str(payload.get("validation_outcome", "")).strip().lower()
-        if isinstance(payload, dict)
-        else ""
-    )
     last_disposition = _last_disposition(events)
-    success_outcomes = {"pass", "passed", "success", "successful", "verified", "ok"}
-    if last_disposition in ("successful", "passed"):
-        terminal_success: bool | None = True
-    elif last_disposition in (None, "neutral", "null"):
-        terminal_success = outcome in success_outcomes if outcome else None
-    else:
-        terminal_success = False
+    terminal_success = _terminal_success(last_disposition, _validation_outcome(record))
     if disposition == "successful" and terminal_success is False:
         return [
             f"{location} [policy] - nonterminal record incorrectly represented as positive terminal example"
@@ -294,27 +306,42 @@ def _terminal_errors(record: dict, events: object, location: str) -> list[str]:
         return [
             f"{location} [policy] - terminal_disposition does not agree with terminal outcome evidence"
         ]
-    terminal_enum = {
-        "successful",
-        "failed",
-        "reverted",
-        "falsified",
-        "null",
-        "invalid",
-        "interrupted",
-        "inconclusive",
-    }
     normalized_last = "successful" if last_disposition == "passed" else last_disposition
-    if (
-        normalized_last not in (None, "neutral", "null")
-        and disposition in terminal_enum
-        and normalized_last in terminal_enum
-        and normalized_last != disposition
-    ):
+    if _terminal_dispositions_conflict(disposition, normalized_last):
         return [
             f"{location} [policy] - terminal_disposition does not agree with terminal outcome evidence"
         ]
     return []
+
+
+def _validation_outcome(record: dict) -> str:
+    payload_name = (
+        "software_payload"
+        if record.get("trajectory_type") == "software"
+        else "research_payload"
+    )
+    payload = record.get(payload_name)
+    if not isinstance(payload, dict):
+        return ""
+    return str(payload.get("validation_outcome", "")).strip().lower()
+
+
+def _terminal_success(last_disposition: object, outcome: str) -> bool | None:
+    if last_disposition in ("successful", "passed"):
+        return True
+    if last_disposition not in (None, "neutral", "null"):
+        return False
+    return outcome in _SUCCESS_OUTCOMES if outcome else None
+
+
+def _terminal_dispositions_conflict(
+    disposition: object, normalized_last: object
+) -> bool:
+    if normalized_last in (None, "neutral", "null"):
+        return False
+    if disposition not in _TERMINAL_DISPOSITIONS:
+        return False
+    return normalized_last in _TERMINAL_DISPOSITIONS and normalized_last != disposition
 
 
 def _last_disposition(events: object) -> object:
@@ -431,6 +458,11 @@ def validate_file(
     if len(validators) != 2:
         raise TypeError("validate_file requires v0 and v1 validators")
     v0_validator, v1_validator = validators
+    context = _LineValidationContext(
+        filename=filepath.name,
+        validators=(v0_validator, v1_validator, v1_1_validator),
+        strict_policy=strict_policy,
+    )
     errors: list[str] = []
     count = 0
     try:
@@ -440,15 +472,7 @@ def validate_file(
                 if not line:
                     continue
                 count += 1
-                errors.extend(
-                    _line_errors(
-                        line,
-                        lineno,
-                        filepath.name,
-                        (v0_validator, v1_validator, v1_1_validator),
-                        strict_policy,
-                    )
-                )
+                errors.extend(_line_errors(line, lineno, context))
     except FileNotFoundError:
         errors.append(f"  ERROR: File not found: {filepath}")
         return errors
@@ -460,13 +484,7 @@ def validate_file(
 def _line_errors(
     line: str,
     lineno: int,
-    filename: str,
-    validators: tuple[
-        jsonschema.Draft7Validator,
-        jsonschema.Draft7Validator,
-        jsonschema.Draft7Validator | None,
-    ],
-    strict_policy: bool,
+    context: _LineValidationContext,
 ) -> list[str]:
     try:
 
@@ -475,14 +493,14 @@ def _line_errors(
 
         record = json.loads(line, parse_constant=_reject_nonfinite)
     except json.JSONDecodeError as exc:
-        return [f"  {filename}:{lineno} - Invalid JSON: {exc}"]
+        return [f"  {context.filename}:{lineno} - Invalid JSON: {exc}"]
     if _contains_nonfinite(record):
-        return [f"  {filename}:{lineno} - Invalid JSON: non-finite number"]
-    v0_validator, v1_validator, v1_1_validator = validators
+        return [f"  {context.filename}:{lineno} - Invalid JSON: non-finite number"]
+    v0_validator, v1_validator, v1_1_validator = context.validators
     validator = _select_validator(record, v0_validator, v1_validator, v1_1_validator)
-    errors = _jsonschema_errors(record, validator, lineno, filename)
-    if strict_policy and isinstance(record, dict):
-        errors.extend(policy_errors(record, lineno, filename))
+    errors = _jsonschema_errors(record, validator, lineno, context.filename)
+    if context.strict_policy and isinstance(record, dict):
+        errors.extend(policy_errors(record, lineno, context.filename))
     return errors
 
 

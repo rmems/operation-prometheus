@@ -127,7 +127,7 @@ def _admission_component_errors(
         reasons.append("admission_schema")
     if not _object_fields(runtime, ("name", "version", "endpoint")):
         reasons.append("admission_schema")
-    reasons.extend(_rights_errors(manifest, rights))
+    reasons.extend(_rights_errors(manifest, rights, digests))
     if not isinstance(provider, dict) or provider.get("name") != "hermes-agent":
         reasons.append("provider_mismatch")
     if not _object_fields(probe, ("timestamp", "endpoint")):
@@ -150,10 +150,14 @@ def _model_valid(model: Any) -> bool:
     )
 
 
-def _rights_errors(manifest: dict[str, Any], rights: Any) -> list[str]:
+def _rights_errors(manifest: dict[str, Any], rights: Any, digests: Any) -> list[str]:
     if not _object_fields(rights, ("identifier", "terms_source", "terms_sha256")):
         return ["admission_schema"]
     if rights.get("identifier") != manifest.get("output_license"):
+        return ["rights_mismatch"]
+    if not isinstance(digests, dict) or rights.get("terms_sha256") != digests.get(
+        "rights"
+    ):
         return ["rights_mismatch"]
     return []
 
@@ -161,7 +165,16 @@ def _rights_errors(manifest: dict[str, Any], rights: Any) -> list[str]:
 def _cross_bind_errors(
     manifest: dict[str, Any], admission: dict[str, Any]
 ) -> list[str]:
-    reasons: list[str] = []
+    return [
+        *_model_bind_errors(manifest, admission),
+        *_runtime_bind_errors(manifest, admission),
+        *_provider_bind_errors(manifest, admission),
+    ]
+
+
+def _model_bind_errors(
+    manifest: dict[str, Any], admission: dict[str, Any]
+) -> list[str]:
     manifest_model = (
         manifest.get("model") if isinstance(manifest.get("model"), dict) else {}
     )
@@ -178,23 +191,36 @@ def _cross_bind_errors(
         ):
             continue
         if left != right:
-            reasons.append("model_mismatch")
-            break
+            return ["model_mismatch"]
+    return []
+
+
+def _runtime_bind_errors(
+    manifest: dict[str, Any], admission: dict[str, Any]
+) -> list[str]:
     ollama = manifest.get("ollama") if isinstance(manifest.get("ollama"), dict) else {}
     runtime = (
         admission.get("runtime") if isinstance(admission.get("runtime"), dict) else {}
     )
-    if (
+    runtime_mismatch = (
         runtime.get("name") != ollama.get("runtime")
         or runtime.get("version") != ollama.get("version")
         or runtime.get("endpoint") != ollama.get("endpoint")
-    ):
-        reasons.append("runtime_mismatch")
+    )
     probe = admission.get("probe") if isinstance(admission.get("probe"), dict) else {}
-    if probe.get("endpoint") != runtime.get("endpoint") or probe.get(
-        "endpoint"
-    ) != ollama.get("endpoint"):
-        reasons.append("probe_endpoint_mismatch")
+    probe_mismatch = probe.get("endpoint") not in {
+        runtime.get("endpoint"),
+        ollama.get("endpoint"),
+    } or runtime.get("endpoint") != ollama.get("endpoint")
+    return [
+        *(["runtime_mismatch"] if runtime_mismatch else []),
+        *(["probe_endpoint_mismatch"] if probe_mismatch else []),
+    ]
+
+
+def _provider_bind_errors(
+    manifest: dict[str, Any], admission: dict[str, Any]
+) -> list[str]:
     producer = (
         manifest.get("producer") if isinstance(manifest.get("producer"), dict) else {}
     )
@@ -202,8 +228,8 @@ def _cross_bind_errors(
         admission.get("provider") if isinstance(admission.get("provider"), dict) else {}
     )
     if provider.get("name") != producer.get("name"):
-        reasons.append("provider_mismatch")
-    return reasons
+        return ["provider_mismatch"]
+    return []
 
 
 def _schema_reason(document: Any, schema_path: Path, code: str) -> list[str]:

@@ -111,6 +111,7 @@ def default_manifest(
         "schema_version": "hermes_run_manifest_v1",
         "producer": {
             "name": "hermes-agent",
+            "profile": "Local Model Lab",
             "version": "0.4.0",
             "revision": PRODUCER_REVISION,
         },

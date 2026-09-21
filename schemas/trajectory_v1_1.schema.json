@@ -121,9 +121,10 @@
         "producer": {
           "type": "object",
           "additionalProperties": false,
-          "required": ["name", "version", "revision"],
+          "required": ["name", "profile", "version", "revision"],
           "properties": {
             "name": { "type": "string", "minLength": 1 },
+            "profile": { "const": "Local Model Lab" },
             "version": { "type": "string", "minLength": 1 },
             "revision": { "type": "string", "minLength": 1 }
           }

@@ -65,6 +65,24 @@ def test_double_encoded_credential_url_path_is_rejected(tmp_path: Path):
     assert _report(paths)["rejected_count"] >= 1
 
 
+@pytest.mark.parametrize(
+    "encoded_key",
+    ["%61ccess_token", "%2561ccess_token", "%2525252561ccess_token"],
+)
+def test_encoded_credential_query_key_is_rejected(tmp_path: Path, encoded_key: str):
+    secret = "ordinarysecretvalue123"
+    record = hermes_record(
+        run_id=f"run-query-{encoded_key}",
+        content=f"https://example.test/file?{encoded_key}={secret}",
+    )
+    paths = write_scenario(tmp_path, [record])
+    assert _run(paths) == 0
+    dumped = paths["output"].read_text(encoding="utf-8")
+    assert dumped == ""
+    assert secret not in dumped
+    assert "secret_leakage" in _report(paths)["records"][0]["reason_codes"]
+
+
 def test_casefolded_hidden_reasoning_and_manifest_hidden_fields_are_rejected(
     tmp_path: Path,
 ):
@@ -161,6 +179,21 @@ def test_output_license_cannot_disagree_with_admitted_rights(tmp_path: Path):
     paths = write_scenario(
         tmp_path,
         [hermes_record(run_id="run-rights-mismatch")],
+        admission=admission,
+    )
+    assert _run(paths) == 0
+    assert paths["output"].read_text(encoding="utf-8") == ""
+    assert "rights_mismatch" in _report(paths)["records"][0]["reason_codes"]
+
+
+def test_rights_terms_digest_must_match_frozen_rights_input(tmp_path: Path):
+    admission = default_admission(
+        rights={"terms_sha256": "b" * 64},
+        input_digests={"rights": "c" * 64},
+    )
+    paths = write_scenario(
+        tmp_path,
+        [hermes_record(run_id="run-rights-digest-mismatch")],
         admission=admission,
     )
     assert _run(paths) == 0

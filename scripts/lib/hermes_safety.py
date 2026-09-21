@@ -39,14 +39,20 @@ def _json_credential_string(value: str) -> bool:
 
 
 def _walk(value: Any) -> Iterator[tuple[Any | None, Any]]:
+    pending = [value]
+    while pending:
+        current = pending.pop()
+        children = _children(current)
+        pending.extend(reversed([item for _, item in children]))
+        yield from children
+
+
+def _children(value: Any) -> list[tuple[Any | None, Any]]:
     if isinstance(value, dict):
-        for key, item in value.items():
-            yield key, item
-            yield from _walk(item)
-    elif isinstance(value, list):
-        for item in value:
-            yield None, item
-            yield from _walk(item)
+        return list(value.items())
+    if isinstance(value, list):
+        return [(None, item) for item in value]
+    return []
 
 
 def _contains_string(value: Any, predicate: Callable[[str], bool]) -> bool:
@@ -127,13 +133,12 @@ def _xml_well_formed(text: str) -> bool:
 
 
 def _safety_reasons(value: Any, *, allow_hidden: bool = False) -> list[str]:
-    reasons: list[str] = []
-    if (
-        _contains_secret(value)
-        or _contains_credential_key(value)
-        or _contains_home_path(value)
-    ):
-        reasons.append("secret_leakage")
-    if not allow_hidden and _contains_hidden_reasoning(value):
-        reasons.append("hidden_reasoning")
-    return reasons
+    leaked = any(
+        check(value)
+        for check in (_contains_secret, _contains_credential_key, _contains_home_path)
+    )
+    hidden = not allow_hidden and _contains_hidden_reasoning(value)
+    return [
+        *(["secret_leakage"] if leaked else []),
+        *(["hidden_reasoning"] if hidden else []),
+    ]

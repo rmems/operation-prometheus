@@ -1,6 +1,7 @@
 """Normalize verified Hermes traces into trajectory v1.1 (Linear RM-1348)."""
 
 from hermes_normalize_test_support import *  # noqa: F403
+from lib import hermes_normalize as hermes_normalize_module
 
 
 def test_cli_contract_exposes_exact_flags():
@@ -20,6 +21,35 @@ def test_cli_contract_exposes_exact_flags():
     assert "--report" in usage
 
 
+def test_output_and_report_are_rolled_back_if_second_publish_fails(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+):
+    paths = write_scenario(tmp_path, [hermes_record(run_id="run-pair-rollback")])
+    paths["output"].write_text("old-output\n", encoding="utf-8")
+    paths["report"].write_text("old-report\n", encoding="utf-8")
+    original_replace = Path.replace
+    failed = False
+
+    def fail_first_report_replace(source: Path, target: Path):
+        nonlocal failed
+        if Path(target) == paths["report"] and not failed:
+            failed = True
+            raise OSError("synthetic report publish failure")
+        return original_replace(source, target)
+
+    monkeypatch.setattr(Path, "replace", fail_first_report_replace)
+    with pytest.raises(OSError, match="synthetic report publish failure"):
+        hermes_normalize_module.normalize_files(
+            input_path=paths["input"],
+            run_manifest_path=paths["manifest"],
+            model_admission_path=paths["admission"],
+            output_path=paths["output"],
+            report_path=paths["report"],
+        )
+    assert paths["output"].read_text(encoding="utf-8") == "old-output\n"
+    assert paths["report"].read_text(encoding="utf-8") == "old-report\n"
+
+
 def test_successful_run_is_accepted_v1_1_and_binds_provenance(tmp_path: Path):
     paths = _scenario_from_fixture(tmp_path, "successful.jsonl")
     assert _run(paths) == 0
@@ -31,6 +61,7 @@ def test_successful_run_is_accepted_v1_1_and_binds_provenance(tmp_path: Path):
         format_checker=jsonschema.Draft7Validator.FORMAT_CHECKER,
     ).validate(record)
     assert record["schema_version"] in ("1.1", "v1.1")
+    assert record["execution_provenance"]["producer"]["profile"] == "Local Model Lab"
     assert record["terminal_disposition"] == "successful"
     assert record["execution"]["producer_completed"] is True
     assert record["execution"]["producer_partial"] is False

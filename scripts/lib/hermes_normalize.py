@@ -69,6 +69,14 @@ class _NormalizationInput:
 
 
 @dataclass(frozen=True)
+class _ParsedDocuments:
+    manifest: dict[str, Any] | None
+    manifest_reason: str | None
+    admission: dict[str, Any] | None
+    admission_reason: str | None
+
+
+@dataclass(frozen=True)
 class _DecisionData:
     line_no: int
     status: str
@@ -140,8 +148,12 @@ def normalize_files(**options: Any) -> dict[str, Any]:
     )
     admitted = [row["output_line"] for row in report.pop("_admitted_lines")]
     admitted_text = ("\n".join(admitted) + "\n") if admitted else ""
-    _atomic_write_bytes(output_path, admitted_text.encode("utf-8"))
-    _atomic_write_bytes(report_path, (canonical_dumps(report) + "\n").encode("utf-8"))
+    _atomic_write_pair(
+        output_path,
+        admitted_text.encode("utf-8"),
+        report_path,
+        (canonical_dumps(report) + "\n").encode("utf-8"),
+    )
     return report
 
 
@@ -177,6 +189,15 @@ def _refuse_collisions(
 
 
 def _atomic_write_bytes(path: Path, data: bytes) -> None:
+    tmp_path = _stage_bytes(path, data)
+    try:
+        tmp_path.replace(path)
+    except Exception:
+        tmp_path.unlink(missing_ok=True)
+        raise
+
+
+def _stage_bytes(path: Path, data: bytes) -> Path:
     path.parent.mkdir(parents=True, exist_ok=True)
     handle, tmp_name = tempfile.mkstemp(
         prefix=f".{path.name}.", suffix=".tmp", dir=path.parent
@@ -185,10 +206,38 @@ def _atomic_write_bytes(path: Path, data: bytes) -> None:
     try:
         with os.fdopen(handle, "wb") as stream:
             stream.write(data)
-        tmp_path.replace(path)
     except Exception:
         tmp_path.unlink(missing_ok=True)
         raise
+    return tmp_path
+
+
+def _atomic_write_pair(
+    output_path: Path, output_data: bytes, report_path: Path, report_data: bytes
+) -> None:
+    previous = {
+        output_path: output_path.read_bytes() if output_path.exists() else None,
+        report_path: report_path.read_bytes() if report_path.exists() else None,
+    }
+    output_tmp = _stage_bytes(output_path, output_data)
+    report_tmp = _stage_bytes(report_path, report_data)
+    try:
+        output_tmp.replace(output_path)
+        report_tmp.replace(report_path)
+    except Exception:
+        _restore_previous(previous)
+        raise
+    finally:
+        output_tmp.unlink(missing_ok=True)
+        report_tmp.unlink(missing_ok=True)
+
+
+def _restore_previous(previous: dict[Path, bytes | None]) -> None:
+    for path, content in previous.items():
+        if content is None:
+            path.unlink(missing_ok=True)
+        else:
+            _atomic_write_bytes(path, content)
 
 
 def _normalize_bytes(
@@ -203,13 +252,13 @@ def _build_context(source: _NormalizationInput) -> _LineContext:
     admission_digest = sha256_bytes(source.admission_bytes)
     manifest, manifest_reason = _parse_json_object(source.manifest_bytes)
     admission, admission_reason = _parse_json_object(source.admission_bytes)
-    file_reasons = _document_errors(
-        manifest,
-        manifest_reason,
-        admission,
-        admission_reason,
-        admission_digest,
+    documents = _ParsedDocuments(
+        manifest=manifest,
+        manifest_reason=manifest_reason,
+        admission=admission,
+        admission_reason=admission_reason,
     )
+    file_reasons = _document_errors(documents, admission_digest)
     return _LineContext(
         input_path=source.input_path,
         input_digest=sha256_bytes(source.input_bytes),
@@ -224,19 +273,18 @@ def _build_context(source: _NormalizationInput) -> _LineContext:
 
 
 def _document_errors(
-    manifest: dict[str, Any] | None,
-    manifest_reason: str | None,
-    admission: dict[str, Any] | None,
-    admission_reason: str | None,
+    documents: _ParsedDocuments,
     admission_digest: str,
 ) -> list[str]:
-    reasons = _manifest_errors(manifest, manifest_reason)
-    if admission is None:
-        reasons.append(admission_reason or "invalid_json")
+    reasons = _manifest_errors(documents.manifest, documents.manifest_reason)
+    if documents.admission is None:
+        reasons.append(documents.admission_reason or "invalid_json")
     else:
-        reasons.extend(_safety_reasons(admission))
-    if manifest is not None and admission is not None:
-        reasons.extend(_binding_errors(manifest, admission, admission_digest))
+        reasons.extend(_safety_reasons(documents.admission))
+    if documents.manifest is not None and documents.admission is not None:
+        reasons.extend(
+            _binding_errors(documents.manifest, documents.admission, admission_digest)
+        )
     return reasons
 
 

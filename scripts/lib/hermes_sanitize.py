@@ -106,13 +106,26 @@ def _normalized_netloc(parts: urllib.parse.SplitResult) -> str:
 
 
 def _sanitized_query(query: str) -> str:
-    query_pairs = [
-        (key, value)
-        for key, value in urllib.parse.parse_qsl(query, keep_blank_values=True)
-        if key.lower() not in SECRET_QUERY_KEYS
-    ]
+    _reject_encoded_secret_query_keys(query)
+    query_pairs: list[tuple[str, str]] = []
+    for key, value in urllib.parse.parse_qsl(query, keep_blank_values=True):
+        decoded_key = _decoded_segment(key)
+        if decoded_key.casefold() in SECRET_QUERY_KEYS:
+            continue
+        query_pairs.append((key, value))
     query_pairs.sort(key=lambda item: (item[0], item[1]))
     return urllib.parse.urlencode(query_pairs)
+
+
+def _reject_encoded_secret_query_keys(query: str) -> None:
+    for query_field in query.split("&"):
+        raw_key = query_field.partition("=")[0]
+        decoded_key = _decoded_segment(raw_key)
+        if (
+            decoded_key.casefold() in SECRET_QUERY_KEYS
+            and raw_key.casefold() != decoded_key.casefold()
+        ):
+            raise UnsafeUrlError("credential_url")
 
 
 def sanitize_query_secrets(value: Any) -> Any:
