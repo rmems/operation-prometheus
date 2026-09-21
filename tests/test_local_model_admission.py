@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import pytest
 
-from scripts.lib.model_admission import (
+from lib.model_admission import (
     SCHEMA_VERSION,
     build_admission_report,
     evaluate_admission,
