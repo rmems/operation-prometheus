@@ -1,24 +1,11 @@
-"""Normalize verified Hermes traces into trajectory v1.1 (Linear RM-1348)."""
+"""Hermes normalization policy and compatibility tests."""
 
-from hermes_normalize_test_support import *  # noqa: F403
+from hermes_normalize_test_support import *  # noqa: F401,F403
 
 
 def test_existing_v0_and_v1_validators_still_pass():
-    v0 = jsonschema.Draft7Validator(
-        load_schema(V0_SCHEMA),
-        format_checker=jsonschema.Draft7Validator.FORMAT_CHECKER,
-    )
-    v1 = jsonschema.Draft7Validator(
-        load_schema(V1_SCHEMA),
-        format_checker=jsonschema.Draft7Validator.FORMAT_CHECKER,
-    )
-    errors = validate_file(
-        ROOT / "tests" / "fixtures" / "v1" / "software_valid.jsonl",
-        v0,
-        v1,
-        strict_policy=True,
-    )
-    assert errors == []
+    v0, v1 = _strict_validators()
+    _assert_legacy_fixture_valid(v0, v1)
 
 
 def test_replacement_does_not_ship_github_page_cassettes():
@@ -128,13 +115,7 @@ def test_manifest_verifier_conflict_with_trace_is_rejected(tmp_path: Path):
         [record],
         manifest_overrides={"verifier": default_verifier(outcome="fail")},
     )
-    assert _run(paths) == 0
-    assert paths["output"].read_text(encoding="utf-8") == ""
-    report = _report(paths)
-    assert report["accepted_count"] == 0
-    assert report["rejected_count"] >= 1
-    joined = ",".join(report["records"][0]["reason_codes"])
-    assert "verifier" in joined
+    _assert_rejected_with_reason(paths, "verifier")
 
 
 def test_manifest_repository_and_workspace_conflicts_are_rejected(tmp_path: Path):
@@ -220,10 +201,5 @@ def test_structured_credential_content_is_rejected(tmp_path: Path):
         content={"api_key": "ordinarysecretvalue123", "answer": "visible"},
     )
     paths = write_scenario(tmp_path, [record])
-    assert _run(paths) == 0
-    dumped = paths["output"].read_text(encoding="utf-8")
-    assert dumped == ""
-    assert "ordinarysecretvalue123" not in dumped
-    report = _report(paths)
+    report = _assert_secret_rejected(paths, "ordinarysecretvalue123")
     assert report["accepted_count"] == 0
-    assert report["rejected_count"] >= 1

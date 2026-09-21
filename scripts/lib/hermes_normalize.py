@@ -219,17 +219,24 @@ def _atomic_write_pair(
         output_path: output_path.read_bytes() if output_path.exists() else None,
         report_path: report_path.read_bytes() if report_path.exists() else None,
     }
-    output_tmp = _stage_bytes(output_path, output_data)
-    report_tmp = _stage_bytes(report_path, report_data)
+    output_tmp: Path | None = None
+    report_tmp: Path | None = None
     try:
+        output_tmp = _stage_bytes(output_path, output_data)
+        report_tmp = _stage_bytes(report_path, report_data)
         output_tmp.replace(output_path)
         report_tmp.replace(report_path)
     except Exception:
         _restore_previous(previous)
         raise
     finally:
-        output_tmp.unlink(missing_ok=True)
-        report_tmp.unlink(missing_ok=True)
+        _cleanup_staged(output_tmp, report_tmp)
+
+
+def _cleanup_staged(*paths: Path | None) -> None:
+    for path in paths:
+        if path is not None:
+            path.unlink(missing_ok=True)
 
 
 def _restore_previous(previous: dict[Path, bytes | None]) -> None:

@@ -116,29 +116,36 @@ def _admission_envelope_errors(
 def _admission_component_errors(
     manifest: dict[str, Any], admission: dict[str, Any]
 ) -> list[str]:
-    reasons: list[str] = []
-    model = admission.get("model")
-    runtime = admission.get("runtime")
-    rights = admission.get("rights")
-    provider = admission.get("provider")
-    probe = admission.get("probe")
-    digests = admission.get("input_digests")
-    if not _model_valid(model):
-        reasons.append("admission_schema")
-    if not _object_fields(runtime, ("name", "version", "endpoint")):
-        reasons.append("admission_schema")
-    reasons.extend(_rights_errors(manifest, rights, digests))
-    if not isinstance(provider, dict) or provider.get("name") != "hermes-agent":
-        reasons.append("provider_mismatch")
-    if not _object_fields(probe, ("timestamp", "endpoint")):
-        reasons.append("admission_schema")
-    if not isinstance(digests, dict) or any(
-        not _is_sha256(digests.get(name)) for name in _REQUIRED_INPUT_DIGESTS
-    ):
-        reasons.append("admission_schema")
-    if not _fallback_disproved(admission):
-        reasons.append("cloud_fallback")
-    return reasons
+    return [
+        *_admission_shape_errors(admission),
+        *_rights_errors(
+            manifest, admission.get("rights"), admission.get("input_digests")
+        ),
+        *_provider_errors(admission.get("provider")),
+        *([] if _fallback_disproved(admission) else ["cloud_fallback"]),
+    ]
+
+
+def _admission_shape_errors(admission: dict[str, Any]) -> list[str]:
+    checks = (
+        _model_valid(admission.get("model")),
+        _object_fields(admission.get("runtime"), ("name", "version", "endpoint")),
+        _object_fields(admission.get("probe"), ("timestamp", "endpoint")),
+        _input_digests_valid(admission.get("input_digests")),
+    )
+    return ["admission_schema" for valid in checks if not valid]
+
+
+def _input_digests_valid(digests: Any) -> bool:
+    return isinstance(digests, dict) and all(
+        _is_sha256(digests.get(name)) for name in _REQUIRED_INPUT_DIGESTS
+    )
+
+
+def _provider_errors(provider: Any) -> list[str]:
+    if isinstance(provider, dict) and provider.get("name") == "hermes-agent":
+        return []
+    return ["provider_mismatch"]
 
 
 def _model_valid(model: Any) -> bool:

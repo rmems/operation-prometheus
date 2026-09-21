@@ -1,4 +1,4 @@
-"""Normalize verified Hermes traces into trajectory v1.1 (Linear RM-1348)."""
+"""Hermes provenance, confidentiality, and evidence-binding tests."""
 
 from hermes_normalize_test_support import *  # noqa: F403
 
@@ -14,12 +14,7 @@ def test_credential_url_path_is_rejected(tmp_path: Path):
         },
     )
     paths = write_scenario(tmp_path, [record])
-    assert _run(paths) == 0
-    dumped = paths["output"].read_text(encoding="utf-8")
-    assert dumped == ""
-    assert "ordinarysecretvalue123" not in dumped
-    report = _report(paths)
-    assert report["rejected_count"] >= 1
+    _assert_secret_rejected(paths, "ordinarysecretvalue123")
 
 
 def test_percent_encoded_credential_url_path_is_rejected(tmp_path: Path):
@@ -141,12 +136,7 @@ def test_successful_disposition_requires_independent_verifier_evidence(tmp_path:
             }
         },
     )
-    assert _run(paths) == 0
-    assert paths["output"].read_text(encoding="utf-8") == ""
-    report = _report(paths)
-    assert report["accepted_count"] == 0
-    joined = ",".join(report["records"][0]["reason_codes"])
-    assert "verifier" in joined
+    _assert_rejected_with_reason(paths, "verifier")
 
 
 def test_verifier_artifact_digest_must_match_supplied_content(tmp_path: Path):
@@ -204,23 +194,10 @@ def test_rights_terms_digest_must_match_frozen_rights_input(tmp_path: Path):
 def test_normalized_output_passes_strict_jsonl_validator(tmp_path: Path):
     paths = write_scenario(tmp_path, [hermes_record(run_id="run-validate")])
     assert _run(paths) == 0
-    v0 = jsonschema.Draft7Validator(
-        load_schema(V0_SCHEMA),
-        format_checker=jsonschema.Draft7Validator.FORMAT_CHECKER,
-    )
-    v1 = jsonschema.Draft7Validator(
-        load_schema(V1_SCHEMA),
-        format_checker=jsonschema.Draft7Validator.FORMAT_CHECKER,
-    )
+    v0, v1 = _strict_validators()
     errors = validate_file(paths["output"], v0, v1, strict_policy=True)
     assert errors == []
-    v0_errors = validate_file(
-        ROOT / "tests" / "fixtures" / "v1" / "software_valid.jsonl",
-        v0,
-        v1,
-        strict_policy=True,
-    )
-    assert v0_errors == []
+    _assert_legacy_fixture_valid(v0, v1)
 
 
 def test_strict_validator_rejects_hidden_reasoning_in_v1_1_event(tmp_path: Path):

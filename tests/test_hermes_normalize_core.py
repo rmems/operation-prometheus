@@ -50,6 +50,35 @@ def test_output_and_report_are_rolled_back_if_second_publish_fails(
     assert paths["report"].read_text(encoding="utf-8") == "old-report\n"
 
 
+def test_staged_output_is_removed_if_report_staging_fails(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+):
+    paths = write_scenario(tmp_path, [hermes_record(run_id="run-stage-cleanup")])
+    original_stage = hermes_normalize_module._stage_bytes
+    staged_output: Path | None = None
+    calls = 0
+
+    def fail_second_stage(path: Path, data: bytes) -> Path:
+        nonlocal calls, staged_output
+        calls += 1
+        if calls == 2:
+            raise OSError("synthetic report staging failure")
+        staged_output = original_stage(path, data)
+        return staged_output
+
+    monkeypatch.setattr(hermes_normalize_module, "_stage_bytes", fail_second_stage)
+    with pytest.raises(OSError, match="synthetic report staging failure"):
+        hermes_normalize_module.normalize_files(
+            input_path=paths["input"],
+            run_manifest_path=paths["manifest"],
+            model_admission_path=paths["admission"],
+            output_path=paths["output"],
+            report_path=paths["report"],
+        )
+    assert staged_output is not None
+    assert not staged_output.exists()
+
+
 def test_successful_run_is_accepted_v1_1_and_binds_provenance(tmp_path: Path):
     paths = _scenario_from_fixture(tmp_path, "successful.jsonl")
     assert _run(paths) == 0
