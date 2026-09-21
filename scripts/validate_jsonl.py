@@ -26,7 +26,10 @@ try:
     import jsonschema
 except ImportError:
     jsonschema = None
-    print("ERROR: jsonschema is required. Install with: pip install jsonschema", file=sys.stderr)
+    print(
+        "ERROR: jsonschema is required. Install with: pip install jsonschema",
+        file=sys.stderr,
+    )
     sys.exit(2)
 
 _SCRIPTS = Path(__file__).resolve().parent
@@ -35,8 +38,17 @@ if str(_SCRIPTS) not in sys.path:
 
 from lib.secrets import find_secrets  # noqa: E402
 
-SCHEMA_V0_PATH = Path(__file__).resolve().parent.parent / "schemas" / "pr_trajectory.schema.json"
-SCHEMA_V1_PATH = Path(__file__).resolve().parent.parent / "schemas" / "trajectory_v1.schema.json"
+SCHEMA_V0_PATH = (
+    Path(__file__).resolve().parent.parent / "schemas" / "pr_trajectory.schema.json"
+)
+SCHEMA_V1_PATH = (
+    Path(__file__).resolve().parent.parent / "schemas" / "trajectory_v1.schema.json"
+)
+SCHEMA_V1_1_PATH = (
+    Path(__file__).resolve().parent.parent / "schemas" / "trajectory_v1_1.schema.json"
+)
+_V1_VERSIONS = frozenset({"1", "1.0", "v1"})
+_V1_1_VERSIONS = frozenset({"1.1", "v1.1"})
 HOME_PATH_RE = re.compile(
     r"("
     r"/home/[A-Za-z0-9._-]+"
@@ -78,7 +90,6 @@ def _iter_strings(obj: object):
     elif isinstance(obj, list):
         for value in obj:
             yield from _iter_strings(value)
-
 
 
 def _is_absolute_uri(value: object) -> bool:
@@ -135,7 +146,7 @@ def policy_errors(record: dict, lineno: int, filename: str) -> list[str]:
         return errors
 
     schema_version = record.get("schema_version")
-    if schema_version in ("1", "1.0", "v1"):
+    if schema_version in _V1_VERSIONS or schema_version in _V1_1_VERSIONS:
         events = record.get("events")
         if isinstance(events, list):
             last_dt: datetime | None = None
@@ -168,8 +179,15 @@ def policy_errors(record: dict, lineno: int, filename: str) -> list[str]:
 
                 actor = e.get("actor")
                 if isinstance(actor, dict):
-                    if actor.get("type") not in ("human", "bot", "application", "agent"):
-                        errors.append(f"  {filename}:{lineno} [policy] - invented/unsupported actor type")
+                    if actor.get("type") not in (
+                        "human",
+                        "bot",
+                        "application",
+                        "agent",
+                    ):
+                        errors.append(
+                            f"  {filename}:{lineno} [policy] - invented/unsupported actor type"
+                        )
 
                 if not _event_has_auditable_anchor(e):
                     errors.append(
@@ -197,10 +215,16 @@ def policy_errors(record: dict, lineno: int, filename: str) -> list[str]:
                             f"  {filename}:{lineno} [policy] - code snapshot {key} is not a git object id"
                         )
             if not has_snapshot:
-                errors.append(f"  {filename}:{lineno} [policy] - missing required code snapshots for software trajectory")
+                errors.append(
+                    f"  {filename}:{lineno} [policy] - missing required code snapshots for software trajectory"
+                )
 
         disp = record.get("terminal_disposition")
-        payload = record.get("software_payload") if traj_type == "software" else record.get("research_payload")
+        payload = (
+            record.get("software_payload")
+            if traj_type == "software"
+            else record.get("research_payload")
+        )
         success_dispositions = ("successful", "passed")
         success_outcomes = ("pass", "passed", "success", "successful", "verified", "ok")
         terminal_enum = {
@@ -318,12 +342,34 @@ def policy_errors(record: dict, lineno: int, filename: str) -> list[str]:
     return errors
 
 
+def _select_validator(
+    record: object,
+    v0_validator: jsonschema.Draft7Validator,
+    v1_validator: jsonschema.Draft7Validator,
+    v1_1_validator: jsonschema.Draft7Validator | None,
+) -> jsonschema.Draft7Validator:
+    if not isinstance(record, dict):
+        return v0_validator
+    version = record.get("schema_version")
+    if version in _V1_1_VERSIONS:
+        if v1_1_validator is None:
+            v1_1_validator = jsonschema.Draft7Validator(
+                load_schema(SCHEMA_V1_1_PATH),
+                format_checker=jsonschema.Draft7Validator.FORMAT_CHECKER,
+            )
+        return v1_1_validator
+    if version in _V1_VERSIONS:
+        return v1_validator
+    return v0_validator
+
+
 def validate_file(
     filepath: Path,
     v0_validator: jsonschema.Draft7Validator,
     v1_validator: jsonschema.Draft7Validator,
     *,
     strict_policy: bool = False,
+    v1_1_validator: jsonschema.Draft7Validator | None = None,
 ) -> list[str]:
     """Validate a single JSONL file. Returns list of error strings."""
     errors: list[str] = []
@@ -336,6 +382,7 @@ def validate_file(
                     continue
                 count += 1
                 try:
+
                     def _reject_nonfinite(constant: str):
                         raise json.JSONDecodeError(
                             f"non-finite constant {constant!r}", line, 0
@@ -351,15 +398,17 @@ def validate_file(
                     )
                     continue
 
-                if isinstance(record, dict):
-                    version = record.get("schema_version")
-                    validator = v1_validator if version in ("1", "1.0", "v1") else v0_validator
-                else:
-                    validator = v0_validator
+                validator = _select_validator(
+                    record, v0_validator, v1_validator, v1_1_validator
+                )
 
-                for error in sorted(validator.iter_errors(record), key=lambda e: list(e.path)):
+                for error in sorted(
+                    validator.iter_errors(record), key=lambda e: list(e.path)
+                ):
                     path = ".".join(str(p) for p in error.absolute_path) or "(root)"
-                    errors.append(f"  {filepath.name}:{lineno} [{path}] - {error.message}")
+                    errors.append(
+                        f"  {filepath.name}:{lineno} [{path}] - {error.message}"
+                    )
                 if strict_policy and isinstance(record, dict):
                     errors.extend(policy_errors(record, lineno, filepath.name))
     except FileNotFoundError:
@@ -389,13 +438,23 @@ def main(argv: list[str] | None = None) -> int:
     v1_validator = jsonschema.Draft7Validator(
         schema_v1, format_checker=jsonschema.Draft7Validator.FORMAT_CHECKER
     )
+    v1_1_validator = None
+    if SCHEMA_V1_1_PATH.exists():
+        v1_1_validator = jsonschema.Draft7Validator(
+            load_schema(SCHEMA_V1_1_PATH),
+            format_checker=jsonschema.Draft7Validator.FORMAT_CHECKER,
+        )
 
     all_errors: list[str] = []
 
     for arg in args.files:
         filepath = Path(arg)
         file_errors = validate_file(
-            filepath, v0_validator, v1_validator, strict_policy=args.strict_policy
+            filepath,
+            v0_validator,
+            v1_validator,
+            strict_policy=args.strict_policy,
+            v1_1_validator=v1_1_validator,
         )
         all_errors.extend(file_errors)
         if not file_errors:
