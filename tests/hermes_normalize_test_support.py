@@ -53,6 +53,7 @@ __all__ = [
     "_assert_rejected_with_reason",
     "_report",
     "_run",
+    "_run_report",
     "_scenario_from_fixture",
     "_strict_validators",
     "build_parser",
@@ -93,6 +94,11 @@ def _scenario_from_fixture(tmp_path: Path, name: str) -> dict[str, Path]:
 
 def _report(paths: dict[str, Path]) -> dict:
     return json.loads(paths["report"].read_text(encoding="utf-8"))
+
+
+def _run_report(paths: dict[str, Path]) -> dict:
+    assert _run(paths) == 0
+    return _report(paths)
 
 
 def _assert_secret_rejected(paths: dict[str, Path], secret: str) -> dict:

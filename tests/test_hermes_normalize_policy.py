@@ -25,8 +25,7 @@ def test_nonfinite_json_is_rejected(tmp_path: Path):
     paths = write_scenario(tmp_path, [hermes_record(run_id="run-nan")])
     text = paths["input"].read_text(encoding="utf-8").replace('"run-nan"', "NaN")
     paths["input"].write_text(text, encoding="utf-8")
-    assert _run(paths) == 0
-    report = _report(paths)
+    report = _run_report(paths)
     assert report["rejected_count"] == 1
     assert "invalid_json" in report["records"][0]["reason_codes"]
 
@@ -39,12 +38,7 @@ def test_admission_model_mismatch_fails_closed(tmp_path: Path):
         [hermes_record(run_id="run-model")],
         admission=admission,
     )
-    assert _run(paths) == 0
-    report = _report(paths)
-    assert report["accepted_count"] == 0
-    assert report["rejected_count"] >= 1
-    joined = ",".join(report["records"][0]["reason_codes"])
-    assert "model" in joined or "mismatch" in joined
+    _assert_rejected_with_reason(paths, "model")
 
 
 def test_shared_admission_fixture_uses_singular_decision_interface():
@@ -76,12 +70,7 @@ def test_legacy_disposition_admission_is_rejected(tmp_path: Path):
         [hermes_record(run_id="run-disposition")],
         admission=admission,
     )
-    assert _run(paths) == 0
-    report = _report(paths)
-    assert report["accepted_count"] == 0
-    assert report["rejected_count"] >= 1
-    joined = ",".join(report["records"][0]["reason_codes"])
-    assert "admission" in joined
+    _assert_rejected_with_reason(paths, "admission")
 
 
 def test_non_accepted_decision_admission_is_rejected(tmp_path: Path):
@@ -91,11 +80,7 @@ def test_non_accepted_decision_admission_is_rejected(tmp_path: Path):
         [hermes_record(run_id="run-decision")],
         admission=admission,
     )
-    assert _run(paths) == 0
-    report = _report(paths)
-    assert report["accepted_count"] == 0
-    assert report["rejected_count"] >= 1
-    assert "admission_rejected" in report["records"][0]["reason_codes"]
+    _assert_rejected_with_reason(paths, "admission_rejected")
 
 
 def test_manifest_verifier_conflict_with_trace_is_rejected(tmp_path: Path):
@@ -175,8 +160,7 @@ def test_empty_input_with_invalid_binding_is_explicitly_rejected(tmp_path: Path)
     paths["input"].write_bytes(b"")
     write_json(paths["manifest"], {"schema_version": "not-a-manifest"})
     write_json(paths["admission"], {"schema_version": "not-admission"})
-    assert _run(paths) == 0
-    report = _report(paths)
+    report = _run_report(paths)
     assert report["accepted_count"] == 0
     assert report["quarantined_count"] == 0
     assert report["rejected_count"] >= 1
@@ -187,8 +171,7 @@ def test_empty_input_with_invalid_binding_is_explicitly_rejected(tmp_path: Path)
 def test_empty_input_with_valid_binding_is_explicitly_rejected(tmp_path: Path):
     paths = write_scenario(tmp_path, [])
     paths["input"].write_bytes(b"")
-    assert _run(paths) == 0
-    report = _report(paths)
+    report = _run_report(paths)
     assert report["accepted_count"] == 0
     assert report["quarantined_count"] == 0
     assert report["rejected_count"] >= 1
@@ -205,36 +188,28 @@ def test_structured_credential_content_is_rejected(tmp_path: Path):
     assert report["accepted_count"] == 0
 
 
-def test_credential_url_path_is_rejected(tmp_path: Path):
+@pytest.mark.parametrize(
+    ("run_id", "url"),
+    [
+        ("run-path-secret", "https://example.test/token/ordinarysecretvalue123"),
+        (
+            "run-encoded-path-secret",
+            "https://example.test/%74oken/ordinarysecretvalue123",
+        ),
+    ],
+)
+def test_credential_url_path_is_rejected(tmp_path: Path, run_id: str, url: str):
     record = hermes_record(
-        run_id="run-path-secret",
+        run_id=run_id,
         extra_message={
             "role": "tool",
             "name": "fetch",
             "timestamp": "2026-09-21T12:00:30Z",
-            "content": "https://example.test/token/ordinarysecretvalue123",
+            "content": url,
         },
     )
     paths = write_scenario(tmp_path, [record])
-    _assert_secret_rejected(paths, "ordinarysecretvalue123")
-
-
-def test_percent_encoded_credential_url_path_is_rejected(tmp_path: Path):
-    record = hermes_record(
-        run_id="run-encoded-path-secret",
-        extra_message={
-            "role": "tool",
-            "name": "fetch",
-            "timestamp": "2026-09-21T12:00:30Z",
-            "content": "https://example.test/%74oken/ordinarysecretvalue123",
-        },
-    )
-    paths = write_scenario(tmp_path, [record])
-    assert _run(paths) == 0
-    dumped = paths["output"].read_text(encoding="utf-8")
-    assert dumped == ""
-    assert "ordinarysecretvalue123" not in dumped
-    assert _report(paths)["rejected_count"] >= 1
+    _assert_rejected_with_reason(paths, "secret_leakage")
 
 
 @pytest.mark.parametrize("scheme", ["ftp", "ftps"])
@@ -257,9 +232,7 @@ def test_double_encoded_credential_url_path_is_rejected(tmp_path: Path):
         content="https://example.test/%2574oken/ordinarysecretvalue123",
     )
     paths = write_scenario(tmp_path, [record])
-    assert _run(paths) == 0
-    assert paths["output"].read_text(encoding="utf-8") == ""
-    assert _report(paths)["rejected_count"] >= 1
+    _assert_secret_rejected(paths, "ordinarysecretvalue123")
 
 
 @pytest.mark.parametrize(
@@ -273,11 +246,8 @@ def test_encoded_credential_query_key_is_rejected(tmp_path: Path, encoded_key: s
         content=f"https://example.test/file?{encoded_key}={secret}",
     )
     paths = write_scenario(tmp_path, [record])
-    assert _run(paths) == 0
-    dumped = paths["output"].read_text(encoding="utf-8")
-    assert dumped == ""
-    assert secret not in dumped
-    assert "secret_leakage" in _report(paths)["records"][0]["reason_codes"]
+    report = _assert_secret_rejected(paths, secret)
+    assert "secret_leakage" in report["records"][0]["reason_codes"]
 
 
 def test_casefolded_hidden_reasoning_and_manifest_hidden_fields_are_rejected(
@@ -366,31 +336,29 @@ def test_manifest_verifier_subject_cannot_be_reused_for_another_trace(tmp_path: 
     assert "verifier_subject_mismatch" in reasons
 
 
-def test_output_license_cannot_disagree_with_admitted_rights(tmp_path: Path):
-    admission = default_admission(rights={"identifier": "MIT"})
+@pytest.mark.parametrize(
+    ("overrides", "run_id"),
+    [
+        ({"rights": {"identifier": "MIT"}}, "run-rights-mismatch"),
+        (
+            {
+                "rights": {"terms_sha256": "b" * 64},
+                "input_digests": {"rights": "c" * 64},
+            },
+            "run-rights-digest-mismatch",
+        ),
+    ],
+)
+def test_admitted_rights_must_match_output_and_frozen_terms(
+    tmp_path: Path, overrides: dict, run_id: str
+):
+    admission = default_admission(**overrides)
     paths = write_scenario(
         tmp_path,
-        [hermes_record(run_id="run-rights-mismatch")],
+        [hermes_record(run_id=run_id)],
         admission=admission,
     )
-    assert _run(paths) == 0
-    assert paths["output"].read_text(encoding="utf-8") == ""
-    assert "rights_mismatch" in _report(paths)["records"][0]["reason_codes"]
-
-
-def test_rights_terms_digest_must_match_frozen_rights_input(tmp_path: Path):
-    admission = default_admission(
-        rights={"terms_sha256": "b" * 64},
-        input_digests={"rights": "c" * 64},
-    )
-    paths = write_scenario(
-        tmp_path,
-        [hermes_record(run_id="run-rights-digest-mismatch")],
-        admission=admission,
-    )
-    assert _run(paths) == 0
-    assert paths["output"].read_text(encoding="utf-8") == ""
-    assert "rights_mismatch" in _report(paths)["records"][0]["reason_codes"]
+    _assert_rejected_with_reason(paths, "rights_mismatch")
 
 
 def test_normalized_output_passes_strict_jsonl_validator(tmp_path: Path):

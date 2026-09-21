@@ -207,15 +207,15 @@ def _model_bind_errors(
     for field in _MODEL_BIND_FIELDS:
         left = manifest_model.get(field)
         right = admission_model.get(field)
-        if (
-            field in _OPTIONAL_MODEL_FIELDS
-            and not _present(left)
-            and not _present(right)
-        ):
-            continue
-        if left != right:
+        if not _model_field_matches(field, left, right):
             return ["model_mismatch"]
     return []
+
+
+def _model_field_matches(field: str, left: Any, right: Any) -> bool:
+    if field in _OPTIONAL_MODEL_FIELDS and not _present(left) and not _present(right):
+        return True
+    return left == right
 
 
 def _runtime_bind_errors(
