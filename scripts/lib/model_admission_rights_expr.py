@@ -33,15 +33,19 @@ def _matching_close_index(identifier: str) -> int | None:
     return None
 
 
+def _outer_wrapped(stripped: str) -> bool:
+    if not stripped.startswith("("):
+        return False
+    if not _parentheses_balanced(stripped):
+        return False
+    return _matching_close_index(stripped) == len(stripped) - 1
+
+
 def _unwrap_outer_parens(identifier: str) -> str | None:
     stripped = identifier.strip()
     if not stripped:
         return None
-    while (
-        stripped.startswith("(")
-        and _parentheses_balanced(stripped)
-        and _matching_close_index(stripped) == len(stripped) - 1
-    ):
+    while _outer_wrapped(stripped):
         stripped = stripped[1:-1].strip()
     if not stripped:
         return None

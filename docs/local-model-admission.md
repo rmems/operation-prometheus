@@ -6,23 +6,33 @@ must admit it. The gate is fail-closed: every candidate is classified
 `accepted`, `quarantined` (evidence incomplete), or `rejected` (evidence
 contradictory) with explicit reason codes.
 
-Each accepted candidate binds:
+The emitted bundle contains one **singular** `local_model_admission_v1`
+decision report per candidate in `decisions[]` — the canonical object that
+downstream consumers (e.g. #74) hash and validate. Each decision binds:
 
-- exact model name and Ollama manifest digest;
-- quantization level (matched against the probe's `show` details);
-- runtime (`ollama`) and a loopback-only endpoint
-  (`127.0.0.1`, `::1`, `localhost`);
-- declared license resolved against frozen rights evidence (SPDX id or
-  `LicenseRef-*` with a matching terms text digest — never guessed);
-- a sanitized provider configuration (no secret-looking keys, no remote
-  endpoints) with explicit `no_cloud: true` evidence;
-- the probe timestamp and SHA-256 digests of every frozen input.
+- exact model name (including tag) and Ollama manifest digest
+  (`sha256:` + 64 lowercase hex);
+- quantization level (matched against the probe's `show` details) and the
+  upstream revision when known;
+- runtime name and version plus the canonical loopback endpoint
+  (`http://127.0.0.1:<port>`, `http://localhost:<port>`, `http://[::1]:<port>`);
+- rights identifier, terms source, and terms-document SHA-256 from frozen
+  rights evidence (SPDX id or `LicenseRef-*` with a matching terms text
+  digest — never guessed);
+- the sanitized provider configuration (strict key allowlist: no secret
+  material, no remote endpoints) with explicit `no_cloud: true` and literal
+  `cloud_fallback_allowed: false` plus a `fallback_evidence` proof object;
+- the validated probe timestamp and SHA-256 digests of every frozen input,
+  including the inputs manifest itself;
+- `evidence_digest` — SHA-256 of the complete emitted report object
+  (minus the digest field itself).
 
-Quarantined and rejected rows keep their bound evidence and reason codes; a
-quarantine is not a deletion. The report (`local_model_admission_v1`,
-`schemas/local_model_admission.schema.json`) carries `license_families`,
-`evidence_digests`, `input_digests`, and `bundle_errors` so consumers can
-verify closure deterministically and offline.
+`decision` is `accepted` only when every binding holds; missing or
+conflicting identity/rights/endpoint/fallback evidence always yields
+`quarantined` or `rejected` with machine-readable `reasons`. The bundle
+adds `closed`, `counts`, `license_families`, `evidence_digests`, and
+`bundle_errors` for aggregate accounting
+(`schemas/local_model_admission.schema.json`).
 
 ## Run (offline, recorded probe — used by CI)
 
@@ -50,20 +60,29 @@ python scripts/verify_local_model_admission.py \
   --live [--endpoint http://127.0.0.1:11434] --out <report.json>
 ```
 
-`--live` queries `/api/tags` and `/api/show` on the given endpoint and refuses
-any non-loopback address. It performs no model pulls, no GPU work, and no
-network access beyond the loopback daemon.
+`--live` (mutually exclusive with `--probe`) queries `/api/version`,
+`/api/tags`, and `/api/show` on the given endpoint with environment proxies
+disabled and all redirects refused. It performs no model pulls, no GPU work,
+and no network access beyond the loopback daemon. Live responses are parsed
+with the same strict parser as frozen inputs (duplicate keys, non-finite
+numbers such as `1e999`, and non-finite constants rejected).
 
 ## Reason codes
 
 Rejection (contradictory evidence): `candidate_not_object`, `model_missing`,
-`rights_conflict`, `terms_digest_mismatch`, `probe_digest_mismatch`,
-`quantization_mismatch`, `runtime_unsupported`, `endpoint_not_loopback`,
-`provider_config_unsanitized`, `cloud_endpoint_detected`.
+`rights_conflict`, `terms_digest_mismatch`, `probe_digest_conflict`,
+`probe_digest_mismatch`, `probe_quantization_mismatch`,
+`probe_license_conflict`, `runtime_unsupported`, `endpoint_not_loopback`,
+`provider_config_unknown_keys`, `provider_config_unsanitized`,
+`cloud_endpoint_detected`, `cloud_fallback_not_disproven`.
 
 Quarantine (incomplete evidence): `rights_evidence_missing`,
 `license_missing`, `license_unknown`, `terms_digest_missing`,
-`probe_evidence_missing`, `probe_endpoint_mismatch`, `digest_missing`,
-`quantization_missing`, `runtime_missing`, `endpoint_missing`,
-`endpoint_invalid`, `provider_config_missing`, `no_cloud_evidence_missing`,
-`probe_timestamp_missing`, `probe_timestamp_invalid`.
+`terms_source_missing`, `probe_evidence_missing`, `probe_schema_missing`,
+`probe_schema_invalid`, `probe_runtime_missing`, `probe_duplicate`,
+`probe_endpoint_missing`, `probe_endpoint_mismatch`,
+`probe_quantization_missing`, `digest_missing`, `digest_invalid`,
+`runtime_missing`, `endpoint_missing`, `endpoint_invalid`,
+`provider_config_missing`, `no_cloud_evidence_missing`,
+`probe_timestamp_missing`, `probe_timestamp_invalid`,
+`probe_timestamp_mismatch`.

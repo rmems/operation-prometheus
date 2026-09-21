@@ -1,0 +1,39 @@
+{
+  "cloud_fallback_allowed": false,
+  "decision": "accepted",
+  "endpoint": "http://127.0.0.1:11434",
+  "evidence_digest": "0c7b90b6452a5ce74db4817fabefbad62e22e9f28e7bb488c5c6822051765b5e",
+  "fallback_evidence": {
+    "cloud_fallback_allowed": false,
+    "no_cloud": true,
+    "remote_endpoints": [],
+    "unsanitized_keys": []
+  },
+  "input_digests": {
+    "admissions": "b81c1c90dedb6ee44b9df60deaae0261bfec3f547a5c4685fcd884938972591e",
+    "probe": "1284667559feff063a8260d8402440b13c0eb6e35a3c3172c2f1b0381995727a",
+    "rights": "8cebf8b4e3d3ea6dc519ac7088263150589517003db4f02a3843725f76ed64e0"
+  },
+  "license_family": "spdx",
+  "model": "hermes-3-llama-3.1-8b:q4_k_m",
+  "ollama_digest": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+  "probed_at": "2026-09-21T12:00:00Z",
+  "provider_config": {
+    "cloud_fallback_allowed": false,
+    "no_cloud": true,
+    "num_ctx": 8192
+  },
+  "quantization": "Q4_K_M",
+  "reasons": [],
+  "rights": {
+    "identifier": "Apache-2.0",
+    "terms_sha256": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+    "terms_source": "upstream/LICENSE"
+  },
+  "runtime": {
+    "name": "ollama",
+    "version": "0.5.4"
+  },
+  "schema_version": "local_model_admission_v1",
+  "upstream_revision": null
+}

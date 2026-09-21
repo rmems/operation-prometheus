@@ -2,15 +2,13 @@
   "$schema": "http://json-schema.org/draft-07/schema#",
   "$id": "https://github.com/rmems/operation-prometheus/schemas/local_model_admission.schema.json",
   "title": "local_model_admission_v1",
-  "description": "Fail-closed admission report for local model providers (e.g. loopback Ollama-served weights). Every candidate is classified accepted, quarantined, or rejected with reason codes; the report binds model identity, Ollama digest/quantization, runtime and loopback endpoint, rights/terms digests, no-cloud evidence, probe timestamp, and frozen-input hashes.",
+  "description": "Fail-closed admission report for local model providers (e.g. loopback Ollama-served weights). The emitted bundle carries one singular decision report per candidate in `decisions[]`; each decision report is the canonical object consumed and hashed downstream, binding model identity, Ollama digest/quantization, runtime name and version, canonical loopback endpoint, rights identifier/terms source/terms digest, sanitized provider configuration, explicit cloud_fallback_allowed:false with proof evidence, the probe timestamp, and hashes of every frozen evidence input.",
   "type": "object",
   "required": [
     "schema_version",
     "closed",
     "counts",
-    "accepted",
-    "quarantined",
-    "rejected",
+    "decisions",
     "license_families",
     "evidence_digests",
     "input_digests",
@@ -21,7 +19,7 @@
     "schema_version": {"const": "local_model_admission_v1"},
     "closed": {
       "type": "boolean",
-      "description": "True only when quarantined, rejected, and bundle_errors are all empty."
+      "description": "True only when every decision is accepted and bundle_errors is empty."
     },
     "counts": {
       "type": "object",
@@ -34,35 +32,10 @@
         "rejected": {"type": "integer", "minimum": 0}
       }
     },
-    "accepted": {
+    "decisions": {
       "type": "array",
-      "items": {
-        "type": "object",
-        "required": [
-          "model",
-          "license_family",
-          "evidence_digest",
-          "ollama_digest",
-          "quantization",
-          "runtime",
-          "endpoint",
-          "probed_at"
-        ],
-        "additionalProperties": false,
-        "properties": {
-          "model": {"type": "string", "minLength": 1},
-          "license_family": {"enum": ["spdx", "custom"]},
-          "evidence_digest": {"$ref": "#/definitions/sha256"},
-          "ollama_digest": {"type": "string", "minLength": 1},
-          "quantization": {"type": "string", "minLength": 1},
-          "runtime": {"const": "ollama"},
-          "endpoint": {"type": "string", "minLength": 1},
-          "probed_at": {"type": "string", "minLength": 1}
-        }
-      }
+      "items": {"$ref": "#/definitions/decision"}
     },
-    "quarantined": {"$ref": "#/definitions/unresolved_rows"},
-    "rejected": {"$ref": "#/definitions/unresolved_rows"},
     "license_families": {
       "type": "array",
       "items": {"enum": ["spdx", "custom", "missing", "unknown"]},
@@ -75,7 +48,7 @@
     },
     "input_digests": {
       "type": "object",
-      "description": "SHA-256 of each frozen input file (admissions, rights, probe).",
+      "description": "SHA-256 of each frozen input file (admissions, rights, probe, inputs_manifest).",
       "additionalProperties": {"$ref": "#/definitions/sha256"}
     },
     "bundle_errors": {
@@ -88,37 +61,99 @@
       "type": "string",
       "pattern": "^[a-f0-9]{64}$"
     },
-    "unresolved_rows": {
-      "type": "array",
-      "items": {
-        "type": "object",
-        "required": [
-          "model",
-          "reason_codes",
-          "license_family",
-          "evidence",
-          "evidence_digest"
-        ],
-        "additionalProperties": false,
-        "properties": {
-          "model": {"type": ["string", "null"]},
-          "reason_codes": {
-            "type": "array",
-            "items": {"type": "string", "minLength": 1},
-            "minItems": 1
-          },
-          "license_family": {
-            "enum": ["spdx", "custom", "missing", "unknown"]
-          },
-          "evidence": {
-            "type": "object",
-            "description": "Bound evidence retained for audit; fields may be null when unavailable."
-          },
-          "evidence_digest": {
-            "type": ["string", "null"],
-            "pattern": "^[a-f0-9]{64}$"
+    "decision": {
+      "type": "object",
+      "description": "Singular local_model_admission_v1 decision report for one candidate.",
+      "required": [
+        "schema_version",
+        "decision",
+        "reasons",
+        "model",
+        "ollama_digest",
+        "quantization",
+        "upstream_revision",
+        "runtime",
+        "endpoint",
+        "rights",
+        "license_family",
+        "provider_config",
+        "cloud_fallback_allowed",
+        "fallback_evidence",
+        "probed_at",
+        "input_digests",
+        "evidence_digest"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "schema_version": {"const": "local_model_admission_v1"},
+        "decision": {"enum": ["accepted", "quarantined", "rejected"]},
+        "reasons": {
+          "type": "array",
+          "items": {"type": "string", "minLength": 1}
+        },
+        "model": {"type": ["string", "null"]},
+        "ollama_digest": {
+          "type": ["string", "null"],
+          "pattern": "^sha256:[a-f0-9]{64}$"
+        },
+        "quantization": {"type": ["string", "null"]},
+        "upstream_revision": {"type": ["string", "null"]},
+        "runtime": {
+          "type": "object",
+          "required": ["name", "version"],
+          "additionalProperties": false,
+          "properties": {
+            "name": {"type": ["string", "null"]},
+            "version": {"type": ["string", "null"]}
           }
-        }
+        },
+        "endpoint": {"type": ["string", "null"]},
+        "rights": {
+          "type": "object",
+          "required": ["identifier", "terms_source", "terms_sha256"],
+          "additionalProperties": false,
+          "properties": {
+            "identifier": {"type": ["string", "null"]},
+            "terms_source": {"type": ["string", "null"]},
+            "terms_sha256": {
+              "type": ["string", "null"],
+              "pattern": "^[a-f0-9]{64}$"
+            }
+          }
+        },
+        "license_family": {
+          "enum": ["spdx", "custom", "missing", "unknown"]
+        },
+        "provider_config": {"type": ["object", "null"]},
+        "cloud_fallback_allowed": {"type": ["boolean", "null"]},
+        "fallback_evidence": {
+          "type": "object",
+          "required": [
+            "no_cloud",
+            "cloud_fallback_allowed",
+            "unsanitized_keys",
+            "remote_endpoints"
+          ],
+          "additionalProperties": false,
+          "properties": {
+            "no_cloud": {"type": ["boolean", "null"]},
+            "cloud_fallback_allowed": {"type": ["boolean", "null"]},
+            "unsanitized_keys": {
+              "type": "array",
+              "items": {"type": "string"}
+            },
+            "remote_endpoints": {
+              "type": "array",
+              "items": {"type": "string"}
+            }
+          }
+        },
+        "probed_at": {"type": ["string", "null"]},
+        "input_digests": {
+          "type": "object",
+          "additionalProperties": {"$ref": "#/definitions/sha256"}
+        },
+        "evidence_digest": {"$ref": "#/definitions/sha256"}
       }
     }
   }

@@ -3,7 +3,8 @@
   "models": {
     "hermes-3-llama-3.1-8b:q4_k_m": {
       "license": "Apache-2.0",
-      "terms_sha256": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"
+      "terms_sha256": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+      "terms_source": "upstream/LICENSE"
     },
     "hermes-3-llama-3.1-70b:q4_k_m": {
       "license": "LicenseRef-Hermes-Community",
@@ -11,7 +12,8 @@
         "identifier": "LicenseRef-Hermes-Community",
         "text_sha256": "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc"
       },
-      "terms_sha256": "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc"
+      "terms_sha256": "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
+      "terms_source": "upstream/LICENSE"
     }
   }
 }

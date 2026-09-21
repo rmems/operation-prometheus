@@ -1,15 +1,18 @@
 """Evidence primitives for local-model admission.
 
-Strict JSON loading (duplicate keys and non-finite constants rejected),
-canonical SHA-256 digests, deterministic report rendering, loopback endpoint
-checks, provider-config sanitization, and frozen-input collision protection.
+One strict JSON parser for frozen and live JSON (duplicate keys and non-finite
+numbers rejected), canonical SHA-256 digests, deterministic report rendering,
+canonical loopback endpoint validation, provider-config sanitization with a
+strict key allowlist, and frozen-input collision protection.
 """
 
 from __future__ import annotations
 
 import hashlib
 import json
+import math
 import re
+from datetime import datetime
 from pathlib import Path
 from typing import Any
 from urllib.parse import urlparse
@@ -17,10 +20,56 @@ from urllib.parse import urlparse
 from .source_inventory_common import canonical_json_bytes
 
 SHA256_RE = re.compile(r"^[a-f0-9]{64}$")
+OLLAMA_DIGEST_RE = re.compile(r"^sha256:[a-f0-9]{64}$")
+RFC3339_TZ_RE = re.compile(
+    r"^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d+)?(?:Z|[+-]\d{2}:\d{2})$"
+)
 LOOPBACK_HOSTS = frozenset({"localhost", "127.0.0.1", "::1"})
+LOOPBACK_SCHEMES = frozenset({"http"})
+
+# Strict provider-config allowlist: only Ollama generation/runtime knobs.
+ALLOWED_CONFIG_KEYS = frozenset(
+    {
+        "no_cloud",
+        "cloud_fallback_allowed",
+        "num_ctx",
+        "num_predict",
+        "num_gpu",
+        "num_thread",
+        "num_batch",
+        "temperature",
+        "top_k",
+        "top_p",
+        "min_p",
+        "tfs_z",
+        "typical_p",
+        "seed",
+        "keep_alive",
+        "repeat_penalty",
+        "presence_penalty",
+        "frequency_penalty",
+        "mirostat",
+        "mirostat_eta",
+        "mirostat_tau",
+        "stop",
+    }
+)
+
 _SECRET_KEY_RE = re.compile(
     r"api[-_]?key|token|secret|password|passwd|authorization|credential",
     re.IGNORECASE,
+)
+_ENDPOINT_KEYS = frozenset(
+    {
+        "base_url",
+        "endpoint",
+        "host",
+        "url",
+        "api_base",
+        "fallback_url",
+        "remote_url",
+        "server",
+    }
 )
 
 
@@ -39,8 +88,22 @@ def sha256_or_none(value: Any) -> str | None:
     return text if SHA256_RE.fullmatch(text) else None
 
 
+def ollama_digest_or_none(value: Any) -> str | None:
+    if not isinstance(value, str):
+        return None
+    text = value.strip()
+    return text if OLLAMA_DIGEST_RE.fullmatch(text) else None
+
+
 def _reject_nonfinite(constant: str) -> None:
     raise json.JSONDecodeError(f"non-finite constant {constant!r}", constant, 0)
+
+
+def _parse_float(value: str) -> float:
+    number = float(value)
+    if not math.isfinite(number):
+        raise ValueError(f"non-finite number {value!r}")
+    return number
 
 
 def _object_pairs(pairs: list[tuple[Any, Any]]) -> dict[str, Any]:
@@ -55,27 +118,37 @@ def _object_pairs(pairs: list[tuple[Any, Any]]) -> dict[str, Any]:
     return result
 
 
-def load_json_strict(path: Path) -> Any:
+def loads_strict(text: str) -> Any:
+    """The one strict JSON parser: frozen files and live responses alike."""
     return json.loads(
-        path.read_text(encoding="utf-8"),
+        text,
         parse_constant=_reject_nonfinite,
+        parse_float=_parse_float,
         object_pairs_hook=_object_pairs,
     )
 
 
+def load_json_strict(path: Path) -> Any:
+    return loads_strict(path.read_text(encoding="utf-8"))
+
+
 def load_jsonl_strict(path: Path) -> list[Any]:
-    rows: list[Any] = []
-    for line in path.read_bytes().decode("utf-8").splitlines():
-        if not line.strip():
-            continue
-        rows.append(
-            json.loads(
-                line,
-                parse_constant=_reject_nonfinite,
-                object_pairs_hook=_object_pairs,
-            )
-        )
-    return rows
+    return parse_jsonl_strict(path.read_bytes().decode("utf-8"))
+
+
+def parse_jsonl_strict(text: str) -> list[Any]:
+    return [loads_strict(line) for line in text.splitlines() if line.strip()]
+
+
+def read_frozen_json(path: Path) -> tuple[Any, bytes]:
+    """Read once: returns (parsed object, exact file bytes)."""
+    data = path.read_bytes()
+    return loads_strict(data.decode("utf-8")), data
+
+
+def read_frozen_jsonl(path: Path) -> tuple[list[Any], bytes]:
+    data = path.read_bytes()
+    return parse_jsonl_strict(data.decode("utf-8")), data
 
 
 def render_report(value: dict[str, Any]) -> bytes:
@@ -91,12 +164,44 @@ def render_report(value: dict[str, Any]) -> bytes:
     )
 
 
+def _text(value: Any) -> str | None:
+    return value.strip() if isinstance(value, str) and value.strip() else None
+
+
+def canonical_loopback_endpoint(value: Any) -> str | None:
+    """Canonical http://loopback endpoint, or None when non-canonical.
+
+    Requires a lowercase literal ``http`` scheme and lowercase host with an
+    explicit port; path must be empty or ``/``; no query, fragment, userinfo,
+    or credentials.
+    """
+    if not isinstance(value, str) or value != value.strip():
+        return None
+    if not value.startswith("http://"):
+        return None
+    parsed = urlparse(value)
+    host = parsed.hostname or ""
+    if parsed.scheme != "http" or host not in LOOPBACK_HOSTS:
+        return None
+    netloc = parsed.netloc
+    if netloc != netloc.lower() or "@" in netloc or ":" not in netloc:
+        return None
+    if parsed.path not in ("", "/") or parsed.query or parsed.fragment:
+        return None
+    if parsed.port is None:
+        return None
+    canonical = f"http://{host}:{parsed.port}"
+    if parsed.path == "/":
+        canonical += "/"
+    return canonical
+
+
 def endpoint_host(endpoint: Any) -> str | None:
-    """Return the URL host for a valid http(s) endpoint, else None."""
+    """URL host for a syntactically valid http(s) endpoint, else None."""
     if not isinstance(endpoint, str) or not endpoint.strip():
         return None
     parsed = urlparse(endpoint.strip())
-    if parsed.scheme not in ("http", "https") or not parsed.hostname:
+    if parsed.scheme.lower() not in ("http", "https") or not parsed.hostname:
         return None
     return parsed.hostname
 
@@ -104,6 +209,20 @@ def endpoint_host(endpoint: Any) -> str | None:
 def is_loopback_endpoint(endpoint: Any) -> bool:
     host = endpoint_host(endpoint)
     return host is not None and host in LOOPBACK_HOSTS
+
+
+def parse_rfc3339_tz(value: Any) -> bool:
+    """True only for a timezone-aware RFC 3339 timestamp string."""
+    if not isinstance(value, str):
+        return False
+    text = value.strip()
+    if not RFC3339_TZ_RE.fullmatch(text):
+        return False
+    try:
+        parsed = datetime.fromisoformat(text.replace("Z", "+00:00"))
+    except ValueError:
+        return False
+    return parsed.tzinfo is not None
 
 
 def _iter_config_items(config: Any, prefix: str = ""):
@@ -118,29 +237,41 @@ def _iter_config_items(config: Any, prefix: str = ""):
             yield name, value
 
 
+def unknown_config_keys(config: Any) -> list[str]:
+    """Leaf keys outside the strict provider-config allowlist."""
+    return [
+        name
+        for name, _ in _iter_config_items(config)
+        if name.rsplit(".", 1)[-1] not in ALLOWED_CONFIG_KEYS
+    ]
+
+
+def _nonempty_secret_value(value: Any) -> bool:
+    if isinstance(value, str):
+        return bool(value.strip())
+    if isinstance(value, (list, dict)):
+        return len(value) > 0
+    return isinstance(value, bool) and value
+
+
 def unsanitized_config_keys(config: Any) -> list[str]:
     """Secret-looking keys carrying non-empty values in a provider config."""
     return [
         name
         for name, value in _iter_config_items(config)
-        if _SECRET_KEY_RE.search(name)
-        and isinstance(value, str)
-        and value.strip()
+        if _SECRET_KEY_RE.search(name) and _nonempty_secret_value(value)
     ]
 
 
-_ENDPOINT_KEYS = frozenset({"base_url", "endpoint", "host", "url", "api_base"})
-
-
 def remote_config_endpoints(config: Any) -> list[str]:
-    """base_url/endpoint/host entries that are not loopback."""
+    """Endpoint-like entries that are not canonical loopback."""
     return [
         value
         for name, value in _iter_config_items(config)
         if name.rsplit(".", 1)[-1].lower() in _ENDPOINT_KEYS
         and isinstance(value, str)
         and value.strip()
-        and not is_loopback_endpoint(value)
+        and canonical_loopback_endpoint(value) is None
     ]
 
 

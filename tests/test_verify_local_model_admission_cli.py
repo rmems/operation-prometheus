@@ -80,7 +80,8 @@ def test_quarantined_candidate_exits_1(tmp_path):
     assert result.returncode == 1
     report = json.loads(out.read_text())
     assert report["closed"] is False
-    assert report["quarantined"][0]["reason_codes"]
+    quarantined = [d for d in report["decisions"] if d["decision"] == "quarantined"]
+    assert quarantined and quarantined[0]["reasons"]
 
 
 def test_rejected_candidate_exits_1(tmp_path):
@@ -88,7 +89,8 @@ def test_rejected_candidate_exits_1(tmp_path):
     result = _run(*_args(out, admissions="admissions_rejected.jsonl"))
     assert result.returncode == 1
     report = json.loads(out.read_text())
-    assert report["rejected"][0]["reason_codes"]
+    rejected = [d for d in report["decisions"] if d["decision"] == "rejected"]
+    assert rejected and rejected[0]["reasons"]
 
 
 def test_check_mode_detects_stale_report(tmp_path):
@@ -139,6 +141,12 @@ def test_report_has_no_nan(tmp_path):
     out = tmp_path / "report.json"
     assert _run(*_args(out)).returncode == 0
     assert "NaN" not in out.read_text()
+
+
+def test_live_and_probe_mutually_exclusive(tmp_path):
+    result = _run(*_args(tmp_path / "report.json"), "--live")
+    assert result.returncode == 2
+    assert "mutually exclusive" in result.stderr
 
 
 def test_live_requires_loopback(tmp_path):

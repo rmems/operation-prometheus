@@ -6,6 +6,7 @@ import pytest
 
 from lib.model_admission import (
     SCHEMA_VERSION,
+    AdmissionInputs,
     build_admission_report,
     evaluate_admission,
 )
@@ -23,7 +24,7 @@ def _candidate(**overrides):
         "runtime": "ollama",
         "endpoint": "http://127.0.0.1:11434",
         "license": "Apache-2.0",
-        "provider_config": {"no_cloud": True, "num_ctx": 8192},
+        "provider_config": {"no_cloud": True, "cloud_fallback_allowed": False, "num_ctx": 8192},
         "probed_at": "2026-09-21T12:00:00Z",
     }
     candidate.update(overrides)
@@ -34,7 +35,7 @@ def _rights(**overrides):
     rights = {
         "schema_version": "model_rights_v1",
         "models": {
-            MODEL: {"license": "Apache-2.0", "terms_sha256": TERMS},
+            MODEL: {"license": "Apache-2.0", "terms_sha256": TERMS, "terms_source": "upstream/LICENSE"},
         },
     }
     rights.update(overrides)
@@ -44,6 +45,8 @@ def _rights(**overrides):
 def _probe(**overrides):
     probe = {
         "schema_version": "ollama_probe_v1",
+        "runtime": "ollama",
+        "version": "0.5.4",
         "endpoint": "http://127.0.0.1:11434",
         "probed_at": "2026-09-21T12:00:00Z",
         "models": [{"name": MODEL, "digest": DIGEST}],
@@ -53,11 +56,19 @@ def _probe(**overrides):
     return probe
 
 
+def _inputs(rights=None, probe=None, digests=None, errors=None):
+    return AdmissionInputs(
+        rights=rights if rights is not None else _rights(),
+        probe=probe if probe is not None else _probe(),
+        input_digests=digests if digests is not None else {},
+        bundle_errors=errors,
+    )
+
+
 def _evaluate(candidate=None, rights=None, probe=None):
     return evaluate_admission(
         candidate if candidate is not None else _candidate(),
-        rights=rights if rights is not None else _rights(),
-        probe=probe if probe is not None else _probe(),
+        inputs=_inputs(rights=rights, probe=probe),
     )
 
 
@@ -66,11 +77,11 @@ def test_clean_candidate_is_accepted():
     assert row["disposition"] == "accepted"
     assert row["reason_codes"] == []
     assert row["license_family"] == "spdx"
-    assert len(row["evidence_digest"]) == 64
+    assert len(row["report"]["evidence_digest"]) == 64
 
 
 def test_evidence_digest_changes_with_any_bound_field():
-    digest = _evaluate()["evidence_digest"]
+    digest = _evaluate()["report"]["evidence_digest"]
     for key, value in (
         ("ollama_digest", "sha256:" + "c" * 64),
         ("quantization", "Q8_0"),
@@ -78,7 +89,7 @@ def test_evidence_digest_changes_with_any_bound_field():
         ("probed_at", "2026-09-21T13:00:00Z"),
     ):
         other = _evaluate(_candidate(**{key: value}))
-        assert other["evidence_digest"] != digest
+        assert other["report"]["evidence_digest"] != digest
 
 
 def test_missing_rights_row_quarantines():
@@ -113,6 +124,7 @@ def test_conflicting_rights_rejected():
 def test_custom_license_ref_needs_matching_terms_digest():
     rights = _rights()
     rights["models"][MODEL] = {
+        "terms_source": "upstream/LICENSE.txt",
         "license": "LicenseRef-Hermes-Community",
         "custom_license": {
             "identifier": "LicenseRef-Hermes-Community",
@@ -144,7 +156,7 @@ def test_quantization_mismatch_rejected():
     probe["show"][MODEL]["details"]["quantization_level"] = "Q8_0"
     row = _evaluate(probe=probe)
     assert row["disposition"] == "rejected"
-    assert "quantization_mismatch" in row["reason_codes"]
+    assert "probe_quantization_mismatch" in row["reason_codes"]
 
 
 def test_missing_probe_evidence_quarantines():
@@ -156,14 +168,14 @@ def test_missing_probe_evidence_quarantines():
 
 def test_unsanitized_provider_config_rejected():
     row = _evaluate(
-        _candidate(provider_config={"no_cloud": True, "api_key": "sk-live"})
+        _candidate(provider_config={"no_cloud": True, "cloud_fallback_allowed": False, "api_key": "sk-live"})
     )
     assert row["disposition"] == "rejected"
     assert "provider_config_unsanitized" in row["reason_codes"]
 
 
 def test_missing_no_cloud_evidence_quarantines():
-    row = _evaluate(_candidate(provider_config={"num_ctx": 8192}))
+    row = _evaluate(_candidate(provider_config={"num_ctx": 8192, "cloud_fallback_allowed": False}))
     assert row["disposition"] == "quarantined"
     assert "no_cloud_evidence_missing" in row["reason_codes"]
 
@@ -186,9 +198,7 @@ def test_report_shape_and_counts():
             _candidate(),
             _candidate(model="unknown-model:latest"),
         ],
-        rights=_rights(),
-        probe=_probe(),
-        input_digests={"admissions": "e" * 64},
+        _inputs(digests={"admissions": "e" * 64}),
     )
     assert report["schema_version"] == SCHEMA_VERSION
     assert report["counts"] == {
@@ -203,20 +213,18 @@ def test_report_shape_and_counts():
 
 
 def test_report_closed_when_all_accepted():
-    report = build_admission_report(
-        [_candidate()], rights=_rights(), probe=_probe(), input_digests={}
-    )
+    report = build_admission_report([_candidate()], _inputs())
     assert report["closed"] is True
 
 
 def test_rejected_row_keeps_reason_coded_evidence():
     row = _evaluate(_candidate(endpoint="https://example.com"))
     assert row["disposition"] == "rejected"
-    assert row["evidence"]["endpoint"] == "https://example.com"
+    assert row["report"]["endpoint"] is None
 
 
 def test_non_object_candidate_fails_closed():
-    row = evaluate_admission("not-an-object", rights=_rights(), probe=_probe())
+    row = evaluate_admission("not-an-object", inputs=_inputs())
     assert row["disposition"] == "rejected"
     assert "candidate_not_object" in row["reason_codes"]
 

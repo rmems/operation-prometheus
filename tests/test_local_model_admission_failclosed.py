@@ -1,0 +1,325 @@
+"""Fail-closed regression tests for local-model admission boundaries."""
+
+from __future__ import annotations
+
+import hashlib
+import json
+from pathlib import Path
+
+import pytest
+
+from lib.model_admission import (
+    AdmissionInputs,
+    build_admission_report,
+    evaluate_admission,
+)
+
+MODEL = "hermes-3-llama-3.1-8b:q4_k_m"
+DIGEST = "sha256:" + "a" * 64
+TERMS = "b" * 64
+
+
+def _candidate(**overrides):
+    candidate = {
+        "model": MODEL,
+        "ollama_digest": DIGEST,
+        "quantization": "Q4_K_M",
+        "runtime": "ollama",
+        "endpoint": "http://127.0.0.1:11434",
+        "license": "Apache-2.0",
+        "provider_config": {
+            "no_cloud": True,
+            "cloud_fallback_allowed": False,
+            "num_ctx": 8192,
+        },
+        "probed_at": "2026-09-21T12:00:00Z",
+    }
+    candidate.update(overrides)
+    return candidate
+
+
+def _rights(**overrides):
+    rights = {
+        "schema_version": "model_rights_v1",
+        "models": {
+            MODEL: {
+                "license": "Apache-2.0",
+                "terms_sha256": TERMS,
+                "terms_source": "upstream/LICENSE",
+            },
+        },
+    }
+    rights.update(overrides)
+    return rights
+
+
+def _probe(**overrides):
+    probe = {
+        "schema_version": "ollama_probe_v1",
+        "runtime": "ollama",
+        "version": "0.5.4",
+        "endpoint": "http://127.0.0.1:11434",
+        "probed_at": "2026-09-21T12:00:00Z",
+        "models": [{"name": MODEL, "digest": DIGEST}],
+        "show": {
+            MODEL: {
+                "details": {"quantization_level": "Q4_K_M"},
+                "license": "Apache-2.0",
+            }
+        },
+    }
+    probe.update(overrides)
+    return probe
+
+
+def _inputs(rights=None, probe=None, digests=None):
+    return AdmissionInputs(
+        rights=rights if rights is not None else _rights(),
+        probe=probe if probe is not None else _probe(),
+        input_digests=digests or {},
+    )
+
+
+def _evaluate(candidate=None, rights=None, probe=None):
+    return evaluate_admission(
+        candidate if candidate is not None else _candidate(),
+        inputs=_inputs(rights=rights, probe=probe),
+    )
+
+
+def _assert_never_accepted(row):
+    assert row["disposition"] in ("quarantined", "rejected")
+
+
+# --- 1. Complete emitted evidence bound into the digest --------------------
+
+def test_accepted_evidence_is_complete_and_bound():
+    row = _evaluate()
+    report = row["report"]
+    assert report["decision"] == "accepted"
+    assert report["reasons"] == []
+    assert report["runtime"] == {"name": "ollama", "version": "0.5.4"}
+    assert report["rights"]["terms_source"] == "upstream/LICENSE"
+    assert report["rights"]["identifier"] == "Apache-2.0"
+    assert report["rights"]["terms_sha256"] == TERMS
+    assert report["provider_config"]["cloud_fallback_allowed"] is False
+    assert report["cloud_fallback_allowed"] is False
+    assert report["fallback_evidence"]["no_cloud"] is True
+    assert report["evidence_digest"]
+
+
+def test_digest_computed_from_emitted_evidence():
+    row = _evaluate()
+    report = dict(row["report"])
+    digest = report.pop("evidence_digest")
+    canonical = json.dumps(
+        report, ensure_ascii=False, sort_keys=True, separators=(",", ":")
+    ).encode("utf-8")
+    assert digest == hashlib.sha256(canonical).hexdigest()
+
+
+# --- 2. no-cloud proof fails closed ----------------------------------------
+
+@pytest.mark.parametrize(
+    "config",
+    [
+        {"no_cloud": True, "cloud_fallback_allowed": True},
+        {"no_cloud": True},
+        {"no_cloud": True, "cloud_fallback_allowed": "false"},
+        {"no_cloud": True, "fallback_url": "https://api.example.com/v1"},
+        {"no_cloud": True, "api_key": ["sk-secret"]},
+        {"no_cloud": True, "unknown_knob": 1},
+    ],
+)
+def test_no_cloud_counterexamples_never_accept(config):
+    row = _evaluate(_candidate(provider_config=config))
+    _assert_never_accepted(row)
+
+
+def test_missing_cloud_fallback_disproof_rejected():
+    config = {"no_cloud": True}
+    row = _evaluate(_candidate(provider_config=config))
+    assert row["disposition"] == "rejected"
+    assert "cloud_fallback_not_disproven" in row["reason_codes"]
+
+
+def test_unknown_config_key_rejected():
+    row = _evaluate(
+        _candidate(
+            provider_config={
+                "no_cloud": True,
+                "cloud_fallback_allowed": False,
+                "mystery": True,
+            }
+        )
+    )
+    assert row["disposition"] == "rejected"
+    assert "provider_config_unknown_keys" in row["reason_codes"]
+
+
+def test_list_secret_value_unsanitized():
+    row = _evaluate(
+        _candidate(
+            provider_config={
+                "no_cloud": True,
+                "cloud_fallback_allowed": False,
+                "api_key": ["sk-secret"],
+            }
+        )
+    )
+    assert row["disposition"] == "rejected"
+    assert "provider_config_unsanitized" in row["reason_codes"]
+
+
+# --- 3. Coherent probe evidence --------------------------------------------
+
+def test_probe_missing_schema_version_quarantines():
+    probe = _probe()
+    del probe["schema_version"]
+    _assert_never_accepted(_evaluate(probe=probe))
+
+
+def test_probe_missing_runtime_version_quarantines():
+    probe = _probe()
+    del probe["version"]
+    row = _evaluate(probe=probe)
+    _assert_never_accepted(row)
+    assert "probe_runtime_missing" in row["reason_codes"]
+
+
+def test_duplicate_model_rows_conflicting_digests_rejected():
+    probe = _probe()
+    probe["models"].append({"name": MODEL, "digest": "sha256:" + "f" * 64})
+    row = _evaluate(probe=probe)
+    assert row["disposition"] == "rejected"
+    assert "probe_digest_conflict" in row["reason_codes"]
+
+
+def test_duplicate_model_rows_same_digest_quarantine():
+    probe = _probe()
+    probe["models"].append({"name": MODEL, "digest": DIGEST})
+    row = _evaluate(probe=probe)
+    assert row["disposition"] == "quarantined"
+    assert "probe_duplicate" in row["reason_codes"]
+
+
+def test_conflicting_show_license_rejected():
+    probe = _probe()
+    probe["show"][MODEL]["license"] = "MIT"
+    row = _evaluate(probe=probe)
+    assert row["disposition"] == "rejected"
+    assert "probe_license_conflict" in row["reason_codes"]
+
+
+def test_missing_probe_timestamp_quarantines():
+    probe = _probe()
+    del probe["probed_at"]
+    row = _evaluate(probe=probe)
+    assert row["disposition"] == "quarantined"
+    assert "probe_timestamp_missing" in row["reason_codes"]
+
+
+def test_emitted_probe_timestamp_is_probe_value():
+    probe = _probe(probed_at="2026-09-21T09:30:00Z")
+    row = _evaluate(
+        _candidate(probed_at="2026-09-21T09:30:00Z"), probe=probe
+    )
+    assert row["report"]["probed_at"] == "2026-09-21T09:30:00Z"
+
+
+def test_missing_probe_quantization_quarantines():
+    probe = _probe()
+    del probe["show"][MODEL]["details"]["quantization_level"]
+    row = _evaluate(probe=probe)
+    _assert_never_accepted(row)
+    assert "probe_quantization_missing" in row["reason_codes"]
+
+
+def test_missing_probe_endpoint_quarantines():
+    probe = _probe()
+    del probe["endpoint"]
+    row = _evaluate(probe=probe)
+    _assert_never_accepted(row)
+    assert "probe_endpoint_missing" in row["reason_codes"]
+
+
+# --- 6. Canonical identity values ------------------------------------------
+
+def test_malformed_digest_quarantines():
+    row = _evaluate(_candidate(ollama_digest="not-a-sha256"))
+    _assert_never_accepted(row)
+    assert "digest_invalid" in row["reason_codes"]
+
+
+def test_uppercase_endpoint_rejected_as_noncanonical():
+    row = _evaluate(_candidate(endpoint="HTTP://LOCALHOST:11434/"))
+    _assert_never_accepted(row)
+    assert "endpoint_invalid" in row["reason_codes"]
+
+
+def test_date_only_timestamp_rejected():
+    probe = _probe(probed_at="2026-09-21")
+    row = _evaluate(_candidate(probed_at="2026-09-21"), probe=probe)
+    _assert_never_accepted(row)
+    assert "probe_timestamp_missing" in row["reason_codes"]
+
+
+def test_timezone_naive_timestamp_rejected():
+    probe = _probe(probed_at="2026-09-21T12:00:00")
+    row = _evaluate(
+        _candidate(probed_at="2026-09-21T12:00:00"), probe=probe
+    )
+    _assert_never_accepted(row)
+
+
+# --- report integrity --------------------------------------------------------
+
+def test_input_digests_include_manifest_self():
+    report = build_admission_report(
+        [_candidate()],
+        _inputs(digests={
+            "admissions": "e" * 64,
+            "inputs_manifest": "f" * 64,
+        }),
+    )
+    assert report["input_digests"]["inputs_manifest"] == "f" * 64
+    decision = report["decisions"][0]
+    assert decision["input_digests"]["inputs_manifest"] == "f" * 64
+
+
+# --- locked #74 contract: singular report -----------------------------------
+
+FIXTURE_DIR = Path(__file__).resolve().parent / "fixtures" / "local_model_admission"
+
+
+def _singular_schema():
+    bundle = json.loads(
+        (Path(__file__).resolve().parent.parent
+         / "schemas" / "local_model_admission.schema.json").read_text()
+    )
+    return {"$ref": "#/definitions/decision", "definitions": bundle["definitions"]}
+
+
+def test_accepted_report_fixture_matches_locked_schema():
+    import jsonschema
+
+    report = json.loads(
+        (FIXTURE_DIR / "accepted_report.json").read_text()
+    )
+    jsonschema.validate(report, _singular_schema())
+    assert report["decision"] == "accepted"
+    assert report["reasons"] == []
+    assert report["cloud_fallback_allowed"] is False
+    assert report["fallback_evidence"]["cloud_fallback_allowed"] is False
+
+
+def test_emitted_decision_is_verbatim_reproducible():
+    row = _evaluate()
+    report = row["report"]
+    assert report["schema_version"] == "local_model_admission_v1"
+    clone = dict(report)
+    digest = clone.pop("evidence_digest")
+    canonical = json.dumps(
+        clone, ensure_ascii=False, sort_keys=True, separators=(",", ":")
+    ).encode("utf-8")
+    assert digest == hashlib.sha256(canonical).hexdigest()

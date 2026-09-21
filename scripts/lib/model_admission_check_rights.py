@@ -67,4 +67,9 @@ def rights_reasons(
         quarantined.append("terms_digest_missing")
     elif _custom_terms_mismatch(custom, terms):
         rejected.append("terms_digest_mismatch")
+    if not (
+        isinstance(rights_row.get("terms_source"), str)
+        and rights_row["terms_source"].strip()
+    ):
+        quarantined.append("terms_source_missing")
     return rejected, quarantined, family, terms

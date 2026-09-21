@@ -35,5 +35,7 @@
       },
       "license": "LicenseRef-Hermes-Community"
     }
-  }
+  },
+  "runtime": "ollama",
+  "version": "0.5.4"
 }
