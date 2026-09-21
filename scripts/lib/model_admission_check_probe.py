@@ -42,57 +42,109 @@ def _schema_reasons(probe: dict[str, Any]) -> list[str]:
     return []
 
 
+def _probe_endpoint_reasons(
+    probe: dict[str, Any], candidate: dict[str, Any]
+) -> tuple[list[str], list[str]]:
+    probe_endpoint = canonical_loopback_endpoint(probe.get("endpoint"))
+    if probe_endpoint is None:
+        return [], ["probe_endpoint_missing"]
+    if canonical_loopback_endpoint(candidate.get("endpoint")) != probe_endpoint:
+        return [], ["probe_endpoint_mismatch"]
+    return [], []
+
+
+def _probe_runtime_reasons(
+    probe: dict[str, Any], candidate: dict[str, Any]
+) -> tuple[list[str], list[str]]:
+    """Probe must report the exact same supported runtime + a version."""
+    probe_runtime = _text(probe.get("runtime"))
+    if probe_runtime is None or not _text(probe.get("version")):
+        return [], ["probe_runtime_missing"]
+    if probe_runtime != _text(candidate.get("runtime")):
+        return ["probe_runtime_mismatch"], []
+    return [], []
+
+
+def _probe_timestamp_reasons(
+    probe: dict[str, Any], candidate: dict[str, Any]
+) -> tuple[list[str], list[str]]:
+    probed_at = probe.get("probed_at")
+    if not parse_rfc3339_tz(probed_at):
+        return [], ["probe_timestamp_missing"]
+    declared_at = candidate.get("probed_at")
+    if not isinstance(declared_at, str) or not declared_at.strip():
+        return [], ["probe_timestamp_missing"]
+    if not parse_rfc3339_tz(declared_at):
+        return [], ["probe_timestamp_invalid"]
+    if declared_at.strip() != probed_at.strip():
+        return [], ["probe_timestamp_mismatch"]
+    return [], []
+
+
 def _meta_reasons(
     probe: dict[str, Any], candidate: dict[str, Any]
 ) -> tuple[list[str], list[str]]:
-    """Loopback endpoint / runtime / runtime-version / probe timestamp."""
+    """Loopback endpoint / runtime identity / probe timestamp."""
     rejected, quarantined = [], []
-    probe_endpoint = canonical_loopback_endpoint(probe.get("endpoint"))
-    if probe_endpoint is None:
-        quarantined.append("probe_endpoint_missing")
-    elif canonical_loopback_endpoint(candidate.get("endpoint")) != probe_endpoint:
-        quarantined.append("probe_endpoint_mismatch")
-    if _text(probe.get("runtime")) is None or not _text(probe.get("version")):
-        quarantined.append("probe_runtime_missing")
-    probed_at = probe.get("probed_at")
-    if not parse_rfc3339_tz(probed_at):
-        quarantined.append("probe_timestamp_missing")
-    else:
-        declared_at = candidate.get("probed_at")
-        if not isinstance(declared_at, str) or not declared_at.strip():
-            quarantined.append("probe_timestamp_missing")
-        elif not parse_rfc3339_tz(declared_at):
-            quarantined.append("probe_timestamp_invalid")
-        elif declared_at.strip() != probed_at.strip():
-            quarantined.append("probe_timestamp_mismatch")
+    for check in (
+        _probe_endpoint_reasons,
+        _probe_runtime_reasons,
+        _probe_timestamp_reasons,
+    ):
+        rej, quar = check(probe, candidate)
+        rejected += rej
+        quarantined += quar
     return rejected, quarantined
+
+
+def _matching_rows(
+    probe: dict[str, Any], model: str
+) -> list[dict[str, Any]]:
+    return [
+        entry
+        for entry in _models_entries(probe)
+        if _text(entry.get("name")) == model
+    ]
+
+
+def _duplicate_reasons(
+    matches: list[dict[str, Any]],
+) -> tuple[list[str], list[str]]:
+    digests = {_text(entry.get("digest")) for entry in matches}
+    if len(digests) > 1:
+        return ["probe_digest_conflict"], []
+    return [], ["probe_duplicate"]
+
+
+def _declared_digest_reasons(candidate: dict[str, Any]) -> list[str] | None:
+    if ollama_digest_or_none(candidate.get("ollama_digest")) is not None:
+        return None
+    if _text(candidate.get("ollama_digest")) is None:
+        return ["digest_missing"]
+    return ["digest_invalid"]
+
+
+def _digest_match_reasons(
+    entry: dict[str, Any], candidate: dict[str, Any]
+) -> tuple[list[str], list[str]]:
+    invalid = _declared_digest_reasons(candidate)
+    if invalid is not None:
+        return [], invalid
+    if _text(entry.get("digest")) != candidate["ollama_digest"].strip():
+        return ["probe_digest_mismatch"], []
+    return [], []
 
 
 def _identity_reasons(
     model: str, probe: dict[str, Any], candidate: dict[str, Any]
 ) -> tuple[list[str], list[str]]:
     """Exactly one matching model row with a valid, matching digest."""
-    matches = [
-        entry
-        for entry in _models_entries(probe)
-        if _text(entry.get("name")) == model
-    ]
+    matches = _matching_rows(probe, model)
     if not matches:
         return [], ["probe_evidence_missing"]
-    digests = {_text(entry.get("digest")) for entry in matches}
     if len(matches) > 1:
-        if len(digests) > 1:
-            return ["probe_digest_conflict"], []
-        return [], ["probe_duplicate"]
-    declared = ollama_digest_or_none(candidate.get("ollama_digest"))
-    if declared is None:
-        if _text(candidate.get("ollama_digest")) is None:
-            return [], ["digest_missing"]
-        return [], ["digest_invalid"]
-    observed = _text(matches[0].get("digest"))
-    if observed != declared:
-        return ["probe_digest_mismatch"], []
-    return [], []
+        return _duplicate_reasons(matches)
+    return _digest_match_reasons(matches[0], candidate)
 
 
 def _show_reasons(

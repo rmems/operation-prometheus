@@ -6,11 +6,11 @@ must admit it. The gate is fail-closed: every candidate is classified
 `accepted`, `quarantined` (evidence incomplete), or `rejected` (evidence
 contradictory) with explicit reason codes.
 
-The emitted bundle contains one **singular** `local_model_admission_v1`
-decision report per candidate in `decisions[]` — the canonical object that
-downstream consumers (e.g. #74) hash and validate. Each decision binds:
+`--out` is the canonical **singular** `local_model_admission_v1` decision
+report for the single candidate admitted — the exact object downstream
+consumers (e.g. #74) hash and validate. Each decision binds:
 
-- exact model name (including tag) and Ollama manifest digest
+- distinct model name and tag plus the Ollama manifest digest
   (`sha256:` + 64 lowercase hex);
 - quantization level (matched against the probe's `show` details) and the
   upstream revision when known;
@@ -29,10 +29,17 @@ downstream consumers (e.g. #74) hash and validate. Each decision binds:
 
 `decision` is `accepted` only when every binding holds; missing or
 conflicting identity/rights/endpoint/fallback evidence always yields
-`quarantined` or `rejected` with machine-readable `reasons`. The bundle
-adds `closed`, `counts`, `license_families`, `evidence_digests`, and
-`bundle_errors` for aggregate accounting
-(`schemas/local_model_admission.schema.json`).
+`quarantined` or `rejected` with machine-readable `reasons`. The root schema
+(`schemas/local_model_admission.schema.json`) validates the singular report
+and conditionally constrains `accepted` reports: every mandatory field
+non-null and valid, empty `reasons`, literal `cloud_fallback_allowed: false`
+with a coherent `fallback_evidence`, required frozen-input digests,
+canonical loopback endpoint, and a closed/sanitized provider config.
+
+`--admissions` must contain exactly one candidate; zero or multiple
+candidates fail closed with exit 2. `--diagnostics <path>` optionally emits
+the aggregate bundle (`closed`, `counts`, `decisions[]`, `license_families`,
+`evidence_digests`, `bundle_errors`) alongside the singular report.
 
 ## Run (offline, recorded probe — used by CI)
 
@@ -72,8 +79,9 @@ numbers such as `1e999`, and non-finite constants rejected).
 Rejection (contradictory evidence): `candidate_not_object`, `model_missing`,
 `rights_conflict`, `terms_digest_mismatch`, `probe_digest_conflict`,
 `probe_digest_mismatch`, `probe_quantization_mismatch`,
-`probe_license_conflict`, `runtime_unsupported`, `endpoint_not_loopback`,
-`provider_config_unknown_keys`, `provider_config_unsanitized`,
+`probe_license_conflict`, `probe_runtime_mismatch`, `runtime_unsupported`,
+`endpoint_not_loopback`, `provider_config_unknown_keys`,
+`provider_config_invalid`, `provider_config_unsanitized`,
 `cloud_endpoint_detected`, `cloud_fallback_not_disproven`.
 
 Quarantine (incomplete evidence): `rights_evidence_missing`,
@@ -85,4 +93,4 @@ Quarantine (incomplete evidence): `rights_evidence_missing`,
 `runtime_missing`, `endpoint_missing`, `endpoint_invalid`,
 `provider_config_missing`, `no_cloud_evidence_missing`,
 `probe_timestamp_missing`, `probe_timestamp_invalid`,
-`probe_timestamp_mismatch`.
+`probe_timestamp_mismatch`, `model_tag_missing`.

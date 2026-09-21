@@ -292,25 +292,61 @@ def test_input_digests_include_manifest_self():
 FIXTURE_DIR = Path(__file__).resolve().parent / "fixtures" / "local_model_admission"
 
 
-def _singular_schema():
-    bundle = json.loads(
-        (Path(__file__).resolve().parent.parent
-         / "schemas" / "local_model_admission.schema.json").read_text()
-    )
-    return {"$ref": "#/definitions/decision", "definitions": bundle["definitions"]}
+ROOT_SCHEMA = json.loads(
+    (Path(__file__).resolve().parent.parent
+     / "schemas" / "local_model_admission.schema.json").read_text()
+)
 
 
 def test_accepted_report_fixture_matches_locked_schema():
     import jsonschema
 
-    report = json.loads(
-        (FIXTURE_DIR / "accepted_report.json").read_text()
-    )
-    jsonschema.validate(report, _singular_schema())
+    report = json.loads((FIXTURE_DIR / "accepted_report.json").read_text())
+    jsonschema.validate(report, ROOT_SCHEMA)
     assert report["decision"] == "accepted"
     assert report["reasons"] == []
+    assert report["model_name"] == "hermes-3-llama-3.1-8b"
+    assert report["model_tag"] == "q4_k_m"
     assert report["cloud_fallback_allowed"] is False
     assert report["fallback_evidence"]["cloud_fallback_allowed"] is False
+
+
+def test_schema_rejects_forged_accepted_with_nulls():
+    import jsonschema
+    import pytest as _pytest
+
+    forged = {
+        "schema_version": "local_model_admission_v1",
+        "decision": "accepted",
+        "reasons": [],
+        "model": None,
+        "model_name": None,
+        "model_tag": None,
+        "ollama_digest": None,
+        "quantization": None,
+        "upstream_revision": None,
+        "runtime": {"name": None, "version": None},
+        "endpoint": None,
+        "rights": {
+            "identifier": None,
+            "terms_source": None,
+            "terms_sha256": None,
+        },
+        "license_family": "missing",
+        "provider_config": None,
+        "cloud_fallback_allowed": None,
+        "fallback_evidence": {
+            "no_cloud": None,
+            "cloud_fallback_allowed": None,
+            "unsanitized_keys": [],
+            "remote_endpoints": [],
+        },
+        "probed_at": None,
+        "input_digests": {},
+        "evidence_digest": "0" * 64,
+    }
+    with _pytest.raises(jsonschema.ValidationError):
+        jsonschema.validate(forged, ROOT_SCHEMA)
 
 
 def test_emitted_decision_is_verbatim_reproducible():
@@ -323,3 +359,87 @@ def test_emitted_decision_is_verbatim_reproducible():
         clone, ensure_ascii=False, sort_keys=True, separators=(",", ":")
     ).encode("utf-8")
     assert digest == hashlib.sha256(canonical).hexdigest()
+
+
+# --- 3. value-level credential scanning and strict config types --------------
+
+def test_credential_in_stop_list_rejected():
+    row = _evaluate(
+        _candidate(
+            provider_config={
+                "no_cloud": True,
+                "cloud_fallback_allowed": False,
+                "stop": ["ghp_abcdefghijklmnopqrstuvwxyz0123456789"],
+            }
+        )
+    )
+    assert row["disposition"] == "rejected"
+    assert "provider_config_unsanitized" in row["reason_codes"]
+
+
+def test_credential_in_allowed_scalar_key_rejected():
+    row = _evaluate(
+        _candidate(
+            provider_config={
+                "no_cloud": True,
+                "cloud_fallback_allowed": False,
+                "stop": "sk-proj-ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789",
+            }
+        )
+    )
+    assert row["disposition"] == "rejected"
+    assert "provider_config_unsanitized" in row["reason_codes"]
+
+
+def test_nested_wrapper_under_allowed_leaf_rejected():
+    row = _evaluate(
+        _candidate(
+            provider_config={
+                "no_cloud": True,
+                "cloud_fallback_allowed": False,
+                "wrapper": {"num_ctx": 1},
+            }
+        )
+    )
+    assert row["disposition"] == "rejected"
+    assert "provider_config_unknown_keys" in row["reason_codes"]
+
+
+def test_wrong_type_for_numeric_knob_rejected():
+    row = _evaluate(
+        _candidate(
+            provider_config={
+                "no_cloud": True,
+                "cloud_fallback_allowed": False,
+                "num_ctx": "big",
+            }
+        )
+    )
+    assert row["disposition"] == "rejected"
+    assert "provider_config_invalid" in row["reason_codes"]
+
+
+# --- 4. probe/candidate runtime identity -------------------------------------
+
+def test_foreign_probe_runtime_rejected():
+    row = _evaluate(probe=_probe(runtime="cloud-runtime"))
+    assert row["disposition"] == "rejected"
+    assert "probe_runtime_mismatch" in row["reason_codes"]
+
+
+# --- 6. IPv6 loopback canonicalization ---------------------------------------
+
+def test_ipv6_endpoint_emitted_with_brackets():
+    candidate = _candidate(endpoint="http://[::1]:11434")
+    probe = _probe(endpoint="http://[::1]:11434")
+    row = _evaluate(candidate, probe=probe)
+    assert row["report"]["endpoint"] == "http://[::1]:11434"
+    assert row["disposition"] == "accepted"
+
+
+# --- 5. empty candidate input fails closed ------------------------------------
+
+def test_empty_candidates_fail_closed():
+    report = build_admission_report([], _inputs())
+    assert report["closed"] is False
+    assert "no_candidates" in report["bundle_errors"]

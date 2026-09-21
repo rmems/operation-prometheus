@@ -6,7 +6,9 @@ from typing import Any
 
 from .model_admission_evidence import (
     canonical_loopback_endpoint,
+    credential_config_values,
     endpoint_host,
+    invalid_config_values,
     remote_config_endpoints,
     unknown_config_keys,
     unsanitized_config_keys,
@@ -46,7 +48,9 @@ def config_reasons(config: Any) -> tuple[list[str], list[str]]:
     rejected: list[str] = []
     if unknown_config_keys(config):
         rejected.append("provider_config_unknown_keys")
-    if unsanitized_config_keys(config):
+    if invalid_config_values(config):
+        rejected.append("provider_config_invalid")
+    if unsanitized_config_keys(config) or credential_config_values(config):
         rejected.append("provider_config_unsanitized")
     if remote_config_endpoints(config):
         rejected.append("cloud_endpoint_detected")

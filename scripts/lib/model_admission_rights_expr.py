@@ -17,11 +17,12 @@ def _paren_depths(identifier: str) -> list[int]:
     return depths
 
 
+def _depths_valid(depths: list[int]) -> bool:
+    return not depths or (min(depths) >= 0 and depths[-1] == 0)
+
+
 def _parentheses_balanced(identifier: str) -> bool:
-    depths = _paren_depths(identifier)
-    if not depths:
-        return True
-    return min(depths) >= 0 and not depths[-1]
+    return _depths_valid(_paren_depths(identifier))
 
 
 def _matching_close_index(identifier: str) -> int | None:
@@ -52,15 +53,19 @@ def _unwrap_outer_parens(identifier: str) -> str | None:
     return stripped if _parentheses_balanced(stripped) else None
 
 
+def _inside_parens(depths: list[int], start: int, end: int) -> bool:
+    return any(depths[i] for i in range(start, end))
+
+
 def _top_level_expression_parts(expression: str) -> list[str] | None:
     """Split on AND/OR/WITH that are outside parentheses."""
     depths = _paren_depths(expression)
-    if any(value < 0 for value in depths) or (depths and depths[-1] != 0):
+    if not _depths_valid(depths):
         return None
     parts: list[str] = []
     start = 0
     for match in _EXPRESSION_SPLIT_RE.finditer(expression):
-        if any(depths[i] for i in range(match.start(), match.end())):
+        if _inside_parens(depths, match.start(), match.end()):
             continue
         parts.append(expression[start : match.start()].strip())
         parts.append(match.group(1).upper())

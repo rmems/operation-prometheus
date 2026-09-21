@@ -2,7 +2,7 @@
   "cloud_fallback_allowed": false,
   "decision": "accepted",
   "endpoint": "http://127.0.0.1:11434",
-  "evidence_digest": "0c7b90b6452a5ce74db4817fabefbad62e22e9f28e7bb488c5c6822051765b5e",
+  "evidence_digest": "7bba55f785b31f4b941644d040a3a681ef80a26ade7b7c807c2adf07f8bb3384",
   "fallback_evidence": {
     "cloud_fallback_allowed": false,
     "no_cloud": true,
@@ -16,6 +16,8 @@
   },
   "license_family": "spdx",
   "model": "hermes-3-llama-3.1-8b:q4_k_m",
+  "model_name": "hermes-3-llama-3.1-8b",
+  "model_tag": "q4_k_m",
   "ollama_digest": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
   "probed_at": "2026-09-21T12:00:00Z",
   "provider_config": {

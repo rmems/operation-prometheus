@@ -40,6 +40,33 @@ def _declared_family(
     return family, ["license_unknown"] if family == "unknown" else []
 
 
+def _license_binding_reasons(
+    candidate_license: str | None, rights_license: str | None
+) -> tuple[list[str], list[str]]:
+    if candidate_license is None:
+        return [], ["license_missing"]
+    if rights_license is not None and candidate_license != rights_license:
+        return ["rights_conflict"], []
+    return [], []
+
+
+def _terms_reasons(
+    rights_row: dict[str, Any], custom: Any
+) -> tuple[list[str], list[str], str | None]:
+    """Terms digest + terms source binding."""
+    rejected: list[str] = []
+    quarantined: list[str] = []
+    terms = sha256_or_none(rights_row.get("terms_sha256"))
+    if terms is None:
+        quarantined.append("terms_digest_missing")
+    elif _custom_terms_mismatch(custom, terms):
+        rejected.append("terms_digest_mismatch")
+    source = rights_row.get("terms_source")
+    if not isinstance(source, str) or not source.strip():
+        quarantined.append("terms_source_missing")
+    return rejected, quarantined, terms
+
+
 def rights_reasons(
     candidate_license: str | None, rights_row: Any
 ) -> tuple[list[str], list[str], str, str | None]:
@@ -49,7 +76,6 @@ def rights_reasons(
 
     rights_license = normalize_license_id(rights_row.get("license"))
     custom = rights_row.get("custom_license")
-    terms = sha256_or_none(rights_row.get("terms_sha256"))
 
     rejected: list[str] = []
     quarantined: list[str] = []
@@ -58,18 +84,10 @@ def rights_reasons(
     family, family_reasons = _declared_family(rights_license, custom)
     quarantined += family_reasons
 
-    if candidate_license is None:
-        quarantined.append("license_missing")
-    elif rights_license is not None and candidate_license != rights_license:
-        rejected.append("rights_conflict")
-
-    if terms is None:
-        quarantined.append("terms_digest_missing")
-    elif _custom_terms_mismatch(custom, terms):
-        rejected.append("terms_digest_mismatch")
-    if not (
-        isinstance(rights_row.get("terms_source"), str)
-        and rights_row["terms_source"].strip()
-    ):
-        quarantined.append("terms_source_missing")
+    rej, quar = _license_binding_reasons(candidate_license, rights_license)
+    rejected += rej
+    quarantined += quar
+    rej, quar, terms = _terms_reasons(rights_row, custom)
+    rejected += rej
+    quarantined += quar
     return rejected, quarantined, family, terms

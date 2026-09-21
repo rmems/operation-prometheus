@@ -55,6 +55,26 @@ ALLOWED_CONFIG_KEYS = frozenset(
     }
 )
 
+# Allowed value types per allowlisted provider-config key.
+CONFIG_KEY_TYPES = {
+    "no_cloud": "bool",
+    "cloud_fallback_allowed": "bool",
+    "seed": "int",
+    "mirostat": "int",
+    "keep_alive": "str",
+    "stop": "str_list",
+}
+
+_SECRET_VALUE_RE = re.compile(
+    r"ghp_[A-Za-z0-9]{20,}"
+    r"|github_pat_[A-Za-z0-9_]{20,}"
+    r"|sk-(?:proj-)?[A-Za-z0-9_-]{20,}"
+    r"|xox[baprs]-[A-Za-z0-9-]{10,}"
+    r"|AKIA[0-9A-Z]{16}"
+    r"|AIza[0-9A-Za-z_-]{20,}"
+    r"|Bearer\s+[A-Za-z0-9._-]{10,}"
+)
+
 _SECRET_KEY_RE = re.compile(
     r"api[-_]?key|token|secret|password|passwd|authorization|credential",
     re.IGNORECASE,
@@ -168,32 +188,41 @@ def _text(value: Any) -> str | None:
     return value.strip() if isinstance(value, str) and value.strip() else None
 
 
+def _endpoint_text_ok(value: Any) -> bool:
+    return (
+        isinstance(value, str)
+        and value == value.strip()
+        and value.startswith("http://")
+    )
+
+
+def _canonical_netloc(parsed) -> str | None:
+    """Lowercase loopback host:port netloc, or None."""
+    netloc = parsed.netloc
+    if netloc != netloc.lower() or "@" in netloc:
+        return None
+    if parsed.hostname not in LOOPBACK_HOSTS or parsed.port is None:
+        return None
+    return netloc
+
+
 def canonical_loopback_endpoint(value: Any) -> str | None:
     """Canonical http://loopback endpoint, or None when non-canonical.
 
     Requires a lowercase literal ``http`` scheme and lowercase host with an
     explicit port; path must be empty or ``/``; no query, fragment, userinfo,
-    or credentials.
+    or credentials. IPv6 loopback keeps its brackets
+    (``http://[::1]:11434``).
     """
-    if not isinstance(value, str) or value != value.strip():
-        return None
-    if not value.startswith("http://"):
+    if not _endpoint_text_ok(value):
         return None
     parsed = urlparse(value)
-    host = parsed.hostname or ""
-    if parsed.scheme != "http" or host not in LOOPBACK_HOSTS:
-        return None
-    netloc = parsed.netloc
-    if netloc != netloc.lower() or "@" in netloc or ":" not in netloc:
+    if parsed.scheme != "http":
         return None
     if parsed.path not in ("", "/") or parsed.query or parsed.fragment:
         return None
-    if parsed.port is None:
-        return None
-    canonical = f"http://{host}:{parsed.port}"
-    if parsed.path == "/":
-        canonical += "/"
-    return canonical
+    netloc = _canonical_netloc(parsed)
+    return None if netloc is None else f"http://{netloc}{parsed.path}"
 
 
 def endpoint_host(endpoint: Any) -> str | None:
@@ -226,24 +255,76 @@ def parse_rfc3339_tz(value: Any) -> bool:
 
 
 def _iter_config_items(config: Any, prefix: str = ""):
-    """Yield (dotted_key, scalar_value) pairs from a nested config object."""
+    """Yield (dotted_key, value) pairs from a nested config object."""
     if not isinstance(config, dict):
         return
     for key, value in config.items():
         name = f"{prefix}{key}" if isinstance(key, str) else prefix
+        yield name, value
         if isinstance(value, dict):
             yield from _iter_config_items(value, f"{name}.")
-        else:
-            yield name, value
 
 
 def unknown_config_keys(config: Any) -> list[str]:
-    """Leaf keys outside the strict provider-config allowlist."""
+    """Config paths whose segments are not all allowlisted (nesting rejects)."""
     return [
         name
         for name, _ in _iter_config_items(config)
-        if name.rsplit(".", 1)[-1] not in ALLOWED_CONFIG_KEYS
+        if not all(
+            segment in ALLOWED_CONFIG_KEYS for segment in name.split(".")
+        )
     ]
+
+
+def invalid_config_values(config: Any) -> list[str]:
+    """Leaves violating the allowed type/range for their key.
+
+    Nested mappings are invalid (the allowlist is flat); numeric knobs must
+    be finite non-negative numbers, ``seed``/``mirostat`` integers,
+    ``no_cloud``/``cloud_fallback_allowed`` booleans, ``stop`` a list of
+    strings, ``keep_alive`` a string.
+    """
+    invalid: list[str] = []
+    for name, value in _iter_config_items(config):
+        leaf = name.rsplit(".", 1)[-1]
+        if leaf not in ALLOWED_CONFIG_KEYS or isinstance(value, dict):
+            continue
+        kind = CONFIG_KEY_TYPES.get(leaf, "num")
+        if not _value_matches_kind(value, kind):
+            invalid.append(name)
+    return invalid
+
+
+def _value_matches_kind(value: Any, kind: str) -> bool:
+    if kind == "bool":
+        return isinstance(value, bool)
+    if kind == "int":
+        return isinstance(value, int) and not isinstance(value, bool)
+    if kind == "str":
+        return isinstance(value, str)
+    if kind == "str_list":
+        return isinstance(value, list) and all(
+            isinstance(item, str) for item in value
+        )
+    return (
+        isinstance(value, (int, float))
+        and not isinstance(value, bool)
+        and math.isfinite(value)
+        and value >= 0
+    )
+
+
+def credential_config_values(config: Any) -> list[str]:
+    """Scalar values anywhere in the config matching credential patterns."""
+    hits: list[str] = []
+    for name, value in _iter_config_items(config):
+        strings = value if isinstance(value, list) else [value]
+        if any(
+            isinstance(item, str) and _SECRET_VALUE_RE.search(item)
+            for item in strings
+        ):
+            hits.append(name)
+    return hits
 
 
 def _nonempty_secret_value(value: Any) -> bool:

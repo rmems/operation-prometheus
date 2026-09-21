@@ -100,6 +100,8 @@ def evaluate_admission(candidate: Any, *, inputs: AdmissionInputs) -> dict:
     model = _text(candidate.get("model")) or ""
     rejected: list[str] = [] if model else ["model_missing"]
     quarantined: list[str] = []
+    if model and _model_name_tag(model)[1] is None:
+        quarantined.append("model_tag_missing")
 
     rights_license = normalize_license_id(candidate.get("license"))
     r_rej, r_quar, family, terms = rights_reasons(
@@ -135,6 +137,13 @@ def evaluate_admission(candidate: Any, *, inputs: AdmissionInputs) -> dict:
     return row
 
 
+def _model_name_tag(model: str | None) -> tuple[str | None, str | None]:
+    if not model or ":" not in model:
+        return model, None
+    name, _, tag = model.rpartition(":")
+    return name or None, tag or None
+
+
 def _decision_report(row: dict[str, Any], inputs: AdmissionInputs) -> dict:
     """The singular ``local_model_admission_v1`` report #74 consumes."""
     candidate = row["candidate"]
@@ -142,11 +151,14 @@ def _decision_report(row: dict[str, Any], inputs: AdmissionInputs) -> dict:
     rights_row = _rights_row(inputs.rights, row["model"] or "")
     rights_row = rights_row if isinstance(rights_row, dict) else {}
     config = _provider_config(candidate)
+    model_name, model_tag = _model_name_tag(row["model"])
     report = {
         "schema_version": SCHEMA_VERSION,
         "decision": row["disposition"],
         "reasons": row["reason_codes"],
         "model": row["model"],
+        "model_name": model_name,
+        "model_tag": model_tag,
         "ollama_digest": ollama_digest_or_none(candidate.get("ollama_digest")),
         "quantization": _text(candidate.get("quantization")),
         "upstream_revision": _text(candidate.get("upstream_revision")),
@@ -190,6 +202,8 @@ def build_admission_report(
     grouped = _rows_by_disposition(rows)
     decisions = [r["report"] for r in rows]
     errors = list(inputs.bundle_errors or [])
+    if not rows:
+        errors.append("no_candidates")
     closed = (
         not grouped["quarantined"] and not grouped["rejected"] and not errors
     )

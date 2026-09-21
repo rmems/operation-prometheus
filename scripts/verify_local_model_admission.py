@@ -51,7 +51,7 @@ DEFAULT_LIVE_ENDPOINT = "http://127.0.0.1:11434"
 class _LoopbackOnlyRedirect(urllib.request.HTTPRedirectHandler):
     """Refuse every redirect: the live probe must stay on loopback."""
 
-    def redirect_request(self, req, fp, code, msg, headers, newurl):  # noqa: D102
+    def redirect_request(self, *_args, **_kwargs):  # noqa: D102
         return None
 
 
@@ -244,13 +244,22 @@ def main(argv: list[str] | None = None) -> int:
             return 2
         digests["probe"] = sha256_bytes(render_report(probe))
 
+    candidates = inputs["candidates"]
+    if not isinstance(candidates, list) or len(candidates) != 1:
+        print(
+            "ERROR: --admissions must contain exactly one candidate "
+            "(the singular admission report covers one model)",
+            file=sys.stderr,
+        )
+        return 2
+
     bundle_errors = (
         _inputs_manifest_errors(inputs["inputs_manifest"], digests)
         if inputs["inputs_manifest"] is not None
         else []
     )
     report = build_admission_report(
-        inputs["candidates"],
+        candidates,
         AdmissionInputs(
             rights=inputs["rights"],
             probe=probe,
@@ -258,13 +267,15 @@ def main(argv: list[str] | None = None) -> int:
             bundle_errors=bundle_errors,
         ),
     )
-    rendered = render_report(report)
+    decision = report["decisions"][0]
+    rendered = render_report(decision)
     if not args.check:
         print(
-            f"{args.out.name}: {report['counts']['accepted']} accepted, "
-            f"{report['counts']['quarantined']} quarantined, "
-            f"{report['counts']['rejected']} rejected."
+            f"{args.out.name}: decision={decision['decision']}"
+            + (f" reasons={decision['reasons']}" if decision["reasons"] else "")
         )
+    if args.diagnostics is not None and not args.check:
+        args.diagnostics.write_bytes(render_report(report))
     return _emit(args, rendered, report["closed"])
 
 
@@ -294,7 +305,14 @@ def build_parser() -> argparse.ArgumentParser:
         "--endpoint", default=DEFAULT_LIVE_ENDPOINT,
         help="Ollama endpoint for --live (loopback only)",
     )
-    parser.add_argument("--out", type=Path, required=True)
+    parser.add_argument(
+        "--out", type=Path, required=True,
+        help="canonical singular local_model_admission_v1 report path",
+    )
+    parser.add_argument(
+        "--diagnostics", type=Path,
+        help="optional bundle diagnostics path (aggregate accounting only)",
+    )
     parser.add_argument(
         "--check", action="store_true",
         help="exit non-zero if --out differs instead of rewriting it",
