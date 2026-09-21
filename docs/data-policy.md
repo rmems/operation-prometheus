@@ -90,14 +90,18 @@ repository retains that repository's own license:
   card's "License / provenance" section. Existing v0 source docs and cards
   are being backfilled with explicit source-license identities; this
   requirement applies going forward regardless of backfill status.
-- The canonical Hugging Face dataset card must document the full set of
+- Any public or exported dataset release's card must document the full set of
   represented source licenses rather than implying a single blanket license
-  for the dataset.
-- Before any positive split is published, `scripts/validate_license_closure.py`
-  must close every released row against frozen inventory evidence, snapshot
-  hashes, and card/manifest disclosure. See
-  [license-closure.md](license-closure.md). Unresolved rows are quarantined
-  with their evidence and cannot appear in released positives.
+  for the dataset. A Hugging Face publication destination
+  (GitHub [#52](https://github.com/rmems/operation-prometheus/issues/52)) is
+  deferred and is not required by this policy.
+- Before any positive split is published or exported,
+  `scripts/validate_license_closure.py` must close every released row against
+  frozen inventory evidence, snapshot hashes, and card/manifest disclosure.
+  See [license-closure.md](license-closure.md). Unresolved rows are quarantined
+  with their evidence and cannot appear in released positives. This gate does
+  not apply to locally retained/private trajectory records, which are
+  classified under this policy rather than deleted.
 
 See [NOTICE](../NOTICE) for the complete distinction between
 Operation Prometheus-owned material and incorporated source-derived material.

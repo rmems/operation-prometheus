@@ -2,6 +2,14 @@
 
 Positive corpus publication is fail-closed on source-repository licensing.
 
+This gate applies to source-derived trajectories marked eligible for a public
+or exported release. It is an export/publication gate, not a definition of
+corpus eligibility: locally retained or private trajectory records are not
+required to close, and a record that cannot close is quarantined for release
+rather than deleted. Publication to Hugging Face
+(GitHub [#52](https://github.com/rmems/operation-prometheus/issues/52)) is
+deferred and is not a required destination for this check.
+
 Every released positive trajectory must resolve through all three of:
 
 1. Frozen source-inventory license evidence (SPDX id or `LicenseRef-*` plus a
