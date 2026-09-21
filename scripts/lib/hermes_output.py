@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import hashlib
 import re
+from dataclasses import dataclass
 from typing import Any
 
 from .hermes_sanitize import sanitize_query_secrets
@@ -34,6 +35,33 @@ _ACTOR_TYPES = {
 _SHA256_RE = re.compile(r"^[a-f0-9]{64}$")
 
 
+@dataclass(frozen=True)
+class _EmissionContext:
+    input_digest: str
+    manifest_digest: str
+    admission_digest: str
+    raw_trace_sha256: str
+    terminal: str
+
+
+@dataclass(frozen=True)
+class _EventData:
+    event_id: str
+    timestamp: str
+    actor_type: str
+    event_type: str
+    disposition: str
+    content: str = ""
+
+
+@dataclass(frozen=True)
+class _EventContext:
+    repository: dict[str, Any]
+    started_at: str
+    terminal: str
+    last_index: int
+
+
 def _is_sha256(value: Any) -> bool:
     return isinstance(value, str) and _SHA256_RE.fullmatch(value) is not None
 
@@ -44,6 +72,7 @@ def _nonempty_str(value: Any) -> bool:
 
 def sha256_bytes(payload: bytes) -> str:
     return hashlib.sha256(payload).hexdigest()
+
 
 def _identity_tuple(record: dict[str, Any]) -> tuple[str, str, str, str]:
     return (
@@ -146,7 +175,9 @@ def _independent_terminal(
     hashes = _artifact_hashes(verifier.get("artifacts"))
     subject = verifier.get("subject")
     expected_subject = dict(
-        zip(("run_id", "session_id", "task_id", "raw_trace_id"), _identity_tuple(record))
+        zip(
+            ("run_id", "session_id", "task_id", "raw_trace_id"), _identity_tuple(record)
+        )
     )
     if subject != expected_subject:
         return terminal, ["verifier_subject_mismatch"]
@@ -240,11 +271,7 @@ def _emit_record(
     record: dict[str, Any],
     *,
     manifest: dict[str, Any],
-    input_digest: str,
-    manifest_digest: str,
-    admission_digest: str,
-    raw_trace_sha256: str,
-    terminal: str,
+    context: _EmissionContext,
 ) -> dict[str, Any]:
     repository = _repository_from_manifest(manifest)
     workspace = _workspace_from_manifest(manifest)
@@ -262,8 +289,8 @@ def _emit_record(
         else {},
         ("policy", "strip_tags"),
     )
-    events = _events(record, repository, terminal)
-    payload = _software_payload(record, terminal)
+    events = _events(record, repository, context.terminal)
+    payload = _software_payload(record, context.terminal)
     run_id, session_id, task_id, raw_trace_id = _identity_tuple(record)
     return {
         "artifacts": [],
@@ -275,17 +302,17 @@ def _emit_record(
             "producer_partial": record["partial"],
         },
         "execution_provenance": {
-            "admission_report_sha256": admission_digest,
-            "input_sha256": input_digest,
+            "admission_report_sha256": context.admission_digest,
+            "input_sha256": context.input_digest,
             "model": model,
             "ollama": _ollama_from_manifest(manifest),
             "producer": producer,
             "raw_trace_id": raw_trace_id,
-            "raw_trace_sha256": raw_trace_sha256,
+            "raw_trace_sha256": context.raw_trace_sha256,
             "repository": repository,
             "reasoning_retention": retention,
             "run_id": run_id,
-            "run_manifest_sha256": manifest_digest,
+            "run_manifest_sha256": context.manifest_digest,
             "session_id": session_id,
             "task_id": task_id,
             "verifier": _verifier_from_manifest(manifest),
@@ -297,7 +324,7 @@ def _emit_record(
         "schema_version": SCHEMA_VERSION,
         "software_payload": payload,
         "source_id": raw_trace_id,
-        "terminal_disposition": terminal,
+        "terminal_disposition": context.terminal,
         "trajectory_id": _trajectory_id(record),
         "trajectory_type": "software",
     }
@@ -309,59 +336,56 @@ def _events(
     messages = record.get("messages")
     if not isinstance(messages, list) or not messages:
         timestamp = str(record.get("started_at") or record.get("ended_at") or "")
-        return [_event("e1", timestamp, "agent", "run", terminal, repository, "")]
-    events: list[dict[str, Any]] = []
-    last_index = len(messages) - 1
-    for index, message in enumerate(messages):
-        if not isinstance(message, dict):
-            raise ValueError("non-object message")
-        role = str(message.get("role") or "assistant")
-        actor_type = _ACTOR_TYPES.get(role, "agent")
-        event_type = "tool_call" if role == "tool" else "message"
-        disposition = terminal if index == last_index else "neutral"
-        content = message.get("content")
-        if not isinstance(content, str):
-            raise ValueError("non-string message content")
-        timestamp = str(message.get("timestamp") or record.get("started_at") or "")
-        events.append(
-            _event(
-                f"e{index + 1}",
-                timestamp,
-                actor_type,
-                event_type,
-                disposition,
-                repository,
-                content,
-            )
-        )
-    return events
+        return [
+            _event(_EventData("e1", timestamp, "agent", "run", terminal), repository)
+        ]
+    context = _EventContext(
+        repository=repository,
+        started_at=str(record.get("started_at") or ""),
+        terminal=terminal,
+        last_index=len(messages) - 1,
+    )
+    return [
+        _message_event(message, index, context)
+        for index, message in enumerate(messages)
+    ]
 
 
-def _event(
-    event_id: str,
-    timestamp: str,
-    actor_type: str,
-    event_type: str,
-    disposition: str,
-    repository: dict[str, Any],
-    content: str,
-) -> dict[str, Any]:
+def _message_event(message: Any, index: int, context: _EventContext) -> dict[str, Any]:
+    if not isinstance(message, dict):
+        raise ValueError("non-object message")
+    content = message.get("content")
+    if not isinstance(content, str):
+        raise ValueError("non-string message content")
+    role = str(message.get("role") or "assistant")
+    data = _EventData(
+        event_id=f"e{index + 1}",
+        timestamp=str(message.get("timestamp") or context.started_at),
+        actor_type=_ACTOR_TYPES.get(role, "agent"),
+        event_type="tool_call" if role == "tool" else "message",
+        disposition=context.terminal if index == context.last_index else "neutral",
+        content=content,
+    )
+    return _event(data, context.repository)
+
+
+def _event(data: _EventData, repository: dict[str, Any]) -> dict[str, Any]:
     event: dict[str, Any] = {
         "actor": {
-            "id": PROVIDER_ID if actor_type != "human" else "user",
-            "type": actor_type,
+            "id": PROVIDER_ID if data.actor_type != "human" else "user",
+            "type": data.actor_type,
         },
         "code_state": {
             "base_oid": repository.get("base_oid"),
             "head_oid": repository.get("head_oid"),
         },
-        "disposition": disposition,
-        "event_id": event_id,
-        "event_type": event_type,
-        "timestamp": timestamp,
+        "disposition": data.disposition,
+        "event_id": data.event_id,
+        "event_type": data.event_type,
+        "timestamp": data.timestamp,
     }
-    if content:
-        event["content"] = content
+    if data.content:
+        event["content"] = data.content
     url = repository.get("url")
     if isinstance(url, str) and url:
         event["evidence_references"] = [url]
@@ -395,5 +419,3 @@ def _patch_from_messages(record: dict[str, Any]) -> str:
         if message.get("role") == "tool" and message.get("name") == "apply_patch":
             return str(message.get("content") or "")
     return ""
-
-

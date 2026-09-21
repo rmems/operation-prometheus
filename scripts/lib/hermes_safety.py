@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import json
 import xml.etree.ElementTree as ET
+from collections.abc import Callable, Iterator
 from typing import Any
 
 from validate_jsonl import HOME_PATH_RE
@@ -37,84 +38,84 @@ def _json_credential_string(value: str) -> bool:
     return _contains_credential_key(parsed)
 
 
-def _contains_secret(value: Any) -> bool:
-    if isinstance(value, str):
-        return (
-            bool(find_secrets(value))
-            or contains_header_secret(value)
-            or _json_credential_string(value)
-        )
-    if isinstance(value, list):
-        return any(_contains_secret(item) for item in value)
+def _walk(value: Any) -> Iterator[tuple[Any | None, Any]]:
     if isinstance(value, dict):
-        return any(
-            _contains_secret(key) or _contains_secret(item)
-            for key, item in value.items()
-        )
-    return False
+        for key, item in value.items():
+            yield key, item
+            yield from _walk(item)
+    elif isinstance(value, list):
+        for item in value:
+            yield None, item
+            yield from _walk(item)
+
+
+def _contains_string(value: Any, predicate: Callable[[str], bool]) -> bool:
+    if isinstance(value, str) and predicate(value):
+        return True
+    return any(
+        (isinstance(key, str) and predicate(key))
+        or (isinstance(item, str) and predicate(item))
+        for key, item in _walk(value)
+    )
+
+
+def _secret_string(value: str) -> bool:
+    return (
+        bool(find_secrets(value))
+        or contains_header_secret(value)
+        or _json_credential_string(value)
+    )
+
+
+def _contains_secret(value: Any) -> bool:
+    return _contains_string(value, _secret_string)
 
 
 def _contains_credential_key(value: Any) -> bool:
-    if isinstance(value, list):
-        return any(_contains_credential_key(item) for item in value)
-    if isinstance(value, dict):
-        for key, item in value.items():
-            if _credential_key(key) and item not in (
-                None,
-                "",
-                False,
-            ):
-                return True
-            if _contains_credential_key(item):
-                return True
-    return False
+    return any(
+        key is not None and _credential_key(key) and item not in (None, "", False)
+        for key, item in _walk(value)
+    )
 
 
 def _contains_home_path(value: Any) -> bool:
-    if isinstance(value, str):
-        return HOME_PATH_RE.search(value) is not None
-    if isinstance(value, list):
-        return any(_contains_home_path(item) for item in value)
-    if isinstance(value, dict):
-        return any(
-            _contains_home_path(key) or _contains_home_path(item)
-            for key, item in value.items()
-        )
-    return False
+    return _contains_string(value, lambda text: HOME_PATH_RE.search(text) is not None)
 
 
 def _contains_hidden_reasoning(value: Any) -> bool:
-    if isinstance(value, str):
-        return hidden_markup_remains(value)
-    if isinstance(value, list):
-        return any(_contains_hidden_reasoning(item) for item in value)
-    if isinstance(value, dict):
-        return any(
-            is_hidden_key(key) or _contains_hidden_reasoning(item)
-            for key, item in value.items()
-        )
-    return False
+    if isinstance(value, dict) and any(is_hidden_key(key) for key in value):
+        return True
+    if any(key is not None and is_hidden_key(key) for key, _ in _walk(value)):
+        return True
+    return _contains_string(value, hidden_markup_remains)
 
 
 def _tool_payload_reasons(record: dict[str, Any]) -> list[str]:
     messages = record.get("messages")
     if not isinstance(messages, list):
         return []
-    for message in messages:
-        if not isinstance(message, dict) or message.get("role") != "tool":
-            continue
-        content = message.get("content")
-        if not isinstance(content, str):
-            continue
-        text = content.lstrip()
-        if text.startswith("{") or text.startswith("["):
-            try:
-                json.loads(text)
-            except json.JSONDecodeError:
-                return ["invalid_tool_payload"]
-        elif text.startswith("<") and not _xml_well_formed(text):
-            return ["invalid_tool_payload"]
-    return []
+    invalid = any(_invalid_tool_payload(message) for message in messages)
+    return ["invalid_tool_payload"] if invalid else []
+
+
+def _invalid_tool_payload(message: Any) -> bool:
+    if not isinstance(message, dict) or message.get("role") != "tool":
+        return False
+    content = message.get("content")
+    if not isinstance(content, str):
+        return False
+    text = content.lstrip()
+    if text.startswith(("{", "[")):
+        return not _json_well_formed(text)
+    return text.startswith("<") and not _xml_well_formed(text)
+
+
+def _json_well_formed(text: str) -> bool:
+    try:
+        json.loads(text)
+    except json.JSONDecodeError:
+        return False
+    return True
 
 
 def _xml_well_formed(text: str) -> bool:
@@ -136,6 +137,3 @@ def _safety_reasons(value: Any, *, allow_hidden: bool = False) -> list[str]:
     if not allow_hidden and _contains_hidden_reasoning(value):
         reasons.append("hidden_reasoning")
     return reasons
-
-
-

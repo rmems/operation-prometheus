@@ -1,59 +1,6 @@
 """Normalize verified Hermes traces into trajectory v1.1 (Linear RM-1348)."""
 
-from __future__ import annotations
-
-import json
-import time
-from pathlib import Path
-
-import jsonschema
-import pytest
-
-from hermes_fixtures import (
-    ADMISSION_FIXTURE,
-    BASE_OID,
-    HEAD_OID,
-    ROOT,
-    SYNTHETIC_GITHUB_TOKEN,
-    VERIFIER_ARTIFACT,
-    cli_args,
-    default_admission,
-    default_verifier,
-    hermes_record,
-    sha256_bytes,
-    seal_admission,
-    write_json,
-    write_scenario,
-    write_fixture_scenario,
-)
-from lib.hermes_normalize import LocalFileBoundary, canonical_dumps, normalize_files
-from lib.hermes_sanitize import strip_hidden_reasoning
-from normalize_hermes_trajectories import build_parser, main
-from validate_jsonl import load_schema, validate_file
-
-V1_1_SCHEMA = ROOT / "schemas" / "trajectory_v1_1.schema.json"
-V0_SCHEMA = ROOT / "schemas" / "pr_trajectory.schema.json"
-V1_SCHEMA = ROOT / "schemas" / "trajectory_v1.schema.json"
-
-
-def _load_jsonl(path: Path) -> list[dict]:
-    lines = [line for line in path.read_text(encoding="utf-8").splitlines() if line]
-    return [json.loads(line) for line in lines]
-
-
-def _run(paths: dict[str, Path], extra: list[str] | None = None) -> int:
-    argv = cli_args(paths)
-    if extra:
-        argv.extend(extra)
-    return main(argv)
-
-
-def _scenario_from_fixture(tmp_path: Path, name: str) -> dict[str, Path]:
-    return write_fixture_scenario(tmp_path, name)
-
-
-def _report(paths: dict[str, Path]) -> dict:
-    return json.loads(paths["report"].read_text(encoding="utf-8"))
+from hermes_normalize_test_support import *  # noqa: F403
 
 
 def test_cli_contract_exposes_exact_flags():
@@ -71,6 +18,7 @@ def test_cli_contract_exposes_exact_flags():
     assert "--model-admission" in usage
     assert "--output" in usage
     assert "--report" in usage
+
 
 def test_successful_run_is_accepted_v1_1_and_binds_provenance(tmp_path: Path):
     paths = _scenario_from_fixture(tmp_path, "successful.jsonl")
@@ -121,6 +69,7 @@ def test_successful_run_is_accepted_v1_1_and_binds_provenance(tmp_path: Path):
     assert report["rejected_count"] == 0
     assert report["records"][0]["status"] == "accepted"
 
+
 def test_completed_true_with_failing_verifier_is_not_successful(tmp_path: Path):
     paths = _scenario_from_fixture(tmp_path, "completed_true_verifier_failed.jsonl")
     assert _run(paths) == 0
@@ -130,6 +79,7 @@ def test_completed_true_with_failing_verifier_is_not_successful(tmp_path: Path):
     assert records[0]["terminal_disposition"] == "failed"
     assert records[0]["terminal_disposition"] != "successful"
     assert records[0]["execution_provenance"]["verifier"]["outcome"] == "fail"
+
 
 def test_partial_and_interrupted_runs_keep_execution_metadata(tmp_path: Path):
     partial = _scenario_from_fixture(tmp_path / "partial", "partial.jsonl")
@@ -144,6 +94,7 @@ def test_partial_and_interrupted_runs_keep_execution_metadata(tmp_path: Path):
     assert interrupted_record["terminal_disposition"] == "interrupted"
     assert interrupted_record["execution"]["producer_completed"] is False
 
+
 def test_unverified_run_is_quarantined(tmp_path: Path):
     paths = _scenario_from_fixture(tmp_path, "unverified.jsonl")
     assert _run(paths) == 0
@@ -153,6 +104,7 @@ def test_unverified_run_is_quarantined(tmp_path: Path):
     assert report["quarantined_count"] == 1
     assert report["records"][0]["status"] == "quarantined"
     assert "unverified" in ",".join(report["records"][0]["reason_codes"])
+
 
 def test_hidden_reasoning_is_stripped_from_trainable_views(tmp_path: Path):
     paths = _scenario_from_fixture(tmp_path, "hidden_reasoning.jsonl")
@@ -168,6 +120,7 @@ def test_hidden_reasoning_is_stripped_from_trainable_views(tmp_path: Path):
         "strip_hidden"
     )
 
+
 def test_secret_leakage_is_rejected_and_not_emitted(tmp_path: Path):
     paths = _scenario_from_fixture(tmp_path, "secret_leak.jsonl")
     original = paths["input"].read_bytes()
@@ -180,6 +133,7 @@ def test_secret_leakage_is_rejected_and_not_emitted(tmp_path: Path):
     dumped = paths["report"].read_text(encoding="utf-8")
     assert "ghp_" not in dumped
 
+
 def test_query_secrets_are_stripped_from_accepted_output(tmp_path: Path):
     paths = _scenario_from_fixture(tmp_path, "query_secret.jsonl")
     assert _run(paths) == 0
@@ -188,6 +142,7 @@ def test_query_secrets_are_stripped_from_accepted_output(tmp_path: Path):
     assert "access_token" not in dumped
     record = _load_jsonl(paths["output"])[0]
     assert record["schema_version"] in ("1.1", "v1.1")
+
 
 def test_malformed_and_truncated_jsonl_are_rejected(tmp_path: Path):
     malformed = _scenario_from_fixture(tmp_path / "malformed", "malformed.jsonl")
@@ -202,6 +157,7 @@ def test_malformed_and_truncated_jsonl_are_rejected(tmp_path: Path):
     assert truncated["output"].read_text(encoding="utf-8") == ""
     assert "invalid_json" in malformed_report["records"][0]["reason_codes"]
     assert "invalid_json" in truncated_report["records"][0]["reason_codes"]
+
 
 def test_duplicate_keys_and_duplicate_records_are_rejected(tmp_path: Path):
     keys = _scenario_from_fixture(tmp_path / "keys", "duplicate_keys.jsonl")
@@ -218,6 +174,7 @@ def test_duplicate_keys_and_duplicate_records_are_rejected(tmp_path: Path):
     assert "duplicate" in ",".join(records_report["records"][1]["reason_codes"])
     assert len(_load_jsonl(records["output"])) == 1
 
+
 def test_admission_digest_mismatch_fails_closed(tmp_path: Path):
     paths = write_scenario(tmp_path, [hermes_record(run_id="run-mismatch")])
     manifest = json.loads(paths["manifest"].read_text(encoding="utf-8"))
@@ -228,6 +185,7 @@ def test_admission_digest_mismatch_fails_closed(tmp_path: Path):
     report = _report(paths)
     assert report["rejected_count"] >= 1
     assert any("digest" in ",".join(row["reason_codes"]) for row in report["records"])
+
 
 def test_output_and_report_cannot_alias_inputs(tmp_path: Path):
     paths = write_scenario(tmp_path, [hermes_record(run_id="run-alias")])
@@ -244,6 +202,7 @@ def test_output_and_report_cannot_alias_inputs(tmp_path: Path):
     colliding_same["report"] = paths["report"]
     assert _run(colliding_same) == 2
 
+
 def test_hard_link_output_collision_fails_closed(tmp_path: Path):
     paths = write_scenario(tmp_path, [hermes_record(run_id="run-link")])
     linked = tmp_path / "linked-output.jsonl"
@@ -253,6 +212,7 @@ def test_hard_link_output_collision_fails_closed(tmp_path: Path):
     original = paths["input"].read_bytes()
     assert _run(colliding) == 2
     assert paths["input"].read_bytes() == original
+
 
 def test_rerun_is_byte_identical_canonical_json(tmp_path: Path):
     paths = write_scenario(
@@ -275,6 +235,7 @@ def test_rerun_is_byte_identical_canonical_json(tmp_path: Path):
         json.loads(first_report).keys()
     )
 
+
 def test_local_file_boundary_rejects_http_and_allows_injected_replay(tmp_path: Path):
     paths = write_scenario(tmp_path, [hermes_record(run_id="run-replay")])
     frozen = {
@@ -294,4 +255,3 @@ def test_local_file_boundary_rejects_http_and_allows_injected_replay(tmp_path: P
     assert report["accepted_count"] == 1
     with pytest.raises(ValueError, match="local file"):
         LocalFileBoundary().read_bytes(Path("https://example.test/trace.jsonl"))
-

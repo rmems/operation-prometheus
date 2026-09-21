@@ -21,6 +21,7 @@ MANIFEST_SCHEMA_PATH = REPO_ROOT / "schemas" / "hermes_run_manifest.schema.json"
 RAW_SCHEMA_PATH = REPO_ROOT / "schemas" / "hermes_raw_trace.schema.json"
 SHA256_RE = re.compile(r"^[a-f0-9]{64}$")
 
+
 def _is_sha256(value: Any) -> bool:
     return isinstance(value, str) and SHA256_RE.fullmatch(value) is not None
 
@@ -87,39 +88,46 @@ def _workspace_errors(manifest: dict[str, Any]) -> list[str]:
 def _binding_errors(
     manifest: dict[str, Any], admission: dict[str, Any], admission_digest: str
 ) -> list[str]:
+    reasons = _admission_envelope_errors(manifest, admission, admission_digest)
+    reasons.extend(_admission_component_errors(manifest, admission))
+    reasons.extend(_cross_bind_errors(manifest, admission))
+    return reasons
+
+
+def _admission_envelope_errors(
+    manifest: dict[str, Any], admission: dict[str, Any], admission_digest: str
+) -> list[str]:
+    checks = (
+        (
+            str(manifest.get("admission_report_sha256") or "") != admission_digest,
+            "admission_digest_mismatch",
+        ),
+        (
+            admission.get("schema_version") != "local_model_admission_v1",
+            "admission_schema",
+        ),
+        (admission.get("decision") != "accepted", "admission_rejected"),
+        (admission.get("reasons") != [], "admission_reasons"),
+        (not _evidence_digest_ok(admission), "evidence_digest"),
+    )
+    return [reason for failed, reason in checks if failed]
+
+
+def _admission_component_errors(
+    manifest: dict[str, Any], admission: dict[str, Any]
+) -> list[str]:
     reasons: list[str] = []
-    expected = str(manifest.get("admission_report_sha256") or "")
-    if expected != admission_digest:
-        reasons.append("admission_digest_mismatch")
-    if admission.get("schema_version") != "local_model_admission_v1":
-        reasons.append("admission_schema")
-    if admission.get("decision") != "accepted":
-        reasons.append("admission_rejected")
-    if admission.get("reasons") != []:
-        reasons.append("admission_reasons")
-    if not _evidence_digest_ok(admission):
-        reasons.append("evidence_digest")
     model = admission.get("model")
     runtime = admission.get("runtime")
     rights = admission.get("rights")
     provider = admission.get("provider")
     probe = admission.get("probe")
     digests = admission.get("input_digests")
-    if not _object_fields(model, ("name", "tag", "ollama_digest", "quantization")):
-        reasons.append("admission_schema")
-    if (
-        isinstance(model, dict)
-        and "upstream_revision" in model
-        and model.get("upstream_revision") is not None
-        and not _nonempty_str(model.get("upstream_revision"))
-    ):
+    if not _model_valid(model):
         reasons.append("admission_schema")
     if not _object_fields(runtime, ("name", "version", "endpoint")):
         reasons.append("admission_schema")
-    if not _object_fields(rights, ("identifier", "terms_source", "terms_sha256")):
-        reasons.append("admission_schema")
-    elif rights.get("identifier") != manifest.get("output_license"):
-        reasons.append("rights_mismatch")
+    reasons.extend(_rights_errors(manifest, rights))
     if not isinstance(provider, dict) or provider.get("name") != "hermes-agent":
         reasons.append("provider_mismatch")
     if not _object_fields(probe, ("timestamp", "endpoint")):
@@ -130,11 +138,29 @@ def _binding_errors(
         reasons.append("admission_schema")
     if not _fallback_disproved(admission):
         reasons.append("cloud_fallback")
-    reasons.extend(_cross_bind_errors(manifest, admission))
     return reasons
 
 
-def _cross_bind_errors(manifest: dict[str, Any], admission: dict[str, Any]) -> list[str]:
+def _model_valid(model: Any) -> bool:
+    if not _object_fields(model, ("name", "tag", "ollama_digest", "quantization")):
+        return False
+    upstream = model.get("upstream_revision")
+    return (
+        "upstream_revision" not in model or upstream is None or _nonempty_str(upstream)
+    )
+
+
+def _rights_errors(manifest: dict[str, Any], rights: Any) -> list[str]:
+    if not _object_fields(rights, ("identifier", "terms_source", "terms_sha256")):
+        return ["admission_schema"]
+    if rights.get("identifier") != manifest.get("output_license"):
+        return ["rights_mismatch"]
+    return []
+
+
+def _cross_bind_errors(
+    manifest: dict[str, Any], admission: dict[str, Any]
+) -> list[str]:
     reasons: list[str] = []
     manifest_model = (
         manifest.get("model") if isinstance(manifest.get("model"), dict) else {}
@@ -145,13 +171,19 @@ def _cross_bind_errors(manifest: dict[str, Any], admission: dict[str, Any]) -> l
     for field in _MODEL_BIND_FIELDS:
         left = manifest_model.get(field)
         right = admission_model.get(field)
-        if field in _OPTIONAL_MODEL_FIELDS and not _present(left) and not _present(right):
+        if (
+            field in _OPTIONAL_MODEL_FIELDS
+            and not _present(left)
+            and not _present(right)
+        ):
             continue
         if left != right:
             reasons.append("model_mismatch")
             break
     ollama = manifest.get("ollama") if isinstance(manifest.get("ollama"), dict) else {}
-    runtime = admission.get("runtime") if isinstance(admission.get("runtime"), dict) else {}
+    runtime = (
+        admission.get("runtime") if isinstance(admission.get("runtime"), dict) else {}
+    )
     if (
         runtime.get("name") != ollama.get("runtime")
         or runtime.get("version") != ollama.get("version")
@@ -163,8 +195,12 @@ def _cross_bind_errors(manifest: dict[str, Any], admission: dict[str, Any]) -> l
         "endpoint"
     ) != ollama.get("endpoint"):
         reasons.append("probe_endpoint_mismatch")
-    producer = manifest.get("producer") if isinstance(manifest.get("producer"), dict) else {}
-    provider = admission.get("provider") if isinstance(admission.get("provider"), dict) else {}
+    producer = (
+        manifest.get("producer") if isinstance(manifest.get("producer"), dict) else {}
+    )
+    provider = (
+        admission.get("provider") if isinstance(admission.get("provider"), dict) else {}
+    )
     if provider.get("name") != producer.get("name"):
         reasons.append("provider_mismatch")
     return reasons
@@ -212,6 +248,3 @@ def _raw_validator() -> Any:
         load_schema(RAW_SCHEMA_PATH),
         format_checker=jsonschema.Draft7Validator.FORMAT_CHECKER,
     )
-
-
-

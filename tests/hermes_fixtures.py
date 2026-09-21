@@ -21,7 +21,9 @@ MODEL_DIGEST = "sha256:0123456789abcdef0123456789abcdef0123456789abcdef012345678
 TERMS_SHA256 = "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
 PRODUCER_REVISION = "c0ffee1c0ffee1c0ffee1c0ffee1c0ffee1c0ffe"
 VERIFIER_ARTIFACT_CONTENT = "synthetic verifier evidence"
-VERIFIER_ARTIFACT = hashlib.sha256(VERIFIER_ARTIFACT_CONTENT.encode("utf-8")).hexdigest()
+VERIFIER_ARTIFACT = hashlib.sha256(
+    VERIFIER_ARTIFACT_CONTENT.encode("utf-8")
+).hexdigest()
 SYNTHETIC_GITHUB_TOKEN = "ghp_AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA"
 
 FIXTURE_VERIFIER_OUTCOMES: dict[str, str | None] = {
@@ -75,12 +77,11 @@ def default_admission(**overrides: Any) -> dict[str, Any]:
 def _subject(record: dict[str, Any] | None) -> dict[str, str]:
     fields = ("run_id", "session_id", "task_id", "raw_trace_id")
     source = record or hermes_record(run_id="run-success")
-    if any(not isinstance(source.get(key), str) or not source.get(key) for key in fields):
+    if any(
+        not isinstance(source.get(key), str) or not source.get(key) for key in fields
+    ):
         source = hermes_record(run_id="run-success")
-    return {
-        key: str(source[key])
-        for key in fields
-    }
+    return {key: str(source[key]) for key in fields}
 
 
 def default_verifier(
@@ -224,11 +225,20 @@ def write_jsonl(path: Path, records: list[dict[str, Any]]) -> bytes:
 def write_scenario(
     tmp_path: Path,
     records: list[dict[str, Any]],
-    *,
-    admission: dict[str, Any] | None = None,
-    manifest_overrides: dict[str, Any] | None = None,
-    input_name: str = "input.jsonl",
+    **options: Any,
 ) -> dict[str, Path]:
+    admission = options.pop("admission", None)
+    manifest_overrides = options.pop("manifest_overrides", None)
+    input_name = options.pop("input_name", "input.jsonl")
+    if options:
+        unexpected = ", ".join(sorted(options))
+        raise TypeError(f"unexpected write_scenario arguments: {unexpected}")
+    if admission is not None and not isinstance(admission, dict):
+        raise TypeError("admission must be an object")
+    if manifest_overrides is not None and not isinstance(manifest_overrides, dict):
+        raise TypeError("manifest_overrides must be an object")
+    if not isinstance(input_name, str):
+        raise TypeError("input_name must be a string")
     admission_payload = seal_admission(
         default_admission() if admission is None else admission
     )

@@ -1,69 +1,19 @@
 """Normalize verified Hermes traces into trajectory v1.1 (Linear RM-1348)."""
 
-from __future__ import annotations
-
-import json
-import time
-from pathlib import Path
-
-import jsonschema
-import pytest
-
-from hermes_fixtures import (
-    ADMISSION_FIXTURE,
-    BASE_OID,
-    HEAD_OID,
-    ROOT,
-    SYNTHETIC_GITHUB_TOKEN,
-    VERIFIER_ARTIFACT,
-    cli_args,
-    default_admission,
-    default_verifier,
-    hermes_record,
-    sha256_bytes,
-    seal_admission,
-    write_json,
-    write_scenario,
-    write_fixture_scenario,
-)
-from lib.hermes_normalize import LocalFileBoundary, canonical_dumps, normalize_files
-from lib.hermes_sanitize import strip_hidden_reasoning
-from normalize_hermes_trajectories import build_parser, main
-from validate_jsonl import load_schema, validate_file
-
-V1_1_SCHEMA = ROOT / "schemas" / "trajectory_v1_1.schema.json"
-V0_SCHEMA = ROOT / "schemas" / "pr_trajectory.schema.json"
-V1_SCHEMA = ROOT / "schemas" / "trajectory_v1.schema.json"
-
-
-def _load_jsonl(path: Path) -> list[dict]:
-    lines = [line for line in path.read_text(encoding="utf-8").splitlines() if line]
-    return [json.loads(line) for line in lines]
-
-
-def _run(paths: dict[str, Path], extra: list[str] | None = None) -> int:
-    argv = cli_args(paths)
-    if extra:
-        argv.extend(extra)
-    return main(argv)
-
-
-def _scenario_from_fixture(tmp_path: Path, name: str) -> dict[str, Path]:
-    return write_fixture_scenario(tmp_path, name)
-
-
-def _report(paths: dict[str, Path]) -> dict:
-    return json.loads(paths["report"].read_text(encoding="utf-8"))
+from hermes_normalize_test_support import *  # noqa: F403
 
 
 def test_accepted_admission_with_reasons_is_rejected(tmp_path: Path):
     admission = default_admission(reasons=["rights_conflict"])
-    paths = write_scenario(tmp_path, [hermes_record(run_id="run-reasons")], admission=admission)
+    paths = write_scenario(
+        tmp_path, [hermes_record(run_id="run-reasons")], admission=admission
+    )
     assert _run(paths) == 0
     assert paths["output"].read_text(encoding="utf-8") == ""
     report = _report(paths)
     assert report["accepted_count"] == 0
     assert "admission_reasons" in report["records"][0]["reason_codes"]
+
 
 def test_runtime_and_probe_conflicts_are_rejected(tmp_path: Path):
     admission = default_admission()
@@ -79,6 +29,7 @@ def test_runtime_and_probe_conflicts_are_rejected(tmp_path: Path):
     joined = ",".join(report["records"][0]["reason_codes"])
     assert "runtime" in joined or "probe" in joined
 
+
 def test_provider_config_without_fallback_flag_is_rejected(tmp_path: Path):
     admission = default_admission()
     admission["provider"]["config"].pop("cloud_fallback_allowed")
@@ -89,6 +40,7 @@ def test_provider_config_without_fallback_flag_is_rejected(tmp_path: Path):
     report = _report(paths)
     assert report["accepted_count"] == 0
     assert "cloud_fallback" in report["records"][0]["reason_codes"]
+
 
 def test_fake_evidence_digest_is_rejected(tmp_path: Path):
     admission = default_admission()
@@ -109,6 +61,7 @@ def test_fake_evidence_digest_is_rejected(tmp_path: Path):
     report = _report(paths)
     assert report["accepted_count"] == 0
     assert "evidence_digest" in report["records"][0]["reason_codes"]
+
 
 def test_shared_or_missing_workspace_kind_is_rejected(tmp_path: Path):
     record = hermes_record(run_id="run-shared-ws")
@@ -131,6 +84,7 @@ def test_shared_or_missing_workspace_kind_is_rejected(tmp_path: Path):
         assert report["rejected_count"] >= 1
         assert "workspace" in ",".join(report["records"][0]["reason_codes"])
 
+
 def test_casefolded_hermes_verifier_identity_is_not_external(tmp_path: Path):
     paths = write_scenario(
         tmp_path,
@@ -151,6 +105,7 @@ def test_casefolded_hermes_verifier_identity_is_not_external(tmp_path: Path):
     report = _report(paths)
     assert report["accepted_count"] == 0
     assert "verifier" in ",".join(report["records"][0]["reason_codes"])
+
 
 def test_hidden_equivalent_tags_are_stripped_and_unclosed_are_rejected(tmp_path: Path):
     closed = hermes_record(
@@ -178,11 +133,13 @@ def test_hidden_equivalent_tags_are_stripped_and_unclosed_are_rejected(tmp_path:
     assert "private chain" not in open_dump
     assert _report(rejected)["rejected_count"] >= 1
 
+
 def test_unclosed_hidden_tags_are_scanned_in_bounded_time():
     value = "<think>" * 20_000
     started = time.monotonic()
     assert strip_hidden_reasoning(value) == value
     assert time.monotonic() - started < 1.0
+
 
 def test_repository_url_query_credential_is_not_emitted(tmp_path: Path):
     secret_url = (
@@ -199,11 +156,12 @@ def test_repository_url_query_credential_is_not_emitted(tmp_path: Path):
             manifest_overrides={"repository": {"url": secret_url}},
         )
         assert _run(paths) == 0
-        dumped = paths["output"].read_text(encoding="utf-8") + paths["report"].read_text(
-            encoding="utf-8"
-        )
+        dumped = paths["output"].read_text(encoding="utf-8") + paths[
+            "report"
+        ].read_text(encoding="utf-8")
         assert "ordinarysecretvalue123" not in dumped
         assert "access_token" not in dumped
+
 
 def test_header_and_json_credential_content_is_rejected(tmp_path: Path):
     bearer = hermes_record(
@@ -221,6 +179,7 @@ def test_header_and_json_credential_content_is_rejected(tmp_path: Path):
         assert dumped == ""
         assert "ordinarysecretvalue123" not in dumped
         assert _report(paths)["rejected_count"] >= 1
+
 
 def test_trajectory_id_encoding_resists_delimiter_collision(tmp_path: Path):
     first = hermes_record(run_id="a/b")
@@ -242,6 +201,7 @@ def test_trajectory_id_encoding_resists_delimiter_collision(tmp_path: Path):
     assert records[0]["execution_provenance"]["run_id"] == "a/b"
     assert records[1]["execution_provenance"]["raw_trace_id"] == "d/e"
 
+
 def test_malformed_tool_payload_is_rejected(tmp_path: Path):
     record = hermes_record(
         run_id="run-tool",
@@ -259,6 +219,7 @@ def test_malformed_tool_payload_is_rejected(tmp_path: Path):
     assert report["rejected_count"] >= 1
     assert "invalid_tool_payload" in report["records"][0]["reason_codes"]
 
+
 def test_unknown_message_field_is_rejected(tmp_path: Path):
     record = hermes_record(run_id="run-extra-field")
     record["messages"][1]["private_notes"] = "producer private container"
@@ -268,7 +229,7 @@ def test_unknown_message_field_is_rejected(tmp_path: Path):
     assert "producer private container" not in dumped
     assert _report(paths)["accepted_count"] == 0
 
+
 def test_canonical_dumps_rejects_nonfinite_numbers():
     with pytest.raises(ValueError):
         canonical_dumps({"value": float("nan")})
-

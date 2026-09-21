@@ -1,59 +1,6 @@
 """Normalize verified Hermes traces into trajectory v1.1 (Linear RM-1348)."""
 
-from __future__ import annotations
-
-import json
-import time
-from pathlib import Path
-
-import jsonschema
-import pytest
-
-from hermes_fixtures import (
-    ADMISSION_FIXTURE,
-    BASE_OID,
-    HEAD_OID,
-    ROOT,
-    SYNTHETIC_GITHUB_TOKEN,
-    VERIFIER_ARTIFACT,
-    cli_args,
-    default_admission,
-    default_verifier,
-    hermes_record,
-    sha256_bytes,
-    seal_admission,
-    write_json,
-    write_scenario,
-    write_fixture_scenario,
-)
-from lib.hermes_normalize import LocalFileBoundary, canonical_dumps, normalize_files
-from lib.hermes_sanitize import strip_hidden_reasoning
-from normalize_hermes_trajectories import build_parser, main
-from validate_jsonl import load_schema, validate_file
-
-V1_1_SCHEMA = ROOT / "schemas" / "trajectory_v1_1.schema.json"
-V0_SCHEMA = ROOT / "schemas" / "pr_trajectory.schema.json"
-V1_SCHEMA = ROOT / "schemas" / "trajectory_v1.schema.json"
-
-
-def _load_jsonl(path: Path) -> list[dict]:
-    lines = [line for line in path.read_text(encoding="utf-8").splitlines() if line]
-    return [json.loads(line) for line in lines]
-
-
-def _run(paths: dict[str, Path], extra: list[str] | None = None) -> int:
-    argv = cli_args(paths)
-    if extra:
-        argv.extend(extra)
-    return main(argv)
-
-
-def _scenario_from_fixture(tmp_path: Path, name: str) -> dict[str, Path]:
-    return write_fixture_scenario(tmp_path, name)
-
-
-def _report(paths: dict[str, Path]) -> dict:
-    return json.loads(paths["report"].read_text(encoding="utf-8"))
+from hermes_normalize_test_support import *  # noqa: F403
 
 
 def test_existing_v0_and_v1_validators_still_pass():
@@ -73,6 +20,7 @@ def test_existing_v0_and_v1_validators_still_pass():
     )
     assert errors == []
 
+
 def test_replacement_does_not_ship_github_page_cassettes():
     assert not (ROOT / "schemas" / "github_page_cassette.schema.json").exists()
     assert not (ROOT / "scripts" / "lib" / "github_page_fixtures.py").exists()
@@ -80,9 +28,11 @@ def test_replacement_does_not_ship_github_page_cassettes():
         ROOT / "tests" / "fixtures" / "github" / "pages" / "pr89_multipage.json"
     ).exists()
 
+
 def test_custody_and_reasoning_docs_exist():
     assert (ROOT / "docs" / "hermes-raw-trace-custody.md").is_file()
     assert (ROOT / "docs" / "hermes-reasoning-retention.md").is_file()
+
 
 def test_nonfinite_json_is_rejected(tmp_path: Path):
     paths = write_scenario(tmp_path, [hermes_record(run_id="run-nan")])
@@ -92,6 +42,7 @@ def test_nonfinite_json_is_rejected(tmp_path: Path):
     report = _report(paths)
     assert report["rejected_count"] == 1
     assert "invalid_json" in report["records"][0]["reason_codes"]
+
 
 def test_admission_model_mismatch_fails_closed(tmp_path: Path):
     admission = default_admission()
@@ -107,6 +58,7 @@ def test_admission_model_mismatch_fails_closed(tmp_path: Path):
     assert report["rejected_count"] >= 1
     joined = ",".join(report["records"][0]["reason_codes"])
     assert "model" in joined or "mismatch" in joined
+
 
 def test_shared_admission_fixture_uses_singular_decision_interface():
     payload = json.loads(ADMISSION_FIXTURE.read_text(encoding="utf-8"))
@@ -127,6 +79,7 @@ def test_shared_admission_fixture_uses_singular_decision_interface():
     assert default_admission()["decision"] == "accepted"
     assert "disposition" not in default_admission()
 
+
 def test_legacy_disposition_admission_is_rejected(tmp_path: Path):
     admission = default_admission()
     admission.pop("decision")
@@ -143,6 +96,7 @@ def test_legacy_disposition_admission_is_rejected(tmp_path: Path):
     joined = ",".join(report["records"][0]["reason_codes"])
     assert "admission" in joined
 
+
 def test_non_accepted_decision_admission_is_rejected(tmp_path: Path):
     admission = default_admission(decision="quarantined")
     paths = write_scenario(
@@ -155,6 +109,7 @@ def test_non_accepted_decision_admission_is_rejected(tmp_path: Path):
     assert report["accepted_count"] == 0
     assert report["rejected_count"] >= 1
     assert "admission_rejected" in report["records"][0]["reason_codes"]
+
 
 def test_manifest_verifier_conflict_with_trace_is_rejected(tmp_path: Path):
     record = hermes_record(
@@ -181,6 +136,7 @@ def test_manifest_verifier_conflict_with_trace_is_rejected(tmp_path: Path):
     joined = ",".join(report["records"][0]["reason_codes"])
     assert "verifier" in joined
 
+
 def test_manifest_repository_and_workspace_conflicts_are_rejected(tmp_path: Path):
     record = hermes_record(run_id="run-repo-conflict")
     record["repository"]["head_oid"] = "deadbeefdeadbeefdeadbeefdeadbeefdeadbeef"
@@ -196,6 +152,7 @@ def test_manifest_repository_and_workspace_conflicts_are_rejected(tmp_path: Path
     assert report["rejected_count"] >= 1
     joined = ",".join(report["records"][0]["reason_codes"])
     assert "repository" in joined or "workspace" in joined or "conflict" in joined
+
 
 def test_manifest_ollama_credential_is_rejected_and_not_emitted(tmp_path: Path):
     paths = write_scenario(
@@ -214,6 +171,7 @@ def test_manifest_ollama_credential_is_rejected_and_not_emitted(tmp_path: Path):
     assert report["rejected_count"] >= 1
     assert "secret" in ",".join(report["records"][0]["reason_codes"])
 
+
 def test_missing_ids_and_string_booleans_are_rejected(tmp_path: Path):
     record = hermes_record(run_id="run-coerced")
     del record["session_id"]
@@ -230,6 +188,7 @@ def test_missing_ids_and_string_booleans_are_rejected(tmp_path: Path):
     joined = ",".join(report["records"][0]["reason_codes"])
     assert "identity" in joined or "execution" in joined or "invalid" in joined
 
+
 def test_empty_input_with_invalid_binding_is_explicitly_rejected(tmp_path: Path):
     paths = write_scenario(tmp_path, [])
     paths["input"].write_bytes(b"")
@@ -243,6 +202,7 @@ def test_empty_input_with_invalid_binding_is_explicitly_rejected(tmp_path: Path)
     assert report["records"]
     assert report["records"][0]["reason_codes"]
 
+
 def test_empty_input_with_valid_binding_is_explicitly_rejected(tmp_path: Path):
     paths = write_scenario(tmp_path, [])
     paths["input"].write_bytes(b"")
@@ -252,6 +212,7 @@ def test_empty_input_with_valid_binding_is_explicitly_rejected(tmp_path: Path):
     assert report["quarantined_count"] == 0
     assert report["rejected_count"] >= 1
     assert "empty_input" in report["records"][0]["reason_codes"]
+
 
 def test_structured_credential_content_is_rejected(tmp_path: Path):
     record = hermes_record(
@@ -266,4 +227,3 @@ def test_structured_credential_content_is_rejected(tmp_path: Path):
     report = _report(paths)
     assert report["accepted_count"] == 0
     assert report["rejected_count"] >= 1
-

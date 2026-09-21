@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import re
 import urllib.parse
+from dataclasses import dataclass, field
 from typing import Any
 
 SECRET_QUERY_KEYS = frozenset(
@@ -71,7 +72,7 @@ def sanitize_url(url: str) -> str:
 def _split_url(url: str) -> urllib.parse.SplitResult:
     try:
         parts = urllib.parse.urlsplit(url)
-        parts.port
+        _ = parts.port
     except ValueError as exc:
         raise UnsafeUrlError("invalid_url") from exc
     return parts
@@ -159,30 +160,42 @@ def strip_hidden_reasoning(value: Any) -> Any:
 
 def _strip_hidden_tag_regions(value: str) -> str:
     """Strip balanced hidden-tag regions with a single left-to-right scan."""
-    output: list[str] = []
-    stack: list[str] = []
-    cursor = 0
-    hidden_start = 0
+    state = _HiddenStripState(value)
     for match in _HIDDEN_TAG_TOKEN_RE.finditer(value):
+        state.consume(match)
+    return state.finish()
+
+
+@dataclass
+class _HiddenStripState:
+    value: str
+    output: list[str] = field(default_factory=list)
+    stack: list[str] = field(default_factory=list)
+    cursor: int = 0
+    hidden_start: int = 0
+
+    def consume(self, match: re.Match[str]) -> None:
         closing, tag = match.groups()
         normalized_tag = tag.casefold()
-        if not stack:
-            if closing:
-                continue
-            output.append(value[cursor : match.start()])
-            hidden_start = match.start()
-            stack.append(normalized_tag)
-            continue
-        if not closing:
-            stack.append(normalized_tag)
-            continue
-        if normalized_tag != stack[-1]:
-            continue
-        stack.pop()
-        if not stack:
-            cursor = match.end()
-    if stack:
-        output.append(value[hidden_start:])
-    else:
-        output.append(value[cursor:])
-    return "".join(output)
+        if not self.stack:
+            self._consume_at_top_level(match, closing, normalized_tag)
+        elif not closing:
+            self.stack.append(normalized_tag)
+        elif normalized_tag == self.stack[-1]:
+            self.stack.pop()
+            if not self.stack:
+                self.cursor = match.end()
+
+    def _consume_at_top_level(
+        self, match: re.Match[str], closing: str, normalized_tag: str
+    ) -> None:
+        if closing:
+            return
+        self.output.append(self.value[self.cursor : match.start()])
+        self.hidden_start = match.start()
+        self.stack.append(normalized_tag)
+
+    def finish(self) -> str:
+        suffix_start = self.hidden_start if self.stack else self.cursor
+        self.output.append(self.value[suffix_start:])
+        return "".join(self.output)
