@@ -1,0 +1,1 @@
+{"model": "hermes-3-llama-3.1-8b:q4_k_m", "ollama_digest": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa", "quantization": "Q4_K_M", "runtime": "ollama", "endpoint": "http://127.0.0.1:11434", "license": "Apache-2.0", "provider_config": {"no_cloud": true, "num_ctx": 8192}, "probed_at": "2026-09-21T12:00:00Z"}

@@ -1,0 +1,39 @@
+{
+  "schema_version": "ollama_probe_v1",
+  "endpoint": "http://127.0.0.1:11434",
+  "probed_at": "2026-09-21T12:00:00Z",
+  "models": [
+    {
+      "name": "hermes-3-llama-3.1-8b:q4_k_m",
+      "digest": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+      "modified_at": "2026-09-20T10:00:00Z",
+      "size": 4920738928
+    },
+    {
+      "name": "hermes-3-llama-3.1-70b:q4_k_m",
+      "digest": "sha256:dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd",
+      "modified_at": "2026-09-20T11:00:00Z",
+      "size": 42520480512
+    }
+  ],
+  "show": {
+    "hermes-3-llama-3.1-8b:q4_k_m": {
+      "details": {
+        "format": "gguf",
+        "family": "llama",
+        "parameter_size": "8.0B",
+        "quantization_level": "Q4_K_M"
+      },
+      "license": "Apache-2.0"
+    },
+    "hermes-3-llama-3.1-70b:q4_k_m": {
+      "details": {
+        "format": "gguf",
+        "family": "llama",
+        "parameter_size": "70.6B",
+        "quantization_level": "Q4_K_M"
+      },
+      "license": "LicenseRef-Hermes-Community"
+    }
+  }
+}

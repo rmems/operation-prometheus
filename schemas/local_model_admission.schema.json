@@ -1,0 +1,125 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "https://github.com/rmems/operation-prometheus/schemas/local_model_admission.schema.json",
+  "title": "local_model_admission_v1",
+  "description": "Fail-closed admission report for local model providers (e.g. loopback Ollama-served weights). Every candidate is classified accepted, quarantined, or rejected with reason codes; the report binds model identity, Ollama digest/quantization, runtime and loopback endpoint, rights/terms digests, no-cloud evidence, probe timestamp, and frozen-input hashes.",
+  "type": "object",
+  "required": [
+    "schema_version",
+    "closed",
+    "counts",
+    "accepted",
+    "quarantined",
+    "rejected",
+    "license_families",
+    "evidence_digests",
+    "input_digests",
+    "bundle_errors"
+  ],
+  "additionalProperties": false,
+  "properties": {
+    "schema_version": {"const": "local_model_admission_v1"},
+    "closed": {
+      "type": "boolean",
+      "description": "True only when quarantined, rejected, and bundle_errors are all empty."
+    },
+    "counts": {
+      "type": "object",
+      "required": ["candidate_count", "accepted", "quarantined", "rejected"],
+      "additionalProperties": false,
+      "properties": {
+        "candidate_count": {"type": "integer", "minimum": 0},
+        "accepted": {"type": "integer", "minimum": 0},
+        "quarantined": {"type": "integer", "minimum": 0},
+        "rejected": {"type": "integer", "minimum": 0}
+      }
+    },
+    "accepted": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": [
+          "model",
+          "license_family",
+          "evidence_digest",
+          "ollama_digest",
+          "quantization",
+          "runtime",
+          "endpoint",
+          "probed_at"
+        ],
+        "additionalProperties": false,
+        "properties": {
+          "model": {"type": "string", "minLength": 1},
+          "license_family": {"enum": ["spdx", "custom"]},
+          "evidence_digest": {"$ref": "#/definitions/sha256"},
+          "ollama_digest": {"type": "string", "minLength": 1},
+          "quantization": {"type": "string", "minLength": 1},
+          "runtime": {"const": "ollama"},
+          "endpoint": {"type": "string", "minLength": 1},
+          "probed_at": {"type": "string", "minLength": 1}
+        }
+      }
+    },
+    "quarantined": {"$ref": "#/definitions/unresolved_rows"},
+    "rejected": {"$ref": "#/definitions/unresolved_rows"},
+    "license_families": {
+      "type": "array",
+      "items": {"enum": ["spdx", "custom", "missing", "unknown"]},
+      "uniqueItems": true
+    },
+    "evidence_digests": {
+      "type": "array",
+      "items": {"$ref": "#/definitions/sha256"},
+      "uniqueItems": true
+    },
+    "input_digests": {
+      "type": "object",
+      "description": "SHA-256 of each frozen input file (admissions, rights, probe).",
+      "additionalProperties": {"$ref": "#/definitions/sha256"}
+    },
+    "bundle_errors": {
+      "type": "array",
+      "items": {"type": "string"}
+    }
+  },
+  "definitions": {
+    "sha256": {
+      "type": "string",
+      "pattern": "^[a-f0-9]{64}$"
+    },
+    "unresolved_rows": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": [
+          "model",
+          "reason_codes",
+          "license_family",
+          "evidence",
+          "evidence_digest"
+        ],
+        "additionalProperties": false,
+        "properties": {
+          "model": {"type": ["string", "null"]},
+          "reason_codes": {
+            "type": "array",
+            "items": {"type": "string", "minLength": 1},
+            "minItems": 1
+          },
+          "license_family": {
+            "enum": ["spdx", "custom", "missing", "unknown"]
+          },
+          "evidence": {
+            "type": "object",
+            "description": "Bound evidence retained for audit; fields may be null when unavailable."
+          },
+          "evidence_digest": {
+            "type": ["string", "null"],
+            "pattern": "^[a-f0-9]{64}$"
+          }
+        }
+      }
+    }
+  }
+}
