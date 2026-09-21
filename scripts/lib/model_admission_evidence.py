@@ -106,41 +106,42 @@ def is_loopback_endpoint(endpoint: Any) -> bool:
     return host is not None and host in LOOPBACK_HOSTS
 
 
+def _iter_config_items(config: Any, prefix: str = ""):
+    """Yield (dotted_key, scalar_value) pairs from a nested config object."""
+    if not isinstance(config, dict):
+        return
+    for key, value in config.items():
+        name = f"{prefix}{key}" if isinstance(key, str) else prefix
+        if isinstance(value, dict):
+            yield from _iter_config_items(value, f"{name}.")
+        else:
+            yield name, value
+
+
 def unsanitized_config_keys(config: Any) -> list[str]:
     """Secret-looking keys carrying non-empty values in a provider config."""
-    if not isinstance(config, dict):
-        return []
-    hits: list[str] = []
-    for key, value in config.items():
-        if isinstance(value, dict):
-            hits.extend(f"{key}.{k}" for k in unsanitized_config_keys(value))
-        elif (
-            isinstance(key, str)
-            and _SECRET_KEY_RE.search(key)
-            and isinstance(value, str)
-            and value.strip()
-        ):
-            hits.append(key)
-    return hits
+    return [
+        name
+        for name, value in _iter_config_items(config)
+        if _SECRET_KEY_RE.search(name)
+        and isinstance(value, str)
+        and value.strip()
+    ]
+
+
+_ENDPOINT_KEYS = frozenset({"base_url", "endpoint", "host", "url", "api_base"})
 
 
 def remote_config_endpoints(config: Any) -> list[str]:
     """base_url/endpoint/host entries that are not loopback."""
-    if not isinstance(config, dict):
-        return []
-    hits: list[str] = []
-    for key, value in config.items():
-        if isinstance(value, dict):
-            hits.extend(remote_config_endpoints(value))
-        elif (
-            isinstance(key, str)
-            and key.lower() in ("base_url", "endpoint", "host", "url", "api_base")
-            and isinstance(value, str)
-            and value.strip()
-            and not is_loopback_endpoint(value)
-        ):
-            hits.append(value)
-    return hits
+    return [
+        value
+        for name, value in _iter_config_items(config)
+        if name.rsplit(".", 1)[-1].lower() in _ENDPOINT_KEYS
+        and isinstance(value, str)
+        and value.strip()
+        and not is_loopback_endpoint(value)
+    ]
 
 
 def paths_collide(path_a: Path, path_b: Path) -> bool:

@@ -2,12 +2,11 @@
 
 from __future__ import annotations
 
+import hashlib
 import json
 import subprocess
 import sys
 from pathlib import Path
-
-import pytest
 
 ROOT = Path(__file__).resolve().parent.parent
 CLI = ROOT / "scripts" / "verify_local_model_admission.py"
@@ -23,13 +22,43 @@ def _run(*args: str) -> subprocess.CompletedProcess:
     )
 
 
-def _args(out: Path, admissions: str = "admissions.jsonl") -> list[str]:
+def _args(
+    out: Path,
+    *,
+    admissions: str = "admissions.jsonl",
+    rights: Path = FIXTURES / "rights.json",
+) -> list[str]:
     return [
         "--admissions", str(FIXTURES / admissions),
-        "--rights", str(FIXTURES / "rights.json"),
+        "--rights", str(rights),
         "--probe", str(FIXTURES / "ollama_probe.json"),
         "--out", str(out),
     ]
+
+
+def _run_with_rights(tmp_path: Path, rights_text: str) -> subprocess.CompletedProcess:
+    rights = tmp_path / "rights.json"
+    rights.write_text(rights_text)
+    return _run(*_args(tmp_path / "report.json", rights=rights))
+
+
+def _manifest(tmp_path: Path, digests: dict[str, str]) -> Path:
+    manifest = tmp_path / "inputs-manifest.json"
+    manifest.write_text(
+        json.dumps({"files": {k: {"sha256": v} for k, v in digests.items()}})
+    )
+    return manifest
+
+
+def _fixture_digests() -> dict[str, str]:
+    return {
+        name: hashlib.sha256((FIXTURES / filename).read_bytes()).hexdigest()
+        for name, filename in (
+            ("admissions", "admissions.jsonl"),
+            ("rights", "rights.json"),
+            ("probe", "ollama_probe.json"),
+        )
+    }
 
 
 def test_closed_fixture_run(tmp_path):
@@ -77,32 +106,20 @@ def test_out_colliding_with_input_rejected(tmp_path):
 
 
 def test_duplicate_json_keys_fail_closed(tmp_path):
-    bad = tmp_path / "rights.json"
-    bad.write_text('{"models": {}, "models": {}}')
-    result = _run(
-        "--admissions", str(FIXTURES / "admissions.jsonl"),
-        "--rights", str(bad),
-        "--probe", str(FIXTURES / "ollama_probe.json"),
-        "--out", str(tmp_path / "report.json"),
-    )
+    result = _run_with_rights(tmp_path, '{"models": {}, "models": {}}')
     assert result.returncode == 2
 
 
 def test_non_finite_json_rejected(tmp_path):
-    bad = tmp_path / "rights.json"
-    bad.write_text('{"models": {"x": {"license": "MIT", "terms_sha256": NaN}}}')
-    result = _run(
-        "--admissions", str(FIXTURES / "admissions.jsonl"),
-        "--rights", str(bad),
-        "--probe", str(FIXTURES / "ollama_probe.json"),
-        "--out", str(tmp_path / "report.json"),
+    result = _run_with_rights(
+        tmp_path,
+        '{"models": {"x": {"license": "MIT", "terms_sha256": NaN}}}',
     )
     assert result.returncode == 2
 
 
 def test_inputs_manifest_mismatch_fails_closed(tmp_path):
-    manifest = tmp_path / "inputs-manifest.json"
-    manifest.write_text(json.dumps({"files": {"admissions": {"sha256": "0" * 64}}}))
+    manifest = _manifest(tmp_path, {"admissions": "0" * 64})
     out = tmp_path / "report.json"
     result = _run(*_args(out), "--inputs-manifest", str(manifest))
     assert result.returncode == 1
@@ -112,17 +129,7 @@ def test_inputs_manifest_mismatch_fails_closed(tmp_path):
 
 
 def test_inputs_manifest_match_binds(tmp_path):
-    import hashlib
-
-    manifest = tmp_path / "inputs-manifest.json"
-    files = {}
-    for name, path in (
-        ("admissions", FIXTURES / "admissions.jsonl"),
-        ("rights", FIXTURES / "rights.json"),
-        ("probe", FIXTURES / "ollama_probe.json"),
-    ):
-        files[name] = {"sha256": hashlib.sha256(path.read_bytes()).hexdigest()}
-    manifest.write_text(json.dumps({"files": files}))
+    manifest = _manifest(tmp_path, _fixture_digests())
     out = tmp_path / "report.json"
     result = _run(*_args(out), "--inputs-manifest", str(manifest))
     assert result.returncode == 0, result.stderr
