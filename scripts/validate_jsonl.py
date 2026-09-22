@@ -16,6 +16,7 @@ import argparse
 import hashlib
 import math
 from datetime import datetime, timezone
+from dataclasses import dataclass
 from urllib.parse import urlparse
 import json
 import re
@@ -26,7 +27,10 @@ try:
     import jsonschema
 except ImportError:
     jsonschema = None
-    print("ERROR: jsonschema is required. Install with: pip install jsonschema", file=sys.stderr)
+    print(
+        "ERROR: jsonschema is required. Install with: pip install jsonschema",
+        file=sys.stderr,
+    )
     sys.exit(2)
 
 _SCRIPTS = Path(__file__).resolve().parent
@@ -34,9 +38,51 @@ if str(_SCRIPTS) not in sys.path:
     sys.path.insert(0, str(_SCRIPTS))
 
 from lib.secrets import find_secrets  # noqa: E402
+from lib.hermes_sanitize import (  # noqa: E402
+    hidden_markup_remains,
+    is_hidden_key,
+    strip_hidden_reasoning,
+)
 
-SCHEMA_V0_PATH = Path(__file__).resolve().parent.parent / "schemas" / "pr_trajectory.schema.json"
-SCHEMA_V1_PATH = Path(__file__).resolve().parent.parent / "schemas" / "trajectory_v1.schema.json"
+SCHEMA_V0_PATH = (
+    Path(__file__).resolve().parent.parent / "schemas" / "pr_trajectory.schema.json"
+)
+SCHEMA_V1_PATH = (
+    Path(__file__).resolve().parent.parent / "schemas" / "trajectory_v1.schema.json"
+)
+SCHEMA_V1_1_PATH = (
+    Path(__file__).resolve().parent.parent / "schemas" / "trajectory_v1_1.schema.json"
+)
+_V1_VERSIONS = frozenset({"1", "1.0", "v1"})
+_V1_1_VERSIONS = frozenset({"1.1", "v1.1"})
+_SUCCESS_OUTCOMES = frozenset(
+    {"pass", "passed", "success", "successful", "verified", "ok"}
+)
+_TERMINAL_DISPOSITIONS = frozenset(
+    {
+        "successful",
+        "failed",
+        "reverted",
+        "falsified",
+        "null",
+        "invalid",
+        "interrupted",
+        "inconclusive",
+    }
+)
+
+
+@dataclass(frozen=True)
+class _LineValidationContext:
+    filename: str
+    validators: tuple[
+        jsonschema.Draft7Validator,
+        jsonschema.Draft7Validator,
+        jsonschema.Draft7Validator | None,
+    ]
+    strict_policy: bool
+
+
 HOME_PATH_RE = re.compile(
     r"("
     r"/home/[A-Za-z0-9._-]+"
@@ -78,7 +124,6 @@ def _iter_strings(obj: object):
     elif isinstance(obj, list):
         for value in obj:
             yield from _iter_strings(value)
-
 
 
 def _is_absolute_uri(value: object) -> bool:
@@ -128,172 +173,237 @@ def _contains_nonfinite(obj: object) -> bool:
     return False
 
 
+def _contains_hidden_reasoning(obj: object) -> bool:
+    if isinstance(obj, str):
+        return hidden_markup_remains(obj) or strip_hidden_reasoning(obj) != obj
+    if isinstance(obj, dict):
+        return any(
+            is_hidden_key(key) or _contains_hidden_reasoning(value)
+            for key, value in obj.items()
+        )
+    if isinstance(obj, list):
+        return any(_contains_hidden_reasoning(value) for value in obj)
+    return False
+
+
 def policy_errors(record: dict, lineno: int, filename: str) -> list[str]:
     """Extra policy checks beyond JSON Schema."""
-    errors: list[str] = []
     if not isinstance(record, dict):
-        return errors
-
+        return []
+    location = f"  {filename}:{lineno}"
     schema_version = record.get("schema_version")
-    if schema_version in ("1", "1.0", "v1"):
-        events = record.get("events")
-        if isinstance(events, list):
-            last_dt: datetime | None = None
-            for e in events:
-                if not isinstance(e, dict):
-                    continue
-                ts = e.get("timestamp")
-                if isinstance(ts, str) and ts:
-                    try:
-                        iso_ts = ts[:-1] + "+00:00" if ts.endswith(("Z", "z")) else ts
-                        dt = datetime.fromisoformat(iso_ts)
-                        if dt.tzinfo is None:
-                            dt = dt.replace(tzinfo=timezone.utc)
-                        else:
-                            dt = dt.astimezone(timezone.utc)
-                        if last_dt is not None and dt < last_dt:
-                            errors.append(
-                                f"  {filename}:{lineno} [policy] - future-event leakage / events not ordered "
-                                f"(timestamp {ts} before previous)"
-                            )
-                        last_dt = dt
-                    except OverflowError:
-                        errors.append(
-                            f"  {filename}:{lineno} [policy] - timestamp UTC normalization overflow"
-                        )
-                    except (ValueError, TypeError):
-                        errors.append(
-                            f"  {filename}:{lineno} [policy] - timestamp is not a parseable UTC instant"
-                        )
+    errors = _versioned_policy_errors(record, schema_version, location)
+    errors.extend(_canonical_source_errors(record, location))
+    errors.extend(_sensitive_data_errors(record, location))
+    return errors
 
-                actor = e.get("actor")
-                if isinstance(actor, dict):
-                    if actor.get("type") not in ("human", "bot", "application", "agent"):
-                        errors.append(f"  {filename}:{lineno} [policy] - invented/unsupported actor type")
 
-                if not _event_has_auditable_anchor(e):
-                    errors.append(
-                        f"  {filename}:{lineno} [policy] - event missing auditable evidence anchor "
-                        f"(evidence_references URL or code_state git object id)"
-                    )
+def _versioned_policy_errors(
+    record: dict, schema_version: object, location: str
+) -> list[str]:
+    errors: list[str] = []
+    if schema_version in _V1_1_VERSIONS and _contains_hidden_reasoning(record):
+        errors.append(f"{location} [policy] - hidden reasoning is not allowed in v1.1")
+    if schema_version not in _V1_VERSIONS and schema_version not in _V1_1_VERSIONS:
+        return errors
+    events = record.get("events")
+    errors.extend(_event_errors(events, location))
+    errors.extend(_snapshot_errors(record, events, location))
+    errors.extend(_terminal_errors(record, events, location))
+    errors.extend(_artifact_errors(record.get("artifacts"), location))
+    return errors
 
-        traj_type = record.get("trajectory_type")
-        if traj_type == "software" and isinstance(events, list):
-            has_snapshot = False
-            for e in events:
-                if not isinstance(e, dict):
-                    continue
-                code_state = e.get("code_state")
-                if not isinstance(code_state, dict):
-                    continue
-                for key in _SNAPSHOT_KEYS:
-                    value = code_state.get(key)
-                    if not value:
-                        continue
-                    if _is_git_oid(value):
-                        has_snapshot = True
-                    else:
-                        errors.append(
-                            f"  {filename}:{lineno} [policy] - code snapshot {key} is not a git object id"
-                        )
-            if not has_snapshot:
-                errors.append(f"  {filename}:{lineno} [policy] - missing required code snapshots for software trajectory")
 
-        disp = record.get("terminal_disposition")
-        payload = record.get("software_payload") if traj_type == "software" else record.get("research_payload")
-        success_dispositions = ("successful", "passed")
-        success_outcomes = ("pass", "passed", "success", "successful", "verified", "ok")
-        terminal_enum = {
-            "successful",
-            "failed",
-            "reverted",
-            "falsified",
-            "null",
-            "invalid",
-            "interrupted",
-            "inconclusive",
-        }
-        last_disp = None
-        if isinstance(events, list):
-            for e in reversed(events):
-                if isinstance(e, dict) and "disposition" in e:
-                    last_disp = e.get("disposition")
-                    break
-        outcome = ""
-        if isinstance(payload, dict):
-            outcome = str(payload.get("validation_outcome", "")).strip().lower()
-        if last_disp in success_dispositions:
-            terminal_success = True
-        elif last_disp in (None, "neutral", "null"):
-            terminal_success = (outcome in success_outcomes) if outcome else None
-        else:
-            terminal_success = False
-        if disp == "successful" and terminal_success is False:
-            errors.append(
-                f"  {filename}:{lineno} [policy] - nonterminal record incorrectly represented as positive terminal example"
-            )
-        elif disp not in (None, "successful") and terminal_success is True:
-            errors.append(
-                f"  {filename}:{lineno} [policy] - terminal_disposition does not agree with terminal outcome evidence"
-            )
-        elif (
-            isinstance(last_disp, str)
-            and last_disp not in ("neutral", "null")
-            and disp in terminal_enum
+def _event_errors(events: object, location: str) -> list[str]:
+    if not isinstance(events, list):
+        return []
+    errors: list[str] = []
+    last_dt: datetime | None = None
+    for event in (item for item in events if isinstance(item, dict)):
+        timestamp_errors, current_dt = _timestamp_errors(
+            event.get("timestamp"), last_dt, location
+        )
+        errors.extend(timestamp_errors)
+        last_dt = current_dt or last_dt
+        actor = event.get("actor")
+        if isinstance(actor, dict) and actor.get("type") not in (
+            "human",
+            "bot",
+            "application",
+            "agent",
         ):
-            normalized_last = "successful" if last_disp == "passed" else last_disp
-            if normalized_last in terminal_enum and normalized_last != disp:
+            errors.append(f"{location} [policy] - invented/unsupported actor type")
+        if not _event_has_auditable_anchor(event):
+            errors.append(
+                f"{location} [policy] - event missing auditable evidence anchor "
+                "(evidence_references URL or code_state git object id)"
+            )
+    return errors
+
+
+def _timestamp_errors(
+    timestamp: object, previous: datetime | None, location: str
+) -> tuple[list[str], datetime | None]:
+    if not isinstance(timestamp, str) or not timestamp:
+        return [], None
+    try:
+        iso_timestamp = (
+            timestamp[:-1] + "+00:00" if timestamp.endswith(("Z", "z")) else timestamp
+        )
+        current = datetime.fromisoformat(iso_timestamp)
+        current = (
+            current.replace(tzinfo=timezone.utc)
+            if current.tzinfo is None
+            else current.astimezone(timezone.utc)
+        )
+    except OverflowError:
+        return [f"{location} [policy] - timestamp UTC normalization overflow"], None
+    except (ValueError, TypeError):
+        return [f"{location} [policy] - timestamp is not a parseable UTC instant"], None
+    if previous is not None and current < previous:
+        return [
+            f"{location} [policy] - future-event leakage / events not ordered "
+            f"(timestamp {timestamp} before previous)"
+        ], current
+    return [], current
+
+
+def _snapshot_errors(record: dict, events: object, location: str) -> list[str]:
+    if record.get("trajectory_type") != "software" or not isinstance(events, list):
+        return []
+    errors: list[str] = []
+    has_snapshot = False
+    for event in (item for item in events if isinstance(item, dict)):
+        code_state = event.get("code_state")
+        if not isinstance(code_state, dict):
+            continue
+        for key in _SNAPSHOT_KEYS:
+            value = code_state.get(key)
+            if not value:
+                continue
+            if _is_git_oid(value):
+                has_snapshot = True
+            else:
                 errors.append(
-                    f"  {filename}:{lineno} [policy] - terminal_disposition does not agree with terminal outcome evidence"
+                    f"{location} [policy] - code snapshot {key} is not a git object id"
                 )
+    if not has_snapshot:
+        errors.append(
+            f"{location} [policy] - missing required code snapshots for software trajectory"
+        )
+    return errors
 
-        artifacts = record.get("artifacts")
-        if isinstance(artifacts, list):
-            for art in artifacts:
-                if not isinstance(art, dict):
-                    continue
-                availability = art.get("availability")
-                content = art.get("content")
-                if availability == "inline" and not isinstance(content, str):
-                    errors.append(
-                        f"  {filename}:{lineno} [policy] - inline artifact missing content"
-                    )
-                    continue
-                if availability == "remote" and not _is_absolute_uri(art.get("uri")):
-                    errors.append(
-                        f"  {filename}:{lineno} [policy] - remote artifact uri is not an absolute URI"
-                    )
-                if not isinstance(content, str):
-                    continue
-                try:
-                    raw = content.encode("utf-8")
-                except UnicodeEncodeError:
-                    errors.append(
-                        f"  {filename}:{lineno} [policy] - {'inline artifact' if availability == 'inline' else 'artifact'} content is not UTF-8 encodable"
-                    )
-                    continue
-                digest = hashlib.sha256(raw).hexdigest()
-                declared = str(art.get("sha256") or "").strip().lower()
-                label = "inline artifact" if availability == "inline" else "artifact"
-                if declared != digest:
-                    errors.append(
-                        f"  {filename}:{lineno} [policy] - {label} sha256 does not match content"
-                    )
-                if art.get("byte_size") != len(raw):
-                    errors.append(
-                        f"  {filename}:{lineno} [policy] - {label} byte_size does not match content"
-                    )
 
+def _terminal_errors(record: dict, events: object, location: str) -> list[str]:
+    disposition = record.get("terminal_disposition")
+    last_disposition = _last_disposition(events)
+    terminal_success = _terminal_success(last_disposition, _validation_outcome(record))
+    if disposition == "successful" and terminal_success is False:
+        return [
+            f"{location} [policy] - nonterminal record incorrectly represented as positive terminal example"
+        ]
+    if disposition not in (None, "successful") and terminal_success is True:
+        return [
+            f"{location} [policy] - terminal_disposition does not agree with terminal outcome evidence"
+        ]
+    normalized_last = "successful" if last_disposition == "passed" else last_disposition
+    if _terminal_dispositions_conflict(disposition, normalized_last):
+        return [
+            f"{location} [policy] - terminal_disposition does not agree with terminal outcome evidence"
+        ]
+    return []
+
+
+def _validation_outcome(record: dict) -> str:
+    payload_name = (
+        "software_payload"
+        if record.get("trajectory_type") == "software"
+        else "research_payload"
+    )
+    payload = record.get(payload_name)
+    if not isinstance(payload, dict):
+        return ""
+    return str(payload.get("validation_outcome", "")).strip().lower()
+
+
+def _terminal_success(last_disposition: object, outcome: str) -> bool | None:
+    if last_disposition in ("successful", "passed"):
+        return True
+    if last_disposition not in (None, "neutral", "null"):
+        return False
+    return outcome in _SUCCESS_OUTCOMES if outcome else None
+
+
+def _terminal_dispositions_conflict(
+    disposition: object, normalized_last: object
+) -> bool:
+    if normalized_last in (None, "neutral", "null"):
+        return False
+    if disposition not in _TERMINAL_DISPOSITIONS:
+        return False
+    return normalized_last in _TERMINAL_DISPOSITIONS and normalized_last != disposition
+
+
+def _last_disposition(events: object) -> object:
+    if not isinstance(events, list):
+        return None
+    for event in reversed(events):
+        if isinstance(event, dict) and "disposition" in event:
+            return event.get("disposition")
+    return None
+
+
+def _artifact_errors(artifacts: object, location: str) -> list[str]:
+    if not isinstance(artifacts, list):
+        return []
+    errors: list[str] = []
+    for artifact in (item for item in artifacts if isinstance(item, dict)):
+        errors.extend(_single_artifact_errors(artifact, location))
+    return errors
+
+
+def _single_artifact_errors(artifact: dict, location: str) -> list[str]:
+    availability = artifact.get("availability")
+    content = artifact.get("content")
+    if availability == "inline" and not isinstance(content, str):
+        return [f"{location} [policy] - inline artifact missing content"]
+    errors: list[str] = []
+    if availability == "remote" and not _is_absolute_uri(artifact.get("uri")):
+        errors.append(
+            f"{location} [policy] - remote artifact uri is not an absolute URI"
+        )
+    if not isinstance(content, str):
+        return errors
+    label = "inline artifact" if availability == "inline" else "artifact"
+    try:
+        raw = content.encode("utf-8")
+    except UnicodeEncodeError:
+        errors.append(f"{location} [policy] - {label} content is not UTF-8 encodable")
+        return errors
+    if (
+        str(artifact.get("sha256") or "").strip().lower()
+        != hashlib.sha256(raw).hexdigest()
+    ):
+        errors.append(f"{location} [policy] - {label} sha256 does not match content")
+    if artifact.get("byte_size") != len(raw):
+        errors.append(f"{location} [policy] - {label} byte_size does not match content")
+    return errors
+
+
+def _canonical_source_errors(record: dict, location: str) -> list[str]:
     repo = record.get("repo")
     pr = record.get("pr_number")
     urls = record.get("source_urls") or []
     if repo and pr:
         canonical = f"https://github.com/{repo}/pull/{pr}"
         if canonical not in urls:
-            errors.append(
-                f"  {filename}:{lineno} [source_urls] - missing canonical PR URL {canonical}"
-            )
+            return [f"{location} [source_urls] - missing canonical PR URL {canonical}"]
+    return []
+
+
+def _sensitive_data_errors(record: dict, location: str) -> list[str]:
     # Scan raw strings so Windows paths (C:\\Users\\...) are not missed via json.dumps escapes.
+    errors: list[str] = []
     home_hit = False
     secret_families: list[str] = []
     seen_families: set[str] = set()
@@ -306,26 +416,53 @@ def policy_errors(record: dict, lineno: int, filename: str) -> list[str]:
                 secret_families.append(family)
     if home_hit:
         errors.append(
-            f"  {filename}:{lineno} [policy] - absolute user-home path present "
+            f"{location} [policy] - absolute user-home path present "
             f"(/home, /Users, /root, or Windows Users)"
         )
     if secret_families:
         families = ", ".join(secret_families)
         errors.append(
-            f"  {filename}:{lineno} [policy] - secret-like token pattern present "
-            f"({families})"
+            f"{location} [policy] - secret-like token pattern present ({families})"
         )
     return errors
 
 
-def validate_file(
-    filepath: Path,
+def _select_validator(
+    record: object,
     v0_validator: jsonschema.Draft7Validator,
     v1_validator: jsonschema.Draft7Validator,
-    *,
+    v1_1_validator: jsonschema.Draft7Validator | None,
+) -> jsonschema.Draft7Validator:
+    if not isinstance(record, dict):
+        return v0_validator
+    version = record.get("schema_version")
+    if version in _V1_1_VERSIONS:
+        if v1_1_validator is None:
+            v1_1_validator = jsonschema.Draft7Validator(
+                load_schema(SCHEMA_V1_1_PATH),
+                format_checker=jsonschema.Draft7Validator.FORMAT_CHECKER,
+            )
+        return v1_1_validator
+    if version in _V1_VERSIONS:
+        return v1_validator
+    return v0_validator
+
+
+def validate_file(
+    filepath: Path,
+    *validators: jsonschema.Draft7Validator,
     strict_policy: bool = False,
+    v1_1_validator: jsonschema.Draft7Validator | None = None,
 ) -> list[str]:
     """Validate a single JSONL file. Returns list of error strings."""
+    if len(validators) != 2:
+        raise TypeError("validate_file requires v0 and v1 validators")
+    v0_validator, v1_validator = validators
+    context = _LineValidationContext(
+        filename=filepath.name,
+        validators=(v0_validator, v1_validator, v1_1_validator),
+        strict_policy=strict_policy,
+    )
     errors: list[str] = []
     count = 0
     try:
@@ -335,38 +472,50 @@ def validate_file(
                 if not line:
                     continue
                 count += 1
-                try:
-                    def _reject_nonfinite(constant: str):
-                        raise json.JSONDecodeError(
-                            f"non-finite constant {constant!r}", line, 0
-                        )
-
-                    record = json.loads(line, parse_constant=_reject_nonfinite)
-                except json.JSONDecodeError as exc:
-                    errors.append(f"  {filepath.name}:{lineno} - Invalid JSON: {exc}")
-                    continue
-                if _contains_nonfinite(record):
-                    errors.append(
-                        f"  {filepath.name}:{lineno} - Invalid JSON: non-finite number"
-                    )
-                    continue
-
-                if isinstance(record, dict):
-                    version = record.get("schema_version")
-                    validator = v1_validator if version in ("1", "1.0", "v1") else v0_validator
-                else:
-                    validator = v0_validator
-
-                for error in sorted(validator.iter_errors(record), key=lambda e: list(e.path)):
-                    path = ".".join(str(p) for p in error.absolute_path) or "(root)"
-                    errors.append(f"  {filepath.name}:{lineno} [{path}] - {error.message}")
-                if strict_policy and isinstance(record, dict):
-                    errors.extend(policy_errors(record, lineno, filepath.name))
+                errors.extend(_line_errors(line, lineno, context))
     except FileNotFoundError:
         errors.append(f"  ERROR: File not found: {filepath}")
         return errors
     if count == 0:
         errors.append(f"  {filepath.name} - no non-empty JSONL records")
+    return errors
+
+
+def _line_errors(
+    line: str,
+    lineno: int,
+    context: _LineValidationContext,
+) -> list[str]:
+    try:
+
+        def _reject_nonfinite(constant: str):
+            raise json.JSONDecodeError(f"non-finite constant {constant!r}", line, 0)
+
+        record = json.loads(line, parse_constant=_reject_nonfinite)
+    except json.JSONDecodeError as exc:
+        return [f"  {context.filename}:{lineno} - Invalid JSON: {exc}"]
+    if _contains_nonfinite(record):
+        return [f"  {context.filename}:{lineno} - Invalid JSON: non-finite number"]
+    v0_validator, v1_validator, v1_1_validator = context.validators
+    validator = _select_validator(record, v0_validator, v1_validator, v1_1_validator)
+    errors = _jsonschema_errors(record, validator, lineno, context.filename)
+    if context.strict_policy and isinstance(record, dict):
+        errors.extend(policy_errors(record, lineno, context.filename))
+    return errors
+
+
+def _jsonschema_errors(
+    record: object,
+    validator: jsonschema.Draft7Validator,
+    lineno: int,
+    filename: str,
+) -> list[str]:
+    errors: list[str] = []
+    for error in sorted(
+        validator.iter_errors(record), key=lambda item: list(item.path)
+    ):
+        path = ".".join(str(part) for part in error.absolute_path) or "(root)"
+        errors.append(f"  {filename}:{lineno} [{path}] - {error.message}")
     return errors
 
 
@@ -389,13 +538,23 @@ def main(argv: list[str] | None = None) -> int:
     v1_validator = jsonschema.Draft7Validator(
         schema_v1, format_checker=jsonschema.Draft7Validator.FORMAT_CHECKER
     )
+    v1_1_validator = None
+    if SCHEMA_V1_1_PATH.exists():
+        v1_1_validator = jsonschema.Draft7Validator(
+            load_schema(SCHEMA_V1_1_PATH),
+            format_checker=jsonschema.Draft7Validator.FORMAT_CHECKER,
+        )
 
     all_errors: list[str] = []
 
     for arg in args.files:
         filepath = Path(arg)
         file_errors = validate_file(
-            filepath, v0_validator, v1_validator, strict_policy=args.strict_policy
+            filepath,
+            v0_validator,
+            v1_validator,
+            strict_policy=args.strict_policy,
+            v1_1_validator=v1_1_validator,
         )
         all_errors.extend(file_errors)
         if not file_errors:
