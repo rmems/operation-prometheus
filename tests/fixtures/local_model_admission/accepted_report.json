@@ -1,0 +1,47 @@
+{
+  "cloud_fallback_allowed": false,
+  "decision": "accepted",
+  "evidence_digest": "b1256bfbe42e665924bceafac4fd0fac05d41794ebe917e05f887546e22dc8c1",
+  "fallback_evidence": {
+    "cloud_fallback_allowed": false,
+    "no_cloud": true,
+    "remote_endpoints": [],
+    "unsanitized_keys": []
+  },
+  "input_digests": {
+    "admissions": "b81c1c90dedb6ee44b9df60deaae0261bfec3f547a5c4685fcd884938972591e",
+    "probe": "1284667559feff063a8260d8402440b13c0eb6e35a3c3172c2f1b0381995727a",
+    "rights": "8cebf8b4e3d3ea6dc519ac7088263150589517003db4f02a3843725f76ed64e0"
+  },
+  "model": {
+    "name": "hermes-3-llama-3.1-8b",
+    "ollama_digest": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+    "quantization": "Q4_K_M",
+    "tag": "q4_k_m",
+    "upstream_revision": null
+  },
+  "probe": {
+    "endpoint": "http://127.0.0.1:11434",
+    "timestamp": "2026-09-21T12:00:00Z"
+  },
+  "provider": {
+    "config": {
+      "cloud_fallback_allowed": false,
+      "no_cloud": true,
+      "num_ctx": 8192
+    },
+    "name": "hermes-agent"
+  },
+  "reasons": [],
+  "rights": {
+    "identifier": "Apache-2.0",
+    "terms_sha256": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+    "terms_source": "upstream/LICENSE"
+  },
+  "runtime": {
+    "endpoint": "http://127.0.0.1:11434",
+    "name": "ollama",
+    "version": "0.5.4"
+  },
+  "schema_version": "local_model_admission_v1"
+}

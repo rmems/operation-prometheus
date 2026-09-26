@@ -63,6 +63,9 @@ else
 fi
 python scripts/trajectory_contract.py
 python scripts/corpus_integrity.py --out-dir /tmp/corpus-integrity
+# Required before admitting a local model provider (fail-closed; frozen evidence only):
+# python scripts/verify_local_model_admission.py --admissions ... --rights ... \
+#   --probe tests/fixtures/local_model_admission/ollama_probe.json --out report.json
 ```
 
 PR CI also runs `trajectory-contract`, `corpus-integrity`, and

@@ -68,6 +68,7 @@ repository's own license and is not relicensed by this repository — see
 
 - **Schema v0** (initial draft, not final): [schemas/pr_trajectory.schema.json](schemas/pr_trajectory.schema.json). Implements GitHub [#2](https://github.com/rmems/operation-prometheus/issues/2). See the tiny example in `datasets/examples/`.
 - **Data policy & hygiene**: [docs/data-policy.md](docs/data-policy.md). Implements GitHub [#3](https://github.com/rmems/operation-prometheus/issues/3). Covers allowed public sources, excluded material, manual inspection requirement, and the distinction between public engineering history vs. raw chat log scraping.
+- **Local-model admission**: [docs/local-model-admission.md](docs/local-model-admission.md). Fail-closed gate for admitting locally served models (e.g. loopback Ollama/Hermes) as trajectory providers (Linear RM-1347).
 
 ## Extraction Shortlists
 
