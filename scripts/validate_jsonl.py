@@ -490,29 +490,32 @@ def validate_file(
     return errors
 
 
+def _parse_json_line(line: str) -> object:
+    def _reject_nonfinite(constant: str) -> None:
+        raise json.JSONDecodeError(f"non-finite constant {constant!r}", line, 0)
+
+    def _reject_duplicate_keys(pairs: list[tuple[str, object]]) -> dict:
+        record_obj: dict = {}
+        for key, value in pairs:
+            if key in record_obj:
+                raise json.JSONDecodeError(f"duplicate key {key!r}", line, 0)
+            record_obj[key] = value
+        return record_obj
+
+    return json.loads(
+        line,
+        parse_constant=_reject_nonfinite,
+        object_pairs_hook=_reject_duplicate_keys,
+    )
+
+
 def _line_errors(
     line: str,
     lineno: int,
     context: _LineValidationContext,
 ) -> list[str]:
     try:
-
-        def _reject_nonfinite(constant: str):
-            raise json.JSONDecodeError(f"non-finite constant {constant!r}", line, 0)
-
-        def _reject_duplicate_keys(pairs: list[tuple[str, object]]) -> dict:
-            record_obj: dict = {}
-            for key, value in pairs:
-                if key in record_obj:
-                    raise json.JSONDecodeError(f"duplicate key {key!r}", line, 0)
-                record_obj[key] = value
-            return record_obj
-
-        record = json.loads(
-            line,
-            parse_constant=_reject_nonfinite,
-            object_pairs_hook=_reject_duplicate_keys,
-        )
+        record = _parse_json_line(line)
     except json.JSONDecodeError as exc:
         return [f"  {context.filename}:{lineno} - Invalid JSON: {exc}"]
     if _contains_nonfinite(record):

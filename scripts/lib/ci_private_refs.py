@@ -78,11 +78,7 @@ def _is_private_host(host: str) -> bool:
         return bool(PRIVATE_HOST_RE.fullmatch(host))
 
 
-def _uri_policy_hit(token: str) -> str | None:
-    try:
-        parsed = urlparse(token)
-    except ValueError:
-        return None
+def _scheme_policy_hit(parsed: Any) -> str | None:
     scheme = (parsed.scheme or "").casefold()
     if scheme == "file":
         return "private file URI"
@@ -90,12 +86,22 @@ def _uri_policy_hit(token: str) -> str | None:
         return "private or ssh git URI"
     if parsed.username or parsed.password:
         return "credentials in URI"
+    return None
+
+
+def _host_policy_hit(parsed: Any) -> str | None:
     host = (parsed.hostname or "").casefold()
-    if not host:
-        return None
-    if _is_private_host(host):
+    if host and _is_private_host(host):
         return f"private host {host}"
     return None
+
+
+def _uri_policy_hit(token: str) -> str | None:
+    try:
+        parsed = urlparse(token)
+    except ValueError:
+        return None
+    return _scheme_policy_hit(parsed) or _host_policy_hit(parsed)
 
 
 def private_reference_errors(text: str) -> list[str]:
