@@ -136,6 +136,12 @@ def test_check_run_conclusions_are_distinguished_from_checklists():
         ]
     }
     assert validation_evidence_errors(real) == []
+    prose_pass = {
+        "validation": [{"type": "ci", "result": "pass", "detail": "CI passed"}]
+    }
+    assert any(
+        "prose" in error for error in validation_evidence_errors(prose_pass)
+    )
 
 
 def test_silent_truncation_without_marker_is_rejected():
