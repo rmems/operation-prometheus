@@ -61,4 +61,7 @@ if ls datasets/jsonl/*.jsonl 1>/dev/null 2>&1; then
 else
   echo "No JSONL files found; skipping schema validation."
 fi
+# Required before admitting a local model provider (fail-closed; frozen evidence only):
+# python scripts/verify_local_model_admission.py --admissions ... --rights ... \
+#   --probe tests/fixtures/local_model_admission/ollama_probe.json --out report.json
 ```
