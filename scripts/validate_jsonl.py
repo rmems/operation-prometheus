@@ -37,12 +37,19 @@ _SCRIPTS = Path(__file__).resolve().parent
 if str(_SCRIPTS) not in sys.path:
     sys.path.insert(0, str(_SCRIPTS))
 
-from lib.secrets import find_secrets  # noqa: E402
+from lib.ci_contracts import (  # noqa: E402
+    blank_license_policy_errors,
+    iter_uri_fields,
+    private_reference_errors,
+    record_identity,
+    unique_event_errors,
+)
 from lib.hermes_sanitize import (  # noqa: E402
     hidden_markup_remains,
     is_hidden_key,
     strip_hidden_reasoning,
 )
+from lib.secrets import find_secrets  # noqa: E402
 
 SCHEMA_V0_PATH = (
     Path(__file__).resolve().parent.parent / "schemas" / "pr_trajectory.schema.json"
@@ -81,6 +88,7 @@ class _LineValidationContext:
         jsonschema.Draft7Validator | None,
     ]
     strict_policy: bool
+    seen_ids: dict[str, int]
 
 
 HOME_PATH_RE = re.compile(
@@ -462,6 +470,7 @@ def validate_file(
         filename=filepath.name,
         validators=(v0_validator, v1_validator, v1_1_validator),
         strict_policy=strict_policy,
+        seen_ids={},
     )
     errors: list[str] = []
     count = 0
@@ -481,17 +490,32 @@ def validate_file(
     return errors
 
 
+def _parse_json_line(line: str) -> object:
+    def _reject_nonfinite(constant: str) -> None:
+        raise json.JSONDecodeError(f"non-finite constant {constant!r}", line, 0)
+
+    def _reject_duplicate_keys(pairs: list[tuple[str, object]]) -> dict:
+        record_obj: dict = {}
+        for key, value in pairs:
+            if key in record_obj:
+                raise json.JSONDecodeError(f"duplicate key {key!r}", line, 0)
+            record_obj[key] = value
+        return record_obj
+
+    return json.loads(
+        line,
+        parse_constant=_reject_nonfinite,
+        object_pairs_hook=_reject_duplicate_keys,
+    )
+
+
 def _line_errors(
     line: str,
     lineno: int,
     context: _LineValidationContext,
 ) -> list[str]:
     try:
-
-        def _reject_nonfinite(constant: str):
-            raise json.JSONDecodeError(f"non-finite constant {constant!r}", line, 0)
-
-        record = json.loads(line, parse_constant=_reject_nonfinite)
+        record = _parse_json_line(line)
     except json.JSONDecodeError as exc:
         return [f"  {context.filename}:{lineno} - Invalid JSON: {exc}"]
     if _contains_nonfinite(record):
@@ -501,7 +525,67 @@ def _line_errors(
     errors = _jsonschema_errors(record, validator, lineno, context.filename)
     if context.strict_policy and isinstance(record, dict):
         errors.extend(policy_errors(record, lineno, context.filename))
+        errors.extend(contract_policy_errors(record, lineno, context.filename))
+        errors.extend(_identity_errors(record, lineno, context))
     return errors
+
+
+def contract_policy_errors(record: dict, lineno: int, filename: str) -> list[str]:
+    errors: list[str] = []
+    private_hits: list[str] = []
+    seen_private: set[str] = set()
+    for text in iter_uri_fields(record):
+        for hit in private_reference_errors(text):
+            if hit not in seen_private:
+                seen_private.add(hit)
+                private_hits.append(hit)
+    if private_hits:
+        errors.append(
+            f"  {filename}:{lineno} [policy] - private reference present "
+            f"({', '.join(private_hits)})"
+        )
+    for message in unique_event_errors(record):
+        errors.append(f"  {filename}:{lineno} [policy] - {message}")
+    for message in blank_license_policy_errors(record):
+        errors.append(f"  {filename}:{lineno} [policy] - {message}")
+    return errors
+
+
+def _version_needs_stable_id(version: object) -> bool:
+    return version in _V1_VERSIONS or version in _V1_1_VERSIONS
+
+
+def _duplicate_identity_error(
+    identity: str, lineno: int, context: _LineValidationContext
+) -> list[str]:
+    previous = context.seen_ids.get(identity)
+    if previous is None:
+        context.seen_ids[identity] = lineno
+        return []
+    return [
+        f"  {context.filename}:{lineno} [policy] - duplicate trajectory id "
+        f"{identity} (first seen on line {previous})"
+    ]
+
+
+def _missing_stable_id(record: dict) -> bool:
+    if _version_needs_stable_id(record.get("schema_version")):
+        return True
+    return record.get("id") is not None
+
+
+def _identity_errors(
+    record: dict, lineno: int, context: _LineValidationContext
+) -> list[str]:
+    identity = record_identity(record)
+    if identity:
+        return _duplicate_identity_error(identity, lineno, context)
+    if not _missing_stable_id(record):
+        return []
+    return [
+        f"  {context.filename}:{lineno} [policy] - "
+        "trajectory/event record is missing a stable id"
+    ]
 
 
 def _jsonschema_errors(

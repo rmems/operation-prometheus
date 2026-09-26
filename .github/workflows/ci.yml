@@ -70,6 +70,77 @@ jobs:
             echo "No JSONL files to validate yet"
           fi
 
+  trajectory-contract:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - run: pip install --quiet 'pytest==8.4.1' 'jsonschema[format]==4.25.0'
+      - name: Schema fixtures, uniqueness, and strict policy
+        run: |
+          pytest -q tests/test_v1_schema.py tests/test_bots_and_secrets.py
+          python scripts/trajectory_contract.py
+
+  corpus-integrity:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - run: pip install --quiet 'pytest==8.4.1' 'jsonschema[format]==4.25.0'
+      - name: Frozen inventory, hashes, duplicates, and mutable-release rules
+        run: |
+          python scripts/corpus_integrity.py --out-dir reports/corpus-integrity
+          if [ -d datasets/shards/v0.7 ]; then
+            python scripts/merge_corpus_shards.py --check
+          fi
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: corpus-integrity-report
+          path: reports/corpus-integrity/
+          if-no-files-found: error
+
+  consumer-contract:
+    runs-on: ubuntu-latest
+    env:
+      CUDA_VISIBLE_DEVICES: "-1"
+      HF_HUB_OFFLINE: "1"
+      HF_DATASETS_OFFLINE: "1"
+      TRANSFORMERS_OFFLINE: "1"
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/checkout@v4
+        with:
+          repository: rmems/agoge-forger
+          ref: 60e9afb47832fd9527518507beba15d5707b8a8d
+          path: .agoge-forger
+          persist-credentials: false
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Install CPU-only Agoge parser deps
+        run: pip install --quiet 'numpy' 'datasets' 'rich'
+      - name: Parse sample derivatives through Agoge without training
+        env:
+          PYTHONPATH: ${{ github.workspace }}/.agoge-forger/src
+        run: python scripts/consumer_contract.py --out-dir reports/consumer-contract
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: consumer-contract-sidecars
+          path: reports/consumer-contract/
+          if-no-files-found: error
+
   status-up-to-date:
     if: github.event_name == 'pull_request'
     runs-on: ubuntu-latest
