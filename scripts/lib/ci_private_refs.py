@@ -51,11 +51,21 @@ def _append_event_uris(record: dict[str, Any], values: list[str]) -> None:
         values.extend(_event_evidence_uris(event))
 
 
+def _append_repository_uris(record: dict[str, Any], values: list[str]) -> None:
+    repository = record.get("repository")
+    if not isinstance(repository, dict):
+        return
+    url = repository.get("url")
+    if isinstance(url, str):
+        values.append(url)
+
+
 def iter_uri_fields(record: dict[str, Any]) -> list[str]:
     """Yield sourced URI strings, excluding patch bodies and review prose."""
     values = _string_fields(
         record, ("source_urls", "evidence_references", "url", "uri", "html_url")
     )
+    _append_repository_uris(record, values)
     _append_artifact_uris(record, values)
     _append_event_uris(record, values)
     return values
@@ -78,6 +88,8 @@ def _uri_policy_hit(token: str) -> str | None:
         return "private file URI"
     if scheme in {"ssh", "git"}:
         return "private or ssh git URI"
+    if parsed.username or parsed.password:
+        return "credentials in URI"
     host = (parsed.hostname or "").casefold()
     if not host:
         return None
@@ -90,7 +102,9 @@ def private_reference_errors(text: str) -> list[str]:
     """Return policy hits for URI-like private or non-public references."""
     errors: list[str] = []
     for match in re.finditer(
-        r"\b(?:[a-z][a-z0-9+.-]*:|/+)[^\s\"'<>]+", text, re.IGNORECASE
+        r"(?:\b[a-z][a-z0-9+.-]*:|(?:^|(?<=\s))//)[^\s\"'<>]+",
+        text,
+        re.IGNORECASE,
     ):
         hit = _uri_policy_hit(match.group(0))
         if hit is not None:

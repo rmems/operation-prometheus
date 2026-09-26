@@ -56,7 +56,11 @@ def round_trip_errors(path: Path) -> list[str]:
     for line_number, line in enumerate(original.splitlines(), start=1):
         if not line.strip():
             continue
-        record = json.loads(line)
+        try:
+            record = json.loads(line)
+        except json.JSONDecodeError:
+            # validate_file already records the parse error for this line.
+            continue
         rebuilt = json.dumps(record, ensure_ascii=False)
         if json.loads(rebuilt) != record:
             errors.append(

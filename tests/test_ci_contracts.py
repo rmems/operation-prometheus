@@ -11,6 +11,7 @@ from lib.ci_contracts import (
     iter_uri_fields,
     private_reference_errors,
     silent_truncation_errors,
+    unique_event_errors,
     validation_evidence_errors,
 )
 from lib.github_client import GitHubClient, GitHubError
@@ -26,6 +27,7 @@ from hf_release_verify import (
     verify,
 )
 from source_inventory_audit import (
+    _snapshot_is_auditable,
     build_report as build_audit_report,
     diff_repositories,
     diff_terminal_candidates,
@@ -96,6 +98,12 @@ def test_patch_mentions_of_localhost_are_not_private_references():
     }
     assert iter_uri_fields(record) == ["https://github.com/rmems/ci-demo/pull/17"]
     assert private_reference_errors("http://[::1]/health") == ["private host ::1"]
+    assert private_reference_errors("https://alice:s3cr3t@example.com/path") == [
+        "credentials in URI"
+    ]
+    assert private_reference_errors("//10.0.0.1/private") == ["private host 10.0.0.1"]
+    nested = {"repository": {"url": "file:///etc/passwd"}}
+    assert iter_uri_fields(nested) == ["file:///etc/passwd"]
 
 
 def test_blank_license_is_rejected(tmp_path):
@@ -137,6 +145,12 @@ def test_silent_truncation_without_marker_is_rejected():
     )
     declared = {"patch": "# Truncated unified diff for training\n" + ("a" * 100)}
     assert silent_truncation_errors(declared) == []
+    hidden = {"software_payload": {"implementation_patch": "b" * (96 * 1024)}}
+    assert any(
+        "silent patch truncation" in error for error in silent_truncation_errors(hidden)
+    )
+    blank_id = {"artifacts": [{"id": ""}]}
+    assert unique_event_errors(blank_id) == ["artifact id is missing"]
 
 
 def test_corpus_integrity_passes_frozen_inventory(tmp_path):
@@ -200,6 +214,52 @@ def test_consumer_contract_parses_messages_and_instruction_with_sidecar(tmp_path
     assert formats == {"messages", "instruction"}
     assert sidecar["parser"] == "agoge_forger.datasets.normalize_row"
     assert sidecar["source_sha256"]
+    assert sidecar["source_path"] == (
+        "tests/fixtures/consumer/messages_and_instruction.jsonl"
+    )
+
+
+def test_consumer_contract_reports_malformed_rows_and_keeps_trajectory_id(tmp_path):
+    def normalize(row, tokenizer=None, index=0):
+        return {"text": "ok"}
+
+    path = tmp_path / "bad.jsonl"
+    path.write_text(
+        "\n".join(
+            [
+                "{",
+                "[]",
+                json.dumps(
+                    {
+                        "text": "keep",
+                        "_prometheus": {"source_trajectory_id": "traj-9"},
+                    }
+                ),
+            ]
+        )
+        + "\n",
+        encoding="utf-8",
+    )
+    sidecar = consume(path, normalize)
+    assert sidecar["ok"] is False
+    assert any("Invalid JSON" in error for error in sidecar["errors"])
+    assert any("not a JSON object" in error for error in sidecar["errors"])
+    assert sidecar["rows"][0]["source_trajectory_id"] == "traj-9"
+
+
+def test_consumer_contract_rejects_malformed_timestamp_metadata():
+    record = {"_prometheus": {"event_timestamps": [1, "2026-01-01T00:00:00Z"]}}
+    assert any("malformed event timestamp" in error for error in future_event_errors(record))
+
+
+def test_consumer_contract_does_not_double_count_event_timelines():
+    record = {
+        "events": [{"timestamp": "2026-01-02T00:00:00Z"}],
+        "_prometheus": {
+            "event_timestamps": ["2026-01-01T00:00:00Z", "2026-01-02T00:00:00Z"]
+        },
+    }
+    assert future_event_errors(record) == []
 
 
 def test_consumer_contract_detects_future_event_leakage():
@@ -217,9 +277,10 @@ def test_consumer_contract_detects_future_event_leakage():
 
 
 def test_hf_release_verify_refuses_immutable_tag_overwrite():
-    with pytest.raises(ReleaseVerifyError, match="overwrite immutable tag"):
-        refuse_overwrite_immutable_tag("v0.7.0", "aaa", {"v0.7.0": "bbb"})
+    refuse_overwrite_immutable_tag("v0.7.0", "aaa", {"v0.7.0": "commit-oid"})
     refuse_overwrite_immutable_tag("v0.7.0", "aaa", {})
+    with pytest.raises(ReleaseVerifyError, match="local manifest sha256 is missing"):
+        refuse_overwrite_immutable_tag("v0.7.0", "  ", {"v0.7.0": "commit-oid"})
     plan = resumable_upload_plan([{"path": "a.jsonl", "sha256": "ab", "bytes": 1}])
     assert plan[0]["resume_key"] == "sha256:ab"
 
@@ -297,6 +358,35 @@ def test_source_inventory_audit_reports_repo_and_terminal_drift():
     kinds = {row["kind"] for row in changed}
     assert "source_state_changed" in kinds
     assert "new_terminal_candidate" in kinds
+
+
+def test_snapshot_cannot_suppress_terminal_diff_or_skip_completeness():
+    frozen = [{"candidate_id": "c1", "source_state": "merged"}]
+    live = {
+        "repositories": [],
+        "pull_requests": [
+            {
+                "id": "PR_1",
+                "repository_id": "R",
+                "state": "closed",
+                "merged_at": None,
+                "number": 1,
+            }
+        ],
+        "skip_terminal_diff": True,
+    }
+    report = build_audit_report([], frozen, live)
+    assert report["changed_terminal_candidates"]
+    assert _snapshot_is_auditable(live, dry_run=False) is False
+    complete = {
+        "repositories": [],
+        "pull_requests": [],
+        "collection": {"complete": True},
+    }
+    assert _snapshot_is_auditable(complete, dry_run=False) is True
+    assert _snapshot_is_auditable(
+        {"repositories": [], "pull_requests": []}, dry_run=True
+    )
 
 
 def test_source_inventory_audit_is_read_only_and_refuses_mutations():

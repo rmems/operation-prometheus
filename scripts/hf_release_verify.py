@@ -141,12 +141,14 @@ def refuse_overwrite_immutable_tag(
         raise ReleaseVerifyError(
             f"Refusing non-immutable tag {tag!r}; expected vMAJOR.MINOR.PATCH"
         )
-    remote = remote_tags.get(tag)
-    if remote is None:
+    # Hugging Face tag targets are repository commit ids, not content hashes.
+    # A different commit id is not by itself an overwrite; pinned file checksums
+    # decide whether the published bytes match this manifest.
+    if remote_tags.get(tag) is None:
         return
-    if remote != local_sha256:
+    if not isinstance(local_sha256, str) or not local_sha256.strip():
         raise ReleaseVerifyError(
-            f"Refusing to overwrite immutable tag {tag}: remote {remote} != local {local_sha256}"
+            f"Refusing to publish immutable tag {tag}: local manifest sha256 is missing"
         )
 
 
@@ -212,6 +214,9 @@ def download_pinned_checksums(
 def _require_local_outputs(manifest: dict[str, Any], parquet_dir: Path) -> None:
     if not manifest["jsonl"]:
         raise ReleaseVerifyError("release is missing JSONL outputs")
+    for item in manifest["jsonl"]:
+        if item.get("bytes") == 0:
+            raise ReleaseVerifyError(f"release JSONL is empty: {item.get('path')}")
     if parquet_dir.is_dir() and not any(parquet_dir.glob("*.parquet")):
         raise ReleaseVerifyError(
             "parquet directory exists but contains no Parquet outputs"
