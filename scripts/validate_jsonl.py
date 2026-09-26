@@ -551,30 +551,41 @@ def contract_policy_errors(record: dict, lineno: int, filename: str) -> list[str
     return errors
 
 
+def _version_needs_stable_id(version: object) -> bool:
+    return version in _V1_VERSIONS or version in _V1_1_VERSIONS
+
+
+def _duplicate_identity_error(
+    identity: str, lineno: int, context: _LineValidationContext
+) -> list[str]:
+    previous = context.seen_ids.get(identity)
+    if previous is None:
+        context.seen_ids[identity] = lineno
+        return []
+    return [
+        f"  {context.filename}:{lineno} [policy] - duplicate trajectory id "
+        f"{identity} (first seen on line {previous})"
+    ]
+
+
+def _missing_stable_id(record: dict) -> bool:
+    if _version_needs_stable_id(record.get("schema_version")):
+        return True
+    return record.get("id") is not None
+
+
 def _identity_errors(
     record: dict, lineno: int, context: _LineValidationContext
 ) -> list[str]:
     identity = record_identity(record)
     if identity:
-        previous = context.seen_ids.get(identity)
-        if previous is not None:
-            return [
-                f"  {context.filename}:{lineno} [policy] - duplicate trajectory id "
-                f"{identity} (first seen on line {previous})"
-            ]
-        context.seen_ids[identity] = lineno
+        return _duplicate_identity_error(identity, lineno, context)
+    if not _missing_stable_id(record):
         return []
-    version = record.get("schema_version")
-    if (
-        version in _V1_VERSIONS
-        or version in _V1_1_VERSIONS
-        or record.get("id") is not None
-    ):
-        return [
-            f"  {context.filename}:{lineno} [policy] - "
-            "trajectory/event record is missing a stable id"
-        ]
-    return []
+    return [
+        f"  {context.filename}:{lineno} [policy] - "
+        "trajectory/event record is missing a stable id"
+    ]
 
 
 def _jsonschema_errors(
