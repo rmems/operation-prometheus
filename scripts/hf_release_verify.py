@@ -141,9 +141,7 @@ def refuse_overwrite_immutable_tag(
         raise ReleaseVerifyError(
             f"Refusing non-immutable tag {tag!r}; expected vMAJOR.MINOR.PATCH"
         )
-    # Hugging Face tag targets are repository commit ids, not content hashes.
-    # A different commit id is not by itself an overwrite; pinned file checksums
-    # decide whether the published bytes match this manifest.
+    # Tag values are Hub commit ids. Content equality is the pinned checksum check.
     if remote_tags.get(tag) is None:
         return
     if not isinstance(local_sha256, str) or not local_sha256.strip():
@@ -211,17 +209,17 @@ def download_pinned_checksums(
     return checksums
 
 
-def _empty_jsonl_name(items: list[dict[str, Any]]) -> str | None:
-    for item in items:
-        if item.get("bytes") == 0:
-            return str(item.get("path"))
-    return None
-
-
 def _require_local_outputs(manifest: dict[str, Any], parquet_dir: Path) -> None:
     if not manifest["jsonl"]:
         raise ReleaseVerifyError("release is missing JSONL outputs")
-    empty_jsonl = _empty_jsonl_name(manifest["jsonl"])
+    empty_jsonl = next(
+        (
+            item.get("path")
+            for item in manifest["jsonl"]
+            if item.get("bytes") == 0
+        ),
+        None,
+    )
     if empty_jsonl is not None:
         raise ReleaseVerifyError(f"release JSONL is empty: {empty_jsonl}")
     if parquet_dir.is_dir() and not any(parquet_dir.glob("*.parquet")):
