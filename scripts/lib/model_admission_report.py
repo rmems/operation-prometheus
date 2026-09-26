@@ -41,68 +41,112 @@ def _schema_errors(report: dict[str, Any]) -> list[str]:
     return [error.message for error in validator.iter_errors(report)]
 
 
+def _identity_token_ok(value: Any) -> bool:
+    if not isinstance(value, str) or not value:
+        return False
+    return ":" not in value
+
+
+def _model_identity_error(model: Any) -> str | None:
+    if not isinstance(model, dict):
+        return "model is not an object"
+    name_ok = _identity_token_ok(model.get("name"))
+    tag_ok = _identity_token_ok(model.get("tag"))
+    if name_ok and tag_ok:
+        return None
+    return "model identity is not canonical name/tag"
+
+
+def _without_evidence_digest(report: dict[str, Any]) -> dict[str, Any]:
+    return {key: value for key, value in report.items() if key != "evidence_digest"}
+
+
+def _digest_recomputes(report: dict[str, Any]) -> bool:
+    clone = _without_evidence_digest(report)
+    return sha256_json(clone) == report.get("evidence_digest")
+
+
+def _missing_nonaccepted_reasons(report: dict[str, Any]) -> bool:
+    if report.get("decision") == "accepted":
+        return False
+    return not report.get("reasons")
+
+
 def _semantic_errors(report: dict[str, Any]) -> list[str]:
     errors: list[str] = []
-    model = report.get("model")
-    if not isinstance(model, dict):
-        errors.append("model is not an object")
-    else:
-        name, tag = model.get("name"), model.get("tag")
-        if (
-            not isinstance(name, str)
-            or not name
-            or ":" in name
-            or not isinstance(tag, str)
-            or not tag
-            or ":" in tag
-        ):
-            errors.append("model identity is not canonical name/tag")
-    clone = {k: v for k, v in report.items() if k != "evidence_digest"}
-    if sha256_json(clone) != report.get("evidence_digest"):
+    identity = _model_identity_error(report.get("model"))
+    if identity:
+        errors.append(identity)
+    if not _digest_recomputes(report):
         errors.append("evidence_digest does not recompute")
-    if report.get("decision") != "accepted" and not report.get("reasons"):
+    if _missing_nonaccepted_reasons(report):
         errors.append("non-accepted report must carry machine-readable reasons")
     return errors
+
+
+def _canonical_emitted_endpoint(value: Any) -> bool:
+    canonical = canonical_loopback_endpoint(value)
+    return canonical is not None and canonical == value
 
 
 def _endpoint_errors(report: dict[str, Any]) -> list[str]:
     runtime = report.get("runtime") or {}
     probe = report.get("probe") or {}
-    runtime_endpoint = canonical_loopback_endpoint(runtime.get("endpoint"))
-    probe_endpoint = canonical_loopback_endpoint(probe.get("endpoint"))
-    if runtime_endpoint is None or runtime_endpoint != runtime.get("endpoint"):
+    runtime_endpoint = runtime.get("endpoint")
+    if not _canonical_emitted_endpoint(runtime_endpoint):
         return ["runtime endpoint is not a canonical loopback URL"]
+    probe_endpoint = canonical_loopback_endpoint(probe.get("endpoint"))
     if runtime_endpoint != probe_endpoint:
         return ["runtime and probe endpoints disagree"]
     return []
 
 
+def _fallback_flags_closed(report: dict[str, Any], fallback: dict[str, Any]) -> bool:
+    if report.get("cloud_fallback_allowed") is not False:
+        return False
+    if fallback.get("cloud_fallback_allowed") is not False:
+        return False
+    return fallback.get("no_cloud") is True
+
+
+def _fallback_surface_clean(fallback: dict[str, Any]) -> bool:
+    if fallback.get("unsanitized_keys"):
+        return False
+    return not fallback.get("remote_endpoints")
+
+
 def _fallback_errors(report: dict[str, Any]) -> list[str]:
     fallback = report.get("fallback_evidence") or {}
-    coherent = (
-        report.get("cloud_fallback_allowed") is False
-        and fallback.get("cloud_fallback_allowed") is False
-        and fallback.get("no_cloud") is True
-        and not fallback.get("unsanitized_keys")
-        and not fallback.get("remote_endpoints")
-    )
-    return [] if coherent else ["fallback evidence is not a coherent disproof"]
+    flags_closed = _fallback_flags_closed(report, fallback)
+    if flags_closed and _fallback_surface_clean(fallback):
+        return []
+    return ["fallback evidence is not a coherent disproof"]
+
+
+def _missing_digest_names(digests: dict[str, Any]) -> list[str]:
+    return [name for name in _REQUIRED_ACCEPTED_DIGESTS if name not in digests]
 
 
 def _digest_errors(report: dict[str, Any]) -> list[str]:
     digests = report.get("input_digests") or {}
-    missing = [name for name in _REQUIRED_ACCEPTED_DIGESTS if name not in digests]
+    missing = _missing_digest_names(digests)
     if missing:
         return [f"missing required input digests: {missing}"]
     return []
+
+
+def _provider_config_dirty(config: Any) -> bool:
+    rejected, quarantined = config_reasons(config)
+    if rejected:
+        return True
+    return bool(quarantined)
 
 
 def _provider_errors(report: dict[str, Any]) -> list[str]:
     provider = report.get("provider") or {}
     if provider.get("name") != "hermes-agent":
         return ["provider name is not hermes-agent"]
-    rejected, quarantined = config_reasons(provider.get("config"))
-    if rejected or quarantined:
+    if _provider_config_dirty(provider.get("config")):
         return ["provider_config fails sanitization"]
     return []
 

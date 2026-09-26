@@ -6,6 +6,7 @@ import hashlib
 import json
 from pathlib import Path
 
+import jsonschema
 import pytest
 
 from lib.model_admission import (
@@ -146,32 +147,47 @@ def test_missing_cloud_fallback_disproof_rejected():
     assert "cloud_fallback_not_disproven" in row["reason_codes"]
 
 
-def test_unknown_config_key_rejected():
-    row = _evaluate(
-        _candidate(
-            provider_config={
-                "no_cloud": True,
-                "cloud_fallback_allowed": False,
-                "mystery": True,
-            }
-        )
-    )
-    assert row["disposition"] == "rejected"
-    assert "provider_config_unknown_keys" in row["reason_codes"]
+def _closed_config(**extra):
+    return {
+        "no_cloud": True,
+        "cloud_fallback_allowed": False,
+        **extra,
+    }
 
 
-def test_list_secret_value_unsanitized():
-    row = _evaluate(
-        _candidate(
-            provider_config={
-                "no_cloud": True,
-                "cloud_fallback_allowed": False,
-                "api_key": ["sk-secret"],
-            }
-        )
-    )
+@pytest.mark.parametrize(
+    ("extra", "code"),
+    [
+        ({"mystery": True}, "provider_config_unknown_keys"),
+        ({"api_key": ["sk-secret"]}, "provider_config_unsanitized"),
+        (
+            {"stop": ["ghp_abcdefghijklmnopqrstuvwxyz0123456789"]},
+            "provider_config_unsanitized",
+        ),
+        (
+            {
+                "stop": (
+                    "sk-proj-ABCDEFGHIJKLMNOPQRSTUVWXYZ"
+                    "abcdefghijklmnopqrstuvwxyz0123456789"
+                )
+            },
+            "provider_config_unsanitized",
+        ),
+        ({"wrapper": {"num_ctx": 1}}, "provider_config_unknown_keys"),
+        ({"num_ctx": "big"}, "provider_config_invalid"),
+        ({"stop": ["https://api.example.com/v1?api_key=supersecret"]}, None),
+        ({"keep_alive": "https://api.example.com/v1"}, None),
+        ({"num_ctx": {"temperature": 1}}, None),
+        ({"stop": ['{"X-API-Key":"ordinarysecretvalue123"}']}, None),
+        ({"stop": ["file:///home/example/.ollama"]}, None),
+        ({"stop": ["Authorization: Bearer abcdef123456"]}, None),
+    ],
+)
+def test_provider_config_shapes_rejected(extra, code):
+    row = _evaluate(_candidate(provider_config=_closed_config(**extra)))
     assert row["disposition"] == "rejected"
-    assert "provider_config_unsanitized" in row["reason_codes"]
+    if code is not None:
+        assert code in row["reason_codes"]
 
 
 # --- 3. Coherent probe evidence --------------------------------------------
@@ -302,8 +318,6 @@ ROOT_SCHEMA = json.loads(
 
 
 def test_accepted_report_fixture_matches_locked_schema():
-    import jsonschema
-
     report = json.loads((FIXTURE_DIR / "accepted_report.json").read_text())
     jsonschema.validate(report, ROOT_SCHEMA)
     assert report["decision"] == "accepted"
@@ -315,9 +329,6 @@ def test_accepted_report_fixture_matches_locked_schema():
 
 
 def test_schema_rejects_forged_accepted_with_nulls():
-    import jsonschema
-    import pytest as _pytest
-
     forged = {
         "schema_version": "local_model_admission_v1",
         "decision": "accepted",
@@ -347,7 +358,7 @@ def test_schema_rejects_forged_accepted_with_nulls():
         "input_digests": {},
         "evidence_digest": "0" * 64,
     }
-    with _pytest.raises(jsonschema.ValidationError):
+    with pytest.raises(jsonschema.ValidationError):
         jsonschema.validate(forged, ROOT_SCHEMA)
 
 
@@ -364,62 +375,6 @@ def test_emitted_decision_is_verbatim_reproducible():
 
 
 # --- 3. value-level credential scanning and strict config types --------------
-
-def test_credential_in_stop_list_rejected():
-    row = _evaluate(
-        _candidate(
-            provider_config={
-                "no_cloud": True,
-                "cloud_fallback_allowed": False,
-                "stop": ["ghp_abcdefghijklmnopqrstuvwxyz0123456789"],
-            }
-        )
-    )
-    assert row["disposition"] == "rejected"
-    assert "provider_config_unsanitized" in row["reason_codes"]
-
-
-def test_credential_in_allowed_scalar_key_rejected():
-    row = _evaluate(
-        _candidate(
-            provider_config={
-                "no_cloud": True,
-                "cloud_fallback_allowed": False,
-                "stop": "sk-proj-ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789",
-            }
-        )
-    )
-    assert row["disposition"] == "rejected"
-    assert "provider_config_unsanitized" in row["reason_codes"]
-
-
-def test_nested_wrapper_under_allowed_leaf_rejected():
-    row = _evaluate(
-        _candidate(
-            provider_config={
-                "no_cloud": True,
-                "cloud_fallback_allowed": False,
-                "wrapper": {"num_ctx": 1},
-            }
-        )
-    )
-    assert row["disposition"] == "rejected"
-    assert "provider_config_unknown_keys" in row["reason_codes"]
-
-
-def test_wrong_type_for_numeric_knob_rejected():
-    row = _evaluate(
-        _candidate(
-            provider_config={
-                "no_cloud": True,
-                "cloud_fallback_allowed": False,
-                "num_ctx": "big",
-            }
-        )
-    )
-    assert row["disposition"] == "rejected"
-    assert "provider_config_invalid" in row["reason_codes"]
-
 
 # --- 4. probe/candidate runtime identity -------------------------------------
 
@@ -498,45 +453,6 @@ def test_unknown_candidate_fields_rejected(extra):
 
 # --- config: credential-bearing URLs and nested containers --------------------
 
-def test_credential_url_in_stop_list_rejected():
-    row = _evaluate(
-        _candidate(
-            provider_config={
-                "no_cloud": True,
-                "cloud_fallback_allowed": False,
-                "stop": ["https://api.example.com/v1?api_key=supersecret"],
-            }
-        )
-    )
-    assert row["disposition"] == "rejected"
-
-
-def test_remote_url_under_arbitrary_key_rejected():
-    row = _evaluate(
-        _candidate(
-            provider_config={
-                "no_cloud": True,
-                "cloud_fallback_allowed": False,
-                "keep_alive": "https://api.example.com/v1",
-            }
-        )
-    )
-    assert row["disposition"] == "rejected"
-
-
-def test_nested_allowlisted_mapping_rejected():
-    row = _evaluate(
-        _candidate(
-            provider_config={
-                "no_cloud": True,
-                "cloud_fallback_allowed": False,
-                "num_ctx": {"temperature": 1},
-            }
-        )
-    )
-    assert row["disposition"] == "rejected"
-
-
 # --- untrusted emitted strings / revision binding / endpoint form ------------
 
 @pytest.mark.parametrize(
@@ -560,27 +476,6 @@ def test_terms_source_with_credential_url_rejected():
     _assert_never_accepted(row)
 
 
-@pytest.mark.parametrize(
-    "value",
-    [
-        '{"X-API-Key":"ordinarysecretvalue123"}',
-        "file:///home/example/.ollama",
-        "Authorization: Bearer abcdef123456",
-    ],
-)
-def test_unsafe_strings_in_stop_list_rejected(value):
-    row = _evaluate(
-        _candidate(
-            provider_config={
-                "no_cloud": True,
-                "cloud_fallback_allowed": False,
-                "stop": [value],
-            }
-        )
-    )
-    assert row["disposition"] == "rejected"
-
-
 def test_trailing_slash_endpoint_equivalent():
     probe = _probe(endpoint="http://127.0.0.1:11434/")
     row = _evaluate(probe=probe)
@@ -589,8 +484,6 @@ def test_trailing_slash_endpoint_equivalent():
 
 
 def test_forged_rejected_with_empty_reasons_fails_contract():
-    import jsonschema
-
     report = json.loads((FIXTURE_DIR / "accepted_report.json").read_text())
     forged = dict(report)
     forged["decision"] = "rejected"

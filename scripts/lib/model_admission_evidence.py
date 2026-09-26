@@ -189,11 +189,11 @@ def _text(value: Any) -> str | None:
 
 
 def _endpoint_text_ok(value: Any) -> bool:
-    return (
-        isinstance(value, str)
-        and value == value.strip()
-        and value.startswith("http://")
-    )
+    if not isinstance(value, str):
+        return False
+    if value != value.strip():
+        return False
+    return value.startswith("http://")
 
 
 def _canonical_netloc(parsed) -> str | None:
@@ -209,6 +209,15 @@ def _canonical_netloc(parsed) -> str | None:
     if host not in LOOPBACK_HOSTS or port is None:
         return None
     return netloc
+
+
+def _endpoint_extras_empty(parsed) -> bool:
+    """Path is empty or ``/``, and query and fragment are absent."""
+    if parsed.path not in ("", "/"):
+        return False
+    if parsed.query:
+        return False
+    return not parsed.fragment
 
 
 def canonical_loopback_endpoint(value: Any) -> str | None:
@@ -227,10 +236,12 @@ def canonical_loopback_endpoint(value: Any) -> str | None:
         return None
     if parsed.scheme != "http":
         return None
-    if parsed.path not in ("", "/") or parsed.query or parsed.fragment:
+    if not _endpoint_extras_empty(parsed):
         return None
     netloc = _canonical_netloc(parsed)
-    return None if netloc is None else f"http://{netloc}"
+    if netloc is None:
+        return None
+    return f"http://{netloc}"
 
 
 def endpoint_host(endpoint: Any) -> str | None:
@@ -309,23 +320,45 @@ def invalid_config_values(config: Any) -> list[str]:
     return invalid
 
 
+def _is_strict_int(value: Any) -> bool:
+    return isinstance(value, int) and not isinstance(value, bool)
+
+
+def _is_str_list(value: Any) -> bool:
+    if not isinstance(value, list):
+        return False
+    return all(isinstance(item, str) for item in value)
+
+
+def _is_finite_number(value: Any) -> bool:
+    if isinstance(value, bool) or not isinstance(value, (int, float)):
+        return False
+    return math.isfinite(value)
+
+
+def _is_nonnegative_number(value: Any) -> bool:
+    return _is_finite_number(value) and value >= 0
+
+
+def _is_bool(value: Any) -> bool:
+    return isinstance(value, bool)
+
+
+def _is_str(value: Any) -> bool:
+    return isinstance(value, str)
+
+
+_KIND_CHECKS = {
+    "bool": _is_bool,
+    "int": _is_strict_int,
+    "str": _is_str,
+    "str_list": _is_str_list,
+}
+
+
 def _value_matches_kind(value: Any, kind: str) -> bool:
-    if kind == "bool":
-        return isinstance(value, bool)
-    if kind == "int":
-        return isinstance(value, int) and not isinstance(value, bool)
-    if kind == "str":
-        return isinstance(value, str)
-    if kind == "str_list":
-        return isinstance(value, list) and all(
-            isinstance(item, str) for item in value
-        )
-    return (
-        isinstance(value, (int, float))
-        and not isinstance(value, bool)
-        and math.isfinite(value)
-        and value >= 0
-    )
+    check = _KIND_CHECKS.get(kind, _is_nonnegative_number)
+    return check(value)
 
 
 _CREDENTIAL_PARAM_RE = re.compile(

@@ -311,17 +311,55 @@ def _load_or_fail(input_paths: dict[str, Path]) -> dict[str, Any] | None:
         return None
 
 
+def _output_paths(args: argparse.Namespace) -> dict[str, Path]:
+    paths = {"--out": args.out}
+    if args.diagnostics is not None:
+        paths["--diagnostics"] = args.diagnostics
+    return paths
+
+
+def _startup_error(args: argparse.Namespace) -> str | None:
+    return _check_args(args) or _collision_error(
+        _input_paths(args), _output_paths(args)
+    )
+
+
+def _decision_line(out_name: str, decision: dict[str, Any]) -> str:
+    line = f"{out_name}: decision={decision['decision']}"
+    if decision["reasons"]:
+        return f"{line} reasons={decision['reasons']}"
+    return line
+
+
+def _announce(
+    args: argparse.Namespace, decision: dict[str, Any], report: dict[str, Any]
+) -> None:
+    if args.check:
+        return
+    print(_decision_line(args.out.name, decision))
+    if args.diagnostics is not None:
+        args.diagnostics.write_bytes(render_report(report))
+
+
+def _finish(
+    args: argparse.Namespace, evaluated: tuple[dict[str, Any], dict[str, Any]]
+) -> int:
+    report, _candidate = evaluated
+    decision = report["decisions"][0]
+    rendered = _validated_decision(report)
+    if rendered is None:
+        return 2
+    _announce(args, decision, report)
+    return _emit(args, rendered, report["closed"])
+
+
 def main(argv: list[str] | None = None) -> int:
     args = build_parser().parse_args(argv)
-    input_paths = _input_paths(args)
-    out_paths = {"--out": args.out}
-    if args.diagnostics is not None:
-        out_paths["--diagnostics"] = args.diagnostics
-    if error := _check_args(args) or _collision_error(input_paths, out_paths):
+    if error := _startup_error(args):
         print(f"ERROR: {error}", file=sys.stderr)
         return 2
 
-    inputs = _load_or_fail(input_paths)
+    inputs = _load_or_fail(_input_paths(args))
     if inputs is None:
         return 2
 
@@ -331,21 +369,7 @@ def main(argv: list[str] | None = None) -> int:
     evaluated = _evaluate(inputs, probe)
     if evaluated is None:
         return 2
-    report, candidate = evaluated
-    decision = report["decisions"][0]
-    rendered = _validated_decision(report)
-    if rendered is None:
-        return 2
-
-    if not args.check:
-        print(
-            f"{args.out.name}: decision={decision['decision']}"
-            + (f" reasons={decision['reasons']}" if decision["reasons"] else "")
-        )
-        args.diagnostics and args.diagnostics.write_bytes(
-            render_report(report)
-        )
-    return _emit(args, rendered, report["closed"])
+    return _finish(args, evaluated)
 
 
 def build_parser() -> argparse.ArgumentParser:

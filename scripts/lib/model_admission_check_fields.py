@@ -60,33 +60,65 @@ def model_identity_reasons(candidate: dict[str, Any]) -> tuple[list[str], list[s
     return [], []
 
 
+def _unknown_candidate_keys(candidate: dict[str, Any]) -> list[Any]:
+    return [key for key in candidate if key not in ALLOWED_CANDIDATE_KEYS]
+
+
+def _foreign_provider_key(key: Any) -> bool:
+    return key.strip().lower() in _FOREIGN_PROVIDER_HINTS
+
+
+def _unknown_key_flags(key: Any, value: Any) -> list[str]:
+    flags: list[str] = []
+    secret = _looks_secret(key, value)
+    remote = _looks_remote_endpoint(key, value)
+    if secret or remote:
+        flags.append("candidate_unsanitized")
+    if _foreign_provider_key(key):
+        flags.append("foreign_provider_declared")
+    return flags
+
+
 def envelope_reasons(candidate: dict[str, Any]) -> tuple[list[str], list[str]]:
     """Closed candidate envelope: unknown keys and foreign/secret values reject."""
-    unknown = [key for key in candidate if key not in ALLOWED_CANDIDATE_KEYS]
-    rejected = ["candidate_unknown_fields"] if unknown else []
+    unknown = _unknown_candidate_keys(candidate)
+    if not unknown:
+        return [], []
+    rejected = ["candidate_unknown_fields"]
     for key in unknown:
-        value = candidate.get(key)
-        if _looks_secret(key, value) or _looks_remote_endpoint(key, value):
-            rejected.append("candidate_unsanitized")
-        if key.strip().lower() in _FOREIGN_PROVIDER_HINTS:
-            rejected.append("foreign_provider_declared")
+        rejected.extend(_unknown_key_flags(key, candidate.get(key)))
     return sorted(set(rejected)), []
 
 
-def _looks_secret(key: Any, value: Any) -> bool:
-    if isinstance(key, str) and _SECRET_KEY_RE.search(key):
-        return _nonempty_secret_value(value)
+def _key_names_secret(key: Any) -> bool:
+    return isinstance(key, str) and bool(_SECRET_KEY_RE.search(key))
+
+
+def _string_matches_secret(item: Any) -> bool:
+    return isinstance(item, str) and bool(_SECRET_VALUE_RE.search(item))
+
+
+def _secret_shaped_value(value: Any) -> bool:
     values = value if isinstance(value, list) else [value]
-    return any(
-        isinstance(item, str) and _SECRET_VALUE_RE.search(item)
-        for item in values
-    )
+    return any(_string_matches_secret(item) for item in values)
+
+
+def _looks_secret(key: Any, value: Any) -> bool:
+    if _key_names_secret(key):
+        return _nonempty_secret_value(value)
+    return _secret_shaped_value(value)
+
+
+def _endpoint_key(key: Any) -> bool:
+    return isinstance(key, str) and key.strip().lower() in _ENDPOINT_KEYS
+
+
+def _blank_endpoint(value: Any) -> bool:
+    return not isinstance(value, str) or not value.strip()
 
 
 def _looks_remote_endpoint(key: Any, value: Any) -> bool:
-    if not (isinstance(key, str) and key.strip().lower() in _ENDPOINT_KEYS):
-        return False
-    if not isinstance(value, str) or not value.strip():
+    if not _endpoint_key(key) or _blank_endpoint(value):
         return False
     return canonical_loopback_endpoint(value) is None
 
@@ -114,33 +146,50 @@ def runtime_reasons(candidate: dict[str, Any]) -> tuple[list[str], list[str]]:
     return [], []
 
 
+def _host_is_loopback(host: str | None) -> bool:
+    return host in ("localhost", "127.0.0.1", "::1")
+
+
 def endpoint_reasons(candidate: dict[str, Any]) -> tuple[list[str], list[str]]:
     endpoint = candidate.get("endpoint")
     if _text(endpoint) is None:
         return [], ["endpoint_missing"]
     host = endpoint_host(endpoint)
-    if host is not None and host not in ("localhost", "127.0.0.1", "::1"):
+    if host is not None and not _host_is_loopback(host):
         return ["endpoint_not_loopback"], []
     if canonical_loopback_endpoint(endpoint) is None:
         return [], ["endpoint_invalid"]
     return [], []
 
 
-def config_reasons(config: Any) -> tuple[list[str], list[str]]:
-    if not isinstance(config, dict):
-        return [], ["provider_config_missing"]
+def _config_unsanitized(config: dict[str, Any]) -> bool:
+    if unsanitized_config_keys(config):
+        return True
+    return bool(credential_config_values(config))
+
+
+def _config_rejection_codes(config: dict[str, Any]) -> list[str]:
     rejected: list[str] = []
     if unknown_config_keys(config):
         rejected.append("provider_config_unknown_keys")
     if invalid_config_values(config):
         rejected.append("provider_config_invalid")
-    if unsanitized_config_keys(config) or credential_config_values(config):
+    if _config_unsanitized(config):
         rejected.append("provider_config_unsanitized")
     if remote_config_endpoints(config):
         rejected.append("cloud_endpoint_detected")
     if config.get("cloud_fallback_allowed") is not False:
         rejected.append("cloud_fallback_not_disproven")
-    quarantined = (
-        [] if config.get("no_cloud") is True else ["no_cloud_evidence_missing"]
-    )
-    return rejected, quarantined
+    return rejected
+
+
+def _config_quarantine_codes(config: dict[str, Any]) -> list[str]:
+    if config.get("no_cloud") is True:
+        return []
+    return ["no_cloud_evidence_missing"]
+
+
+def config_reasons(config: Any) -> tuple[list[str], list[str]]:
+    if not isinstance(config, dict):
+        return [], ["provider_config_missing"]
+    return _config_rejection_codes(config), _config_quarantine_codes(config)

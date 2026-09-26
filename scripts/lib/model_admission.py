@@ -55,21 +55,39 @@ def _rights_row(rights: Any, model: str) -> Any:
     return models.get(model) if isinstance(models, dict) else None
 
 
+def _frozen_revision(rights_row: Any) -> str | None:
+    if not isinstance(rights_row, dict):
+        return None
+    return _text(rights_row.get("upstream_revision"))
+
+
+def _revisions_conflict(declared: str | None, frozen: str | None) -> bool:
+    if declared is None or frozen is None:
+        return False
+    return declared != frozen
+
+
+def _revision_unbound(declared: str | None, frozen: str | None) -> bool:
+    return declared is not None and frozen is None
+
+
 def _upstream_revision_reasons(
     candidate: dict[str, Any], rights_row: Any
 ) -> tuple[list[str], list[str]]:
     """A claimed revision must be bound to frozen evidence, else quarantine."""
     declared = _text(candidate.get("upstream_revision"))
-    frozen = (
-        _text(rights_row.get("upstream_revision"))
-        if isinstance(rights_row, dict)
-        else None
-    )
-    if declared is not None and frozen is not None and declared != frozen:
+    frozen = _frozen_revision(rights_row)
+    if _revisions_conflict(declared, frozen):
         return ["upstream_revision_mismatch"], []
-    if declared is not None and frozen is None:
+    if _revision_unbound(declared, frozen):
         return [], ["upstream_revision_unbound"]
     return [], []
+
+
+def _revision_attested(declared: str | None, frozen: str | None) -> bool:
+    if frozen is None:
+        return False
+    return declared is None or declared == frozen
 
 
 def _bound_revision(
@@ -77,12 +95,8 @@ def _bound_revision(
 ) -> str | None:
     """Only a revision attested by frozen evidence may be emitted."""
     declared = _text(candidate.get("upstream_revision"))
-    frozen = (
-        _text(rights_row.get("upstream_revision"))
-        if isinstance(rights_row, dict)
-        else None
-    )
-    if frozen is not None and (declared is None or declared == frozen):
+    frozen = _frozen_revision(rights_row)
+    if _revision_attested(declared, frozen):
         return frozen
     return None
 
@@ -266,7 +280,7 @@ def _decision_report(row: dict[str, Any], inputs: AdmissionInputs) -> dict:
 
 def _rows_by_disposition(rows: list[dict[str, Any]]) -> dict[str, list]:
     return {
-        name: [r for r in rows if r["disposition"] == name]
+        name: [row for row in rows if row["disposition"] == name]
         for name in DISPOSITIONS
     }
 
@@ -274,7 +288,35 @@ def _rows_by_disposition(rows: list[dict[str, Any]]) -> dict[str, list]:
 def _evaluate_rows(
     candidates: list[Any], inputs: AdmissionInputs
 ) -> list[dict[str, Any]]:
-    return [evaluate_admission(c, inputs=inputs) for c in candidates]
+    return [evaluate_admission(candidate, inputs=inputs) for candidate in candidates]
+
+
+def _decision_reports(rows: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    return [row["report"] for row in rows]
+
+
+def _bundle_error_list(inputs: AdmissionInputs, rows: list[dict[str, Any]]) -> list[str]:
+    errors = list(inputs.bundle_errors or [])
+    if not rows:
+        errors.append("no_candidates")
+    return errors
+
+
+def _bundle_is_closed(
+    grouped: dict[str, list], errors: list[str]
+) -> bool:
+    if grouped["quarantined"] or grouped["rejected"]:
+        return False
+    return not errors
+
+
+def _license_families(rows: list[dict[str, Any]]) -> list[str]:
+    families = [row["license_family"] for row in rows]
+    return sorted({family for family in families if family})
+
+
+def _evidence_digests(decisions: list[dict[str, Any]]) -> list[str]:
+    return sorted({decision["evidence_digest"] for decision in decisions})
 
 
 def build_admission_report(
@@ -283,16 +325,11 @@ def build_admission_report(
     """Build the bundle report wrapping each singular decision report."""
     rows = _evaluate_rows(candidates, inputs)
     grouped = _rows_by_disposition(rows)
-    decisions = [r["report"] for r in rows]
-    errors = list(inputs.bundle_errors or [])
-    if not rows:
-        errors.append("no_candidates")
-    closed = (
-        not grouped["quarantined"] and not grouped["rejected"] and not errors
-    )
+    decisions = _decision_reports(rows)
+    errors = _bundle_error_list(inputs, rows)
     return {
         "schema_version": SCHEMA_VERSION,
-        "closed": closed,
+        "closed": _bundle_is_closed(grouped, errors),
         "counts": {
             "candidate_count": len(rows),
             "accepted": len(grouped["accepted"]),
@@ -300,12 +337,8 @@ def build_admission_report(
             "rejected": len(grouped["rejected"]),
         },
         "decisions": decisions,
-        "license_families": sorted(
-            {r["license_family"] for r in rows if r["license_family"]}
-        ),
-        "evidence_digests": sorted(
-            {d["evidence_digest"] for d in decisions}
-        ),
+        "license_families": _license_families(rows),
+        "evidence_digests": _evidence_digests(decisions),
         "input_digests": dict(sorted(inputs.input_digests.items())),
         "bundle_errors": errors,
     }
