@@ -146,12 +146,7 @@ def _ci_detail_error(detail: str) -> str | None:
         return None
     if detail.startswith("review_apps"):
         return None
-    folded = detail.casefold()
-    if "passing locally" in folded:
-        return "CI evidence is prose rather than a check-run conclusion"
-    if "test plan" in folded:
-        return "CI evidence is prose rather than a check-run conclusion"
-    return None
+    return "CI evidence is prose rather than a check-run conclusion"
 
 
 def _missing_validation_errors(record: dict[str, Any]) -> list[str]:
