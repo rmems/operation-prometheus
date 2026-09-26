@@ -167,6 +167,40 @@ def _source_identity(path: Path) -> str:
         return path.as_posix()
 
 
+def _consumed_row(
+    line_number: int,
+    record: dict[str, Any],
+    normalized: dict[str, Any],
+) -> dict[str, Any]:
+    payload = {key: value for key, value in record.items() if key != "_prometheus"}
+    row = {
+        "line": line_number,
+        "format": _format_name(payload),
+        "text_sha256": hashlib.sha256(normalized["text"].encode("utf-8")).hexdigest(),
+    }
+    meta = _prometheus_meta(record)
+    source_trajectory_id = meta.get("source_trajectory_id") if meta is not None else None
+    if isinstance(source_trajectory_id, str) and source_trajectory_id.strip():
+        row["source_trajectory_id"] = source_trajectory_id
+    return row
+
+
+def _normalize_row(
+    path: Path,
+    line_number: int,
+    record: dict[str, Any],
+    normalize: Callable[..., dict[str, Any]],
+) -> tuple[dict[str, Any] | None, str | None]:
+    payload = {key: value for key, value in record.items() if key != "_prometheus"}
+    try:
+        normalized = normalize(payload, None, index=line_number)
+    except ValueError as exc:
+        return None, f"{path.name}:{line_number} {exc}"
+    if not isinstance(normalized, dict) or not isinstance(normalized.get("text"), str):
+        return None, f"{path.name}:{line_number} parser did not return a text row"
+    return normalized, None
+
+
 def consume(path: Path, normalize: Callable[..., dict[str, Any]]) -> dict[str, Any]:
     rows, errors = load_derivative_rows(path)
     consumed: list[dict[str, Any]] = []
@@ -175,31 +209,12 @@ def consume(path: Path, normalize: Callable[..., dict[str, Any]]) -> dict[str, A
             f"{path.name}:{line_number} {message}"
             for message in future_event_errors(record)
         )
-        payload = {key: value for key, value in record.items() if key != "_prometheus"}
-        try:
-            normalized = normalize(payload, None, index=line_number)
-        except ValueError as exc:
-            errors.append(f"{path.name}:{line_number} {exc}")
+        normalized, error = _normalize_row(path, line_number, record, normalize)
+        if error is not None or normalized is None:
+            if error is not None:
+                errors.append(error)
             continue
-        if not isinstance(normalized, dict) or not isinstance(
-            normalized.get("text"), str
-        ):
-            errors.append(f"{path.name}:{line_number} parser did not return a text row")
-            continue
-        row = {
-            "line": line_number,
-            "format": _format_name(payload),
-            "text_sha256": hashlib.sha256(
-                normalized["text"].encode("utf-8")
-            ).hexdigest(),
-        }
-        meta = _prometheus_meta(record)
-        source_trajectory_id = (
-            meta.get("source_trajectory_id") if meta is not None else None
-        )
-        if isinstance(source_trajectory_id, str) and source_trajectory_id.strip():
-            row["source_trajectory_id"] = source_trajectory_id
-        consumed.append(row)
+        consumed.append(_consumed_row(line_number, record, normalized))
     sidecar = {
         "schema_version": SIDECAR_SCHEMA,
         "source_path": _source_identity(path),
