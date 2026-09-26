@@ -28,20 +28,15 @@ from lib.ci_contracts import (  # noqa: E402
     load_jsonl,
     sha256_file,
 )
-
-try:
-    from huggingface_hub import HfApi, hf_hub_download
-except ImportError:
-    HfApi = None
-    hf_hub_download = None
+from lib.hf_release_hub import (  # noqa: E402
+    ReleaseVerifyError,
+    load_remote_tags,
+    pinned_checksum_errors,
+)
 
 DEFAULT_REPO = "rmems/operation-prometheus-trajectories"
 IMMUTABLE_TAG_RE = r"^v\d+\.\d+\.\d+$"
 RELEASE_EVENT_ENV = "GITHUB_EVENT_NAME"
-
-
-class ReleaseVerifyError(ValueError):
-    """A release-verify precondition failed."""
 
 
 def _event_name() -> str:
@@ -53,21 +48,20 @@ def refuse_pull_request_context() -> None:
         raise ReleaseVerifyError(
             "hf-release-verify must not run on pull_request events"
         )
-    if os.environ.get("GITHUB_EVENT_NAME") == "pull_request":
-        raise ReleaseVerifyError(
-            "hf-release-verify must not run on pull_request events"
-        )
 
 
 def jsonl_outputs(jsonl_dir: Path) -> list[dict[str, Any]]:
     files: list[dict[str, Any]] = []
     for path in sorted(jsonl_dir.glob("*.jsonl")):
         rows = load_jsonl(path)
+        size = path.stat().st_size
+        if size == 0:
+            raise ReleaseVerifyError(f"release JSONL is empty: {path.name}")
         files.append(
             {
                 "path": path.name,
                 "sha256": sha256_file(path),
-                "bytes": path.stat().st_size,
+                "bytes": size,
                 "record_count": len(rows),
             }
         )
@@ -144,122 +138,23 @@ def refuse_overwrite_immutable_tag(
     # Tag values are Hub commit ids. Content equality is the pinned checksum check.
     if remote_tags.get(tag) is None:
         return
-    if not isinstance(local_sha256, str) or not local_sha256.strip():
+    if not isinstance(local_sha256, str):
+        raise ReleaseVerifyError(
+            f"Refusing to publish immutable tag {tag}: local manifest sha256 is missing"
+        )
+    if not local_sha256.strip():
         raise ReleaseVerifyError(
             f"Refusing to publish immutable tag {tag}: local manifest sha256 is missing"
         )
 
 
-def pinned_revision_checksums(
-    downloaded: dict[str, str],
-    expected: list[dict[str, Any]],
-) -> list[str]:
-    errors: list[str] = []
-    for item in expected:
-        actual = downloaded.get(item["path"])
-        if actual is None:
-            errors.append(f"pinned revision is missing {item['path']}")
-        elif actual != item["sha256"]:
-            errors.append(f"pinned revision checksum mismatch for {item['path']}")
-    return errors
-
-
-def _tag_name_and_oid(tag: Any) -> tuple[str, str] | None:
-    name = getattr(tag, "name", None) or getattr(tag, "ref", None)
-    oid = getattr(tag, "target_commit", None) or getattr(tag, "ref", None)
-    if name and oid:
-        return str(name), str(oid)
-    return None
-
-
-def load_remote_tags(dataset_repo: str, token: str | None) -> dict[str, str]:
-    if not token:
-        return {}
-    if HfApi is None:
-        raise ReleaseVerifyError("huggingface_hub is required when HF_TOKEN is set")
-    refs = HfApi(token=token).list_repo_refs(dataset_repo, repo_type="dataset")
-    tags: dict[str, str] = {}
-    for tag in getattr(refs, "tags", []) or []:
-        parsed = _tag_name_and_oid(tag)
-        if parsed is not None:
-            tags[parsed[0]] = parsed[1]
-    return tags
-
-
-def download_pinned_checksums(
-    dataset_repo: str,
-    revision: str,
-    filenames: list[str],
-    token: str | None,
-) -> dict[str, str]:
-    if not token:
-        return {}
-    if hf_hub_download is None:
-        raise ReleaseVerifyError("huggingface_hub is required when HF_TOKEN is set")
-    checksums: dict[str, str] = {}
-    for name in filenames:
-        local = hf_hub_download(
-            repo_id=dataset_repo,
-            filename=name,
-            repo_type="dataset",
-            revision=revision,
-            token=token,
-        )
-        checksums[name] = sha256_file(Path(local))
-    return checksums
-
-
-def _empty_jsonl_name(items: list[dict[str, Any]]) -> str | None:
-    for item in items:
-        if item.get("bytes") == 0:
-            return str(item.get("path"))
-    return None
-
-
 def _require_local_outputs(manifest: dict[str, Any], parquet_dir: Path) -> None:
     if not manifest["jsonl"]:
         raise ReleaseVerifyError("release is missing JSONL outputs")
-    empty_jsonl = _empty_jsonl_name(manifest["jsonl"])
-    if empty_jsonl is not None:
-        raise ReleaseVerifyError(f"release JSONL is empty: {empty_jsonl}")
     if parquet_dir.is_dir() and not any(parquet_dir.glob("*.parquet")):
         raise ReleaseVerifyError(
             "parquet directory exists but contains no Parquet outputs"
         )
-
-
-def _maybe_download_pinned(
-    tag: str,
-    dataset_repo: str,
-    artifacts: list[dict[str, Any]],
-    tags: dict[str, str],
-) -> dict[str, str] | None:
-    if not os.environ.get("HF_TOKEN"):
-        return None
-    if tag not in tags:
-        return None
-    return download_pinned_checksums(
-        dataset_repo,
-        tag,
-        [item["path"] for item in artifacts],
-        os.environ.get("HF_TOKEN"),
-    )
-
-
-def _pinned_checksum_errors(
-    *,
-    tag: str,
-    dataset_repo: str,
-    artifacts: list[dict[str, Any]],
-    remotes: dict[str, Any],
-) -> list[str]:
-    tags = remotes["tags"]
-    resolved = remotes.get("downloaded")
-    if resolved is None:
-        resolved = _maybe_download_pinned(tag, dataset_repo, artifacts, tags)
-    if not resolved:
-        return []
-    return pinned_revision_checksums(resolved, artifacts)
 
 
 def verify(
@@ -271,8 +166,6 @@ def verify(
 ) -> dict[str, Any]:
     jsonl_dir, parquet_dir = dirs
     refuse_pull_request_context()
-    if os.environ.get("HF_TOKEN") and _event_name() == "pull_request":
-        raise ReleaseVerifyError("PRs must never receive HF_TOKEN")
     manifest = build_release_manifest(
         jsonl_dir, parquet_dir, tag=tag, dataset_repo=dataset_repo
     )
@@ -287,11 +180,8 @@ def verify(
         else load_remote_tags(dataset_repo, os.environ.get("HF_TOKEN"))
     )
     refuse_overwrite_immutable_tag(tag, manifest["sha256"], tags)
-    checksum_errors = _pinned_checksum_errors(
-        tag=tag,
-        dataset_repo=dataset_repo,
-        artifacts=artifacts,
-        remotes={"tags": tags, "downloaded": downloaded},
+    checksum_errors = pinned_checksum_errors(
+        tag, dataset_repo, artifacts, {"tags": tags, "downloaded": downloaded}
     )
     if checksum_errors:
         raise ReleaseVerifyError("; ".join(checksum_errors))
