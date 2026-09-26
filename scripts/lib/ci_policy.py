@@ -73,9 +73,11 @@ def _artifact_digest_error(digest: Any) -> str | None:
 
 
 def _record_artifact_id(artifact: dict[str, Any], artifact_ids: set[str]) -> str | None:
-    artifact_id = artifact.get("id")
-    if not isinstance(artifact_id, str) or not artifact_id:
+    if "id" not in artifact:
         return None
+    artifact_id = artifact.get("id")
+    if not isinstance(artifact_id, str) or not artifact_id.strip():
+        return "artifact id is missing"
     return _duplicate_artifact_id(artifact_id, artifact_ids)
 
 
@@ -212,15 +214,28 @@ def _omitted_reason_error(patch: str) -> str | None:
     return "silent patch truncation: omitted file lacks a truncation reason"
 
 
-def silent_truncation_errors(record: dict[str, Any]) -> list[str]:
+def _record_patches(record: dict[str, Any]) -> list[str]:
+    patches: list[str] = []
     patch = record.get("patch")
-    if not isinstance(patch, str) or not patch:
-        return []
-    declared = any(marker in patch for marker in DECLARED_TRUNCATION_MARKERS)
-    budget = _silent_budget_error(patch, declared)
-    if budget:
-        return [budget]
-    omitted = _omitted_reason_error(patch)
-    if omitted:
-        return [omitted]
-    return []
+    if isinstance(patch, str) and patch:
+        patches.append(patch)
+    payload = record.get("software_payload")
+    if isinstance(payload, dict):
+        implementation = payload.get("implementation_patch")
+        if isinstance(implementation, str) and implementation:
+            patches.append(implementation)
+    return patches
+
+
+def silent_truncation_errors(record: dict[str, Any]) -> list[str]:
+    errors: list[str] = []
+    for patch in _record_patches(record):
+        declared = any(marker in patch for marker in DECLARED_TRUNCATION_MARKERS)
+        budget = _silent_budget_error(patch, declared)
+        if budget:
+            errors.append(budget)
+            continue
+        omitted = _omitted_reason_error(patch)
+        if omitted:
+            errors.append(omitted)
+    return errors

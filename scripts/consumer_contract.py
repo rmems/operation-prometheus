@@ -70,9 +70,30 @@ def _parse_timestamp(value: str) -> datetime:
     return parsed.astimezone(timezone.utc)
 
 
-def _prometheus_timestamps(record: dict[str, Any]) -> list[str]:
+def _prometheus_meta(record: dict[str, Any]) -> dict[str, Any] | None:
     meta = record.get("_prometheus")
-    if not isinstance(meta, dict):
+    if isinstance(meta, dict):
+        return meta
+    return None
+
+
+def _prometheus_timestamp_errors(record: dict[str, Any]) -> list[str]:
+    meta = _prometheus_meta(record)
+    if meta is None or "event_timestamps" not in meta:
+        return []
+    raw = meta.get("event_timestamps")
+    if not isinstance(raw, list):
+        return ["_prometheus.event_timestamps is not a list"]
+    errors: list[str] = []
+    for item in raw:
+        if not isinstance(item, str):
+            errors.append(f"malformed event timestamp {item!r}")
+    return errors
+
+
+def _prometheus_timestamps(record: dict[str, Any]) -> list[str]:
+    meta = _prometheus_meta(record)
+    if meta is None:
         return []
     raw = meta.get("event_timestamps") or []
     if not isinstance(raw, list):
@@ -92,11 +113,16 @@ def _payload_event_timestamps(record: dict[str, Any]) -> list[str]:
 
 
 def _event_timestamps(record: dict[str, Any]) -> list[str]:
-    return [*_prometheus_timestamps(record), *_payload_event_timestamps(record)]
+    # Payload events are the authoritative timeline. Metadata timestamps are
+    # only used when the derivative has no events list, so the two copies of
+    # the same ordered timeline are not concatenated.
+    if isinstance(record.get("events"), list) and record.get("events"):
+        return _payload_event_timestamps(record)
+    return _prometheus_timestamps(record)
 
 
 def future_event_errors(record: dict[str, Any]) -> list[str]:
-    errors: list[str] = []
+    errors: list[str] = _prometheus_timestamp_errors(record)
     last: datetime | None = None
     for stamp in _event_timestamps(record):
         try:
@@ -110,22 +136,40 @@ def future_event_errors(record: dict[str, Any]) -> list[str]:
     return errors
 
 
-def load_derivative_rows(path: Path) -> list[tuple[int, dict[str, Any]]]:
+def load_derivative_rows(
+    path: Path,
+) -> tuple[list[tuple[int, dict[str, Any]]], list[str]]:
     rows: list[tuple[int, dict[str, Any]]] = []
+    errors: list[str] = []
     with path.open(encoding="utf-8") as handle:
         for line_number, line in enumerate(handle, start=1):
             if not line.strip():
                 continue
-            record = json.loads(line)
-            if isinstance(record, dict):
-                rows.append((line_number, record))
-    return rows
+            try:
+                record = json.loads(line)
+            except json.JSONDecodeError as exc:
+                errors.append(f"{path.name}:{line_number} Invalid JSON: {exc}")
+                continue
+            if not isinstance(record, dict):
+                errors.append(
+                    f"{path.name}:{line_number} derivative row is not a JSON object"
+                )
+                continue
+            rows.append((line_number, record))
+    return rows, errors
+
+
+def _source_identity(path: Path) -> str:
+    resolved = path.resolve()
+    try:
+        return resolved.relative_to(_REPO_ROOT).as_posix()
+    except ValueError:
+        return path.as_posix()
 
 
 def consume(path: Path, normalize: Callable[..., dict[str, Any]]) -> dict[str, Any]:
-    rows = load_derivative_rows(path)
+    rows, errors = load_derivative_rows(path)
     consumed: list[dict[str, Any]] = []
-    errors: list[str] = []
     for line_number, record in rows:
         errors.extend(
             f"{path.name}:{line_number} {message}"
@@ -142,18 +186,23 @@ def consume(path: Path, normalize: Callable[..., dict[str, Any]]) -> dict[str, A
         ):
             errors.append(f"{path.name}:{line_number} parser did not return a text row")
             continue
-        consumed.append(
-            {
-                "line": line_number,
-                "format": _format_name(payload),
-                "text_sha256": hashlib.sha256(
-                    normalized["text"].encode("utf-8")
-                ).hexdigest(),
-            }
+        row = {
+            "line": line_number,
+            "format": _format_name(payload),
+            "text_sha256": hashlib.sha256(
+                normalized["text"].encode("utf-8")
+            ).hexdigest(),
+        }
+        meta = _prometheus_meta(record)
+        source_trajectory_id = (
+            meta.get("source_trajectory_id") if meta is not None else None
         )
+        if isinstance(source_trajectory_id, str) and source_trajectory_id.strip():
+            row["source_trajectory_id"] = source_trajectory_id
+        consumed.append(row)
     sidecar = {
         "schema_version": SIDECAR_SCHEMA,
-        "source_path": str(path.resolve()),
+        "source_path": _source_identity(path),
         "source_sha256": sha256_file(path),
         "parser": "agoge_forger.datasets.normalize_row",
         "row_count": len(consumed),
@@ -179,7 +228,7 @@ def default_inputs() -> list[Path]:
 
 
 def _sidecar_path(path: Path, out_dir: Path) -> Path:
-    digest = hashlib.sha256(str(path.resolve()).encode("utf-8")).hexdigest()[:12]
+    digest = hashlib.sha256(_source_identity(path).encode("utf-8")).hexdigest()[:12]
     return out_dir / f"{path.stem}-{digest}.sidecar.json"
 
 

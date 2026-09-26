@@ -500,7 +500,19 @@ def _line_errors(
         def _reject_nonfinite(constant: str):
             raise json.JSONDecodeError(f"non-finite constant {constant!r}", line, 0)
 
-        record = json.loads(line, parse_constant=_reject_nonfinite)
+        def _reject_duplicate_keys(pairs: list[tuple[str, object]]) -> dict:
+            record_obj: dict = {}
+            for key, value in pairs:
+                if key in record_obj:
+                    raise json.JSONDecodeError(f"duplicate key {key!r}", line, 0)
+                record_obj[key] = value
+            return record_obj
+
+        record = json.loads(
+            line,
+            parse_constant=_reject_nonfinite,
+            object_pairs_hook=_reject_duplicate_keys,
+        )
     except json.JSONDecodeError as exc:
         return [f"  {context.filename}:{lineno} - Invalid JSON: {exc}"]
     if _contains_nonfinite(record):

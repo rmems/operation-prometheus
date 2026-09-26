@@ -43,9 +43,12 @@ def _live_repos(live_snapshot: dict[str, Any]) -> list[dict[str, Any]]:
 
 
 def _terminal_changes(
-    frozen_candidates: list[dict[str, Any]], live_snapshot: dict[str, Any]
+    frozen_candidates: list[dict[str, Any]],
+    live_snapshot: dict[str, Any],
+    *,
+    skip_terminal_diff: bool,
 ) -> list[dict[str, Any]]:
-    if live_snapshot.get("skip_terminal_diff"):
+    if skip_terminal_diff:
         return []
     return diff_terminal_candidates(
         frozen_candidates, _as_rows(live_snapshot, "pull_requests")
@@ -72,10 +75,16 @@ def build_report(
     frozen_repos: list[dict[str, Any]],
     frozen_candidates: list[dict[str, Any]],
     live_snapshot: dict[str, Any],
+    *,
+    skip_terminal_diff: bool = False,
 ) -> dict[str, Any]:
     live_repos = _live_repos(live_snapshot)
     repo_diff = diff_repositories(frozen_repos, live_repos)
-    changed = _terminal_changes(frozen_candidates, live_snapshot)
+    changed = _terminal_changes(
+        frozen_candidates,
+        live_snapshot,
+        skip_terminal_diff=skip_terminal_diff,
+    )
     return {
         "schema_version": REPORT_SCHEMA,
         "read_only": True,
@@ -91,7 +100,6 @@ def _dry_run_snapshot(frozen_repos: list[dict[str, Any]]) -> dict[str, Any]:
     return {
         "repositories": frozen_repos,
         "pull_requests": [],
-        "skip_terminal_diff": True,
     }
 
 
@@ -129,6 +137,15 @@ def _snapshot_has_lists(snapshot: dict[str, Any]) -> bool:
     if not _has_list(snapshot, "repositories"):
         return False
     return _has_list(snapshot, "pull_requests")
+
+
+def _snapshot_is_auditable(snapshot: dict[str, Any], *, dry_run: bool) -> bool:
+    if not _snapshot_has_lists(snapshot):
+        return False
+    if dry_run:
+        return True
+    collection = snapshot.get("collection")
+    return isinstance(collection, dict) and collection.get("complete") is True
 
 
 def _write_report(path: Path, report: dict[str, Any]) -> None:
@@ -169,13 +186,19 @@ def main(argv: list[str] | None = None) -> int:
     except (GitHubError, OSError, ValueError, json.JSONDecodeError) as exc:
         print(f"source-inventory-audit FAILED: {exc}", file=sys.stderr)
         return 1
-    if not _snapshot_has_lists(live_snapshot):
+    if not _snapshot_is_auditable(live_snapshot, dry_run=args.dry_run):
         print(
-            "source-inventory-audit FAILED: snapshot must include repositories and pull_requests lists",
+            "source-inventory-audit FAILED: snapshot must include repository and "
+            "pull_request lists and collection.complete=true",
             file=sys.stderr,
         )
         return 1
-    report = build_report(frozen_repos, frozen_candidates, live_snapshot)
+    report = build_report(
+        frozen_repos,
+        frozen_candidates,
+        live_snapshot,
+        skip_terminal_diff=args.dry_run,
+    )
     _write_report(args.out, report)
     return 0
 

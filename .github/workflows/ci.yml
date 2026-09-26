@@ -96,7 +96,11 @@ jobs:
           python-version: "3.12"
       - run: pip install --quiet 'pytest==8.4.1' 'jsonschema[format]==4.25.0'
       - name: Frozen inventory, hashes, duplicates, and mutable-release rules
-        run: python scripts/corpus_integrity.py --out-dir reports/corpus-integrity
+        run: |
+          python scripts/corpus_integrity.py --out-dir reports/corpus-integrity
+          if [ -d datasets/shards/v0.7 ]; then
+            python scripts/merge_corpus_shards.py --check
+          fi
       - uses: actions/upload-artifact@v4
         if: always()
         with:
@@ -118,6 +122,7 @@ jobs:
       - uses: actions/checkout@v4
         with:
           repository: rmems/agoge-forger
+          ref: 60e9afb47832fd9527518507beba15d5707b8a8d
           path: .agoge-forger
           persist-credentials: false
       - uses: actions/setup-python@v5
