@@ -149,8 +149,68 @@ def _ci_detail_error(detail: str) -> str | None:
     return "CI evidence is prose rather than a check-run conclusion"
 
 
+_V1_SCHEMA_VERSIONS = frozenset({"1", "1.0", "v1", "1.1", "v1.1"})
+
+
+def _schema_v1(record: dict[str, Any]) -> bool:
+    return record.get("schema_version") in _V1_SCHEMA_VERSIONS
+
+
+def _text_present(value: Any) -> bool:
+    return isinstance(value, str) and bool(value.strip())
+
+
+def _payload_outcome_present(record: dict[str, Any]) -> bool:
+    payload = record.get("software_payload")
+    if not isinstance(payload, dict):
+        return False
+    return _text_present(payload.get("validation_outcome"))
+
+
+def _verifier_outcome_present(record: dict[str, Any]) -> bool:
+    provenance = record.get("execution_provenance")
+    if not isinstance(provenance, dict):
+        return False
+    verifier = provenance.get("verifier")
+    if not isinstance(verifier, dict):
+        return False
+    return _text_present(verifier.get("outcome"))
+
+
+def _event_evidence_present(event: Any) -> bool:
+    if not isinstance(event, dict):
+        return False
+    kind = event.get("type") or event.get("event_type")
+    if kind in {"ci", "validation"}:
+        return True
+    return _text_present(event.get("disposition"))
+
+
+def _events_have_evidence(record: dict[str, Any]) -> bool:
+    events = record.get("events")
+    if not isinstance(events, list):
+        return False
+    return any(_event_evidence_present(event) for event in events)
+
+
+def _v1_has_validation_evidence(record: dict[str, Any]) -> bool:
+    if _text_present(record.get("validation_outcome")):
+        return True
+    if _payload_outcome_present(record):
+        return True
+    if _verifier_outcome_present(record):
+        return True
+    return _events_have_evidence(record)
+
+
 def _missing_validation_errors(record: dict[str, Any]) -> list[str]:
-    if record.get("schema_version") in ("1", "1.0", "v1"):
+    # Research fixtures may record a successful read without a validation array.
+    # Software and Hermes v1.1 records must carry an outcome, a verifier, or an
+    # event disposition. An issue statement plus a bare code-state event is not
+    # enough.
+    if _schema_v1(record) and record.get("trajectory_type") == "research":
+        return []
+    if _schema_v1(record) and _v1_has_validation_evidence(record):
         return []
     return ["missing required validation evidence"]
 

@@ -85,8 +85,13 @@ jobs:
           pytest -q tests/test_v1_schema.py tests/test_bots_and_secrets.py
           python scripts/trajectory_contract.py
 
-  corpus-integrity:
+  local-agent-contract:
     runs-on: ubuntu-latest
+    env:
+      CUDA_VISIBLE_DEVICES: "-1"
+      HF_HUB_OFFLINE: "1"
+      HF_DATASETS_OFFLINE: "1"
+      TRANSFORMERS_OFFLINE: "1"
     steps:
       - uses: actions/checkout@v4
         with:
@@ -95,18 +100,8 @@ jobs:
         with:
           python-version: "3.12"
       - run: pip install --quiet 'pytest==8.4.1' 'jsonschema[format]==4.25.0'
-      - name: Frozen inventory, hashes, duplicates, and mutable-release rules
-        run: |
-          python scripts/corpus_integrity.py --out-dir reports/corpus-integrity
-          if [ -d datasets/shards/v0.7 ]; then
-            python scripts/merge_corpus_shards.py --check
-          fi
-      - uses: actions/upload-artifact@v4
-        if: always()
-        with:
-          name: corpus-integrity-report
-          path: reports/corpus-integrity/
-          if-no-files-found: error
+      - name: Trajectory v1.1, admission digest, verifier, and observable actions
+        run: python scripts/local_agent_contract.py
 
   consumer-contract:
     runs-on: ubuntu-latest

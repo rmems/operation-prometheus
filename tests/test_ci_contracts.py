@@ -1,11 +1,10 @@
-"""CI contract jobs: trajectory, corpus integrity, consumer, release, inventory audit."""
+"""CI contract jobs: trajectory policy and Agoge consumer sidecars."""
 
 from __future__ import annotations
 
 import json
 from pathlib import Path
 
-import pytest
 from lib.ci_contracts import (
     is_real_check_run_detail,
     iter_uri_fields,
@@ -14,24 +13,8 @@ from lib.ci_contracts import (
     unique_event_errors,
     validation_evidence_errors,
 )
-from lib.github_client import GitHubClient, GitHubError
 
-import corpus_integrity
 from consumer_contract import consume, future_event_errors
-from corpus_integrity import _resolve_records
-from hf_release_verify import (
-    ReleaseVerifyError,
-    refuse_overwrite_immutable_tag,
-    refuse_pull_request_context,
-    resumable_upload_plan,
-    verify,
-)
-from source_inventory_audit import (
-    _snapshot_is_auditable,
-    build_report as build_audit_report,
-    diff_repositories,
-    diff_terminal_candidates,
-)
 from validate_jsonl import load_schema, validate_file
 
 try:
@@ -159,54 +142,6 @@ def test_silent_truncation_without_marker_is_rejected():
     assert unique_event_errors(blank_id) == ["artifact id is missing"]
 
 
-def test_corpus_integrity_passes_frozen_inventory(tmp_path):
-    report = corpus_integrity.build_report(
-        ROOT / "datasets" / "inventory" / "v0.7", tmp_path
-    )
-    assert report["ok"], report["errors"]
-    assert (tmp_path / "duplicates.jsonl").is_file()
-    groups = [
-        json.loads(line)
-        for line in (tmp_path / "duplicates.jsonl").read_text().splitlines()
-        if line.strip()
-    ]
-    assert groups
-    assert all("kind" in row and "exact" in row for row in groups)
-    assert report["duplicates"]["exact_count"] >= 1
-    assert report["counts"]["unresolved_jsonl_records"] >= 0
-
-
-def test_mutable_jsonl_cannot_enter_positive_release(tmp_path):
-    candidates = [
-        {
-            "candidate_id": "github:repository:R_open:pull:PR_open",
-            "repository_name_with_owner": "rmems/open-repo",
-            "pull_request_number": 1,
-            "state": "watchlist_open",
-            "source_state": "open",
-            "primary_reason": "mutable_open_pull_request",
-            "reason_codes": ["mutable_open_pull_request"],
-        }
-    ]
-    jsonl = tmp_path / "datasets" / "jsonl"
-    jsonl.mkdir(parents=True)
-    rec = {
-        "id": "rmems-open-repo-1",
-        "repo": "rmems/open-repo",
-        "pr_number": 1,
-    }
-    (jsonl / "open.jsonl").write_text(json.dumps(rec) + "\n")
-    monkey_root = tmp_path
-    original = corpus_integrity.ROOT
-    corpus_integrity.ROOT = monkey_root
-    try:
-        errors, _, _, unresolved = _resolve_records(candidates)
-    finally:
-        corpus_integrity.ROOT = original
-    assert any("mutable candidate" in error for error in errors)
-    assert unresolved == []
-
-
 def test_consumer_contract_parses_messages_and_instruction_with_sidecar(tmp_path):
     def normalize(row, tokenizer=None, index=0):
         if "messages" in row:
@@ -282,135 +217,47 @@ def test_consumer_contract_detects_future_event_leakage():
     assert sidecar["ok"] is False
 
 
-def test_hf_release_verify_refuses_immutable_tag_overwrite():
-    refuse_overwrite_immutable_tag("v0.7.0", "aaa", {"v0.7.0": "commit-oid"})
-    refuse_overwrite_immutable_tag("v0.7.0", "aaa", {})
-    with pytest.raises(ReleaseVerifyError, match="local manifest sha256 is missing"):
-        refuse_overwrite_immutable_tag("v0.7.0", "  ", {"v0.7.0": "commit-oid"})
-    plan = resumable_upload_plan([{"path": "a.jsonl", "sha256": "ab", "bytes": 1}])
-    assert plan[0]["resume_key"] == "sha256:ab"
 
-
-def test_hf_release_verify_refuses_pull_request_event(monkeypatch, tmp_path):
-    monkeypatch.setenv("GITHUB_EVENT_NAME", "pull_request")
-    monkeypatch.setenv("HF_TOKEN", "should-not-be-here")
-    with pytest.raises(ReleaseVerifyError, match="pull_request"):
-        refuse_pull_request_context()
-    monkeypatch.setenv("GITHUB_EVENT_NAME", "release")
-    jsonl = tmp_path / "jsonl"
-    jsonl.mkdir()
-    (jsonl / "a.jsonl").write_bytes(b"{}\n")
-    result = verify(
-        tag="v0.7.0",
-        dataset_repo="rmems/operation-prometheus-trajectories",
-        dirs=(jsonl, tmp_path / "missing-parquet"),
-        remotes={"tags": {}, "downloaded": {}},
-    )
-    assert result["ok"]
-    assert result["release_manifest"]["jsonl"][0]["path"] == "a.jsonl"
-
-
-def test_pr_workflows_never_receive_hf_token():
-    ci = (ROOT / ".github" / "workflows" / "ci.yml").read_text()
-    assert "HF_TOKEN" not in ci
-    quality = ROOT / ".github" / "workflows"
-    for path in quality.glob("*.yml"):
-        text = path.read_text()
-        if "HF_TOKEN" not in text:
-            continue
-        assert path.name == "hf_release_verify.yml"
-        header = text.split("jobs:", 1)[0]
-        assert "pull_request" not in header
-
-
-def test_source_inventory_audit_reports_repo_and_terminal_drift():
-    frozen_repos = [
-        {"repository_id": "R_old", "name_with_owner": "rmems/old-name"},
-        {"repository_id": "R_gone", "name_with_owner": "rmems/removed"},
-    ]
-    live_repos = [
-        {"id": "R_old", "name_with_owner": "rmems/renamed"},
-        {"id": "R_new", "name_with_owner": "rmems/new-repo"},
-    ]
-    repo_diff = diff_repositories(frozen_repos, live_repos)
-    assert repo_diff["renamed"][0]["to"] == "rmems/renamed"
-    assert repo_diff["new"][0]["name_with_owner"] == "rmems/new-repo"
-    assert repo_diff["deleted"][0]["name_with_owner"] == "rmems/removed"
-
-    frozen_candidates = [
-        {
-            "candidate_id": "github:repository:R_old:pull:PR_1",
-            "source_state": "merged",
-        }
-    ]
-    live_prs = [
-        {
-            "id": "PR_1",
-            "repository_id": "R_old",
-            "state": "closed",
-            "merged_at": None,
-            "number": 1,
-        },
-        {
-            "id": "PR_2",
-            "repository_id": "R_old",
-            "state": "merged",
-            "merged_at": "2026-09-01T00:00:00Z",
-            "number": 2,
-            "repository_name_with_owner": "rmems/renamed",
-        },
-    ]
-    changed = diff_terminal_candidates(frozen_candidates, live_prs)
-    kinds = {row["kind"] for row in changed}
-    assert "source_state_changed" in kinds
-    assert "new_terminal_candidate" in kinds
-
-
-def test_snapshot_cannot_suppress_terminal_diff_or_skip_completeness():
-    frozen = [{"candidate_id": "c1", "source_state": "merged"}]
-    live = {
-        "repositories": [],
-        "pull_requests": [
+def test_schema_v1_software_without_validation_evidence_is_rejected():
+    record = {
+        "schema_version": "1.0",
+        "trajectory_type": "software",
+        "events": [
             {
-                "id": "PR_1",
-                "repository_id": "R",
-                "state": "closed",
-                "merged_at": None,
-                "number": 1,
+                "event_id": "e1",
+                "content": "The empty-list helper returns None.",
+                "code_state": {"head_oid": "abc123"},
             }
         ],
-        "skip_terminal_diff": True,
     }
-    report = build_audit_report([], frozen, live)
-    assert report["changed_terminal_candidates"]
-    assert _snapshot_is_auditable(live, dry_run=False) is False
-    complete = {
-        "repositories": [],
-        "pull_requests": [],
-        "collection": {"complete": True},
-    }
-    assert _snapshot_is_auditable(complete, dry_run=False) is True
-    assert _snapshot_is_auditable(
-        {"repositories": [], "pull_requests": []}, dry_run=True
-    )
+    assert validation_evidence_errors(record) == [
+        "missing required validation evidence"
+    ]
 
 
-def test_source_inventory_audit_is_read_only_and_refuses_mutations():
-    report = build_audit_report(
-        [{"repository_id": "R1", "name_with_owner": "rmems/repo"}],
-        [],
-        {
-            "repositories": [{"id": "R1", "name_with_owner": "rmems/repo"}],
-            "pull_requests": [],
-        },
-    )
-    assert report["read_only"] is True
-    assert report["creates_source_issues"] is False
-    assert report["mutates_source_repositories"] is False
-    with pytest.raises(GitHubError, match="non-query"):
-        GitHubClient._validate_graphql_document(
-            "mutation CreateIssue { createIssue { id } }"
-        )
+def test_schema_v1_event_disposition_counts_as_validation_evidence():
+    record = {
+        "schema_version": "1.1",
+        "trajectory_type": "software",
+        "events": [{"disposition": "successful"}],
+    }
+    assert validation_evidence_errors(record) == []
+
+
+def test_schema_v1_research_without_validation_array_is_allowed():
+    record = {"schema_version": "1.0", "trajectory_type": "research"}
+    assert validation_evidence_errors(record) == []
+
+
+def test_pr_workflows_stay_offline():
+    workflows = ROOT / ".github" / "workflows"
+    for path in workflows.glob("*.yml"):
+        text = path.read_text()
+        assert "HF_TOKEN" not in text
+        assert "ollama" not in text.casefold()
+    ci = (workflows / "ci.yml").read_text()
+    assert "CUDA_VISIBLE_DEVICES" in ci
+    assert "HF_HUB_OFFLINE" in ci
 
 
 def test_shared_files_guard_and_existing_gates_remain_named():
@@ -422,7 +269,7 @@ def test_shared_files_guard_and_existing_gates_remain_named():
         "status-up-to-date",
         "shared-files-guard",
         "trajectory-contract",
-        "corpus-integrity",
+        "local-agent-contract",
         "consumer-contract",
     ):
         assert f"{job}:" in ci

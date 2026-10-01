@@ -36,7 +36,7 @@ def load_jsonl(path: Path) -> list[tuple[int, dict[str, Any]]]:
 
 
 def record_identity(record: dict[str, Any]) -> str | None:
-    if record.get("schema_version") in ("1", "1.0", "v1"):
+    if record.get("schema_version") in ("1", "1.0", "v1", "1.1", "v1.1"):
         value = record.get("trajectory_id")
     else:
         value = record.get("id")

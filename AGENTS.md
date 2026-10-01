@@ -62,14 +62,13 @@ else
   echo "No JSONL files found; skipping schema validation."
 fi
 python scripts/trajectory_contract.py
-python scripts/corpus_integrity.py --out-dir /tmp/corpus-integrity
+python scripts/local_agent_contract.py
 # Required before admitting a local model provider (fail-closed; frozen evidence only):
 # python scripts/verify_local_model_admission.py --admissions ... --rights ... \
 #   --probe tests/fixtures/local_model_admission/ollama_probe.json --out report.json
 ```
 
-PR CI also runs `trajectory-contract`, `corpus-integrity`, and
-`consumer-contract`. Hugging Face tokens stay out of pull-request jobs; the
-publish verifier uses the protected `release` environment instead. The
-weekly source-inventory audit is read-only. See
+PR CI also runs `trajectory-contract`, `local-agent-contract`, and
+`consumer-contract`. Those jobs are CPU-only and offline: no model download,
+Ollama daemon, GPU, network call, or token. See
 [docs/ci-contracts.md](docs/ci-contracts.md).
