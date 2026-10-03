@@ -40,27 +40,59 @@ apt_install curl ca-certificates
 
 # --- Python (uv) ---
 export PATH="$HOME/.local/bin:$PATH"
-if ! command -v uv >/dev/null 2>&1; then
-  curl -LsSf https://astral.sh/uv/install.sh | sh
+UV_VERSION="0.12.22"
+UV_SHA256="b9980552309f09c15172b8be828555e375097f16deb459795ce7bfd200380f0b"
+installed_uv_version="$(uv --version 2>/dev/null || true)"
+if [[ "$installed_uv_version" != "uv $UV_VERSION "* ]]; then
+  uv_archive="uv-x86_64-unknown-linux-gnu.tar.gz"
+  uv_tmp="$(mktemp -d)"
+  trap 'rm -rf "$uv_tmp"' EXIT
+  curl -LsSf -o "$uv_tmp/$uv_archive" \
+    "https://github.com/astral-sh/uv/releases/download/$UV_VERSION/$uv_archive"
+  printf '%s  %s\n' "$UV_SHA256" "$uv_tmp/$uv_archive" | sha256sum --check -
+  tar -xzf "$uv_tmp/$uv_archive" -C "$uv_tmp"
+  mkdir -p "$HOME/.local/bin"
+  install -m 0755 "$uv_tmp/uv-x86_64-unknown-linux-gnu/uv" "$HOME/.local/bin/uv"
+  install -m 0755 "$uv_tmp/uv-x86_64-unknown-linux-gnu/uvx" "$HOME/.local/bin/uvx"
+  rm -rf "$uv_tmp"
+  trap - EXIT
 fi
 # ci.yml uses Python 3.12 for every job.
 uv python install 3.12
-if [ ! -x .venv/bin/python ]; then
-  uv venv --python 3.12 .venv
+venv_python_version=""
+if [ -x .venv/bin/python ]; then
+  venv_python_version="$(.venv/bin/python -c \
+    'import sys; print(f"{sys.version_info.major}.{sys.version_info.minor}")' 2>/dev/null || true)"
+fi
+if [ "$venv_python_version" != "3.12" ]; then
+  uv venv --clear --python 3.12 .venv
 fi
 uv pip install --python .venv/bin/python -r requirements.txt 'ruff==0.11.12' 'pytest==8.4.1'
 
 # --- Expose the tools to later shells ---
 # The PATH exports above last only for this script; Amp starts the agent's shell
-# separately. Login shells get these directories from /etc/profile.d, and every other
-# shell finds the entry points through symlinks in /usr/local/bin (on the default PATH).
+# separately. Login shells get these directories from /etc/profile.d and a repo-scoped
+# ~/.bash_profile hook; every other shell finds the entry points through symlinks in
+# /usr/local/bin (on the default PATH).
 # In login shells the venv's bin comes first, so python3 is the venv's Python.
 # The links skip python and pip so the system python3 stays the default elsewhere.
 repo_root="$(pwd)"
 tool_dirs=("$repo_root/.venv/bin" "$HOME/.local/bin")
+tool_path="$(IFS=:; echo "${tool_dirs[*]}")"
 # shellcheck disable=SC2016 # $PATH must expand when the profile is sourced, not now.
-printf 'export PATH=%q:$PATH\n' "$(IFS=:; echo "${tool_dirs[*]}")" |
+printf 'export PATH=%q:$PATH\n' "$tool_path" |
   $SUDO tee /etc/profile.d/amp-orb-operation-prometheus.sh >/dev/null
+profile_marker="# operation-prometheus orb tool path"
+if ! grep -Fqx "$profile_marker" "$HOME/.bash_profile" 2>/dev/null; then
+  {
+    printf '\n%s\n' "$profile_marker"
+    # shellcheck disable=SC2016 # $PWD must expand when the profile is sourced, not now.
+    printf 'if [ "$PWD" = %q ]; then\n' "$repo_root"
+    # shellcheck disable=SC2016 # $PATH must expand when the profile is sourced, not now.
+    printf '  export PATH=%q:$PATH\n' "$tool_path"
+    printf 'fi\n'
+  } >> "$HOME/.bash_profile"
+fi
 for dir in "${tool_dirs[@]}"; do
   [ -d "$dir" ] || continue
   for tool in "$dir"/*; do
@@ -69,8 +101,9 @@ for dir in "${tool_dirs[@]}"; do
       # uv's installer also drops env/env.fish (sourced, not run) in ~/.local/bin.
       python* | pip* | activate* | deactivate | Activate.ps1 | env | env.fish) continue ;;
     esac
-    if [ -f "$tool" ] && [ -x "$tool" ]; then
-      $SUDO ln -sfn "$tool" "/usr/local/bin/$name"
+    destination="/usr/local/bin/$name"
+    if [ -f "$tool" ] && [ -x "$tool" ] && [ ! -e "$destination" ] && [ ! -L "$destination" ]; then
+      $SUDO ln -s "$tool" "$destination"
     fi
   done
 done
