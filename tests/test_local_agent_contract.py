@@ -119,6 +119,45 @@ def test_observable_export_rejects_duplicate_trajectory_ids(tmp_path):
         raise AssertionError("duplicate trajectory rows were exported")
 
 
+def test_observable_export_rejects_missing_or_invalid_trajectory_ids(tmp_path):
+    path = tmp_path / "invalid-ids.jsonl"
+    for trajectory_id in (None, "", "   ", 7):
+        record = {
+            "events": [{"actor": {"type": "agent"}, "content": "output"}]
+        }
+        if trajectory_id is not None:
+            record["trajectory_id"] = trajectory_id
+        path.write_text(json.dumps(record) + "\n")
+        try:
+            export_jsonl(path, set())
+        except ValueError as exc:
+            assert "trajectory_id" in str(exc)
+        else:
+            raise AssertionError(f"invalid trajectory_id {trajectory_id!r} was exported")
+
+
+def test_observable_export_rejects_unbalanced_hidden_reasoning():
+    try:
+        export_record(
+            {"events": [{"actor": {"type": "agent"}, "content": "<think>secret"}]}
+        )
+    except ValueError as exc:
+        assert "hidden reasoning" in str(exc)
+    else:
+        raise AssertionError("unbalanced hidden reasoning was exported")
+
+
+def test_observable_export_rejects_admitted_record_without_messages(tmp_path):
+    path = tmp_path / "empty.jsonl"
+    path.write_text('{"trajectory_id":"empty","events":[]}\n')
+    try:
+        export_jsonl(path, {"empty"})
+    except ValueError as exc:
+        assert "empty" in str(exc)
+    else:
+        raise AssertionError("admitted record without messages was silently omitted")
+
+
 def test_trainable_text_rejects_secrets_and_private_uris():
     assert any(
         "secret" in error
@@ -127,6 +166,15 @@ def test_trainable_text_rejects_secrets_and_private_uris():
     assert any(
         "private" in error
         for error in trainable_text_errors("see file:///etc/passwd")
+    )
+
+
+def test_trainable_text_rejects_authorization_headers():
+    assert any(
+        "secret" in error
+        for error in trainable_text_errors(
+            "Authorization: Bearer topsecretvalue12345"
+        )
     )
 
 

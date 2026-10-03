@@ -6,7 +6,7 @@ import re
 from typing import Any
 
 from .ci_private_refs import private_reference_errors
-from .hermes_sanitize import strip_hidden_reasoning
+from .hermes_sanitize import contains_header_secret, strip_hidden_reasoning
 from .secrets import find_secrets
 
 HOME_PATH_RE = re.compile(
@@ -98,6 +98,8 @@ def trainable_text_errors(text: str) -> list[str]:
         errors.append("absolute user-home path present")
     if find_secrets(text):
         errors.append("secret-like token pattern present")
+    if contains_header_secret(text):
+        errors.append("secret-like header present")
     if hidden_reasoning_errors(text):
         errors.append("hidden reasoning is present")
     if _CLOUD_FALLBACK_TEXT_RE.search(text):

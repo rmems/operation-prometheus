@@ -20,7 +20,7 @@ _SCRIPTS = Path(__file__).resolve().parent
 if str(_SCRIPTS) not in sys.path:
     sys.path.insert(0, str(_SCRIPTS))
 
-from lib.hermes_sanitize import strip_hidden_reasoning  # noqa: E402
+from lib.hermes_sanitize import hidden_markup_remains, strip_hidden_reasoning  # noqa: E402
 from lib.local_agent_privacy import trainable_text_errors  # noqa: E402
 
 _ROLE_BY_ACTOR = {
@@ -54,11 +54,12 @@ def export_jsonls(paths: list[Path], admitted_ids: set[str]) -> str:
 
 
 def _trajectory_ids(records: list[dict[str, Any]]) -> set[str]:
-    identities = [
-        record["trajectory_id"]
-        for record in records
-        if isinstance(record.get("trajectory_id"), str)
-    ]
+    identities: list[str] = []
+    for record in records:
+        identity = record.get("trajectory_id")
+        if not isinstance(identity, str) or not identity.strip():
+            raise ValueError("canonical row has invalid trajectory_id")
+        identities.append(identity)
     duplicate = next(
         (identity for identity, count in Counter(identities).items() if count > 1),
         None,
@@ -73,7 +74,9 @@ def _render_records(records: list[dict[str, Any]]) -> str:
     for record in records:
         row = export_record(record)
         if row is None:
-            continue
+            raise ValueError(
+                f"admitted trajectory {record['trajectory_id']} has no observable messages"
+            )
         lines.append(json.dumps(row, ensure_ascii=False, separators=(",", ":")))
     if not lines:
         return ""
@@ -129,6 +132,8 @@ def _message(event: Any) -> dict[str, str] | None:
 def _clean_content(content: Any) -> str | None:
     if not isinstance(content, str):
         return None
+    if hidden_markup_remains(content):
+        raise ValueError("hidden reasoning markup remains")
     cleaned = strip_hidden_reasoning(content)
     if not _nonempty_text(cleaned):
         return None
