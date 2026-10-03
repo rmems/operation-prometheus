@@ -79,6 +79,14 @@ uv pip install --python .venv/bin/python -r requirements.txt 'ruff==0.11.12' 'py
 repo_root="$(pwd)"
 tool_dirs=("$repo_root/.venv/bin" "$HOME/.local/bin")
 tool_path="$(IFS=:; echo "${tool_dirs[*]}")"
+# Amp puts ~/.local/bin before /usr/local/bin in non-login shells. Expose bare
+# python there without replacing an unrelated system interpreter.
+python_entry="$HOME/.local/bin/python"
+if [ ! -e "$python_entry" ] && [ ! -L "$python_entry" ]; then
+  # shellcheck disable=SC2016 # $@ must expand when the launcher runs, not now.
+  printf '#!/usr/bin/env bash\nexec %q "$@"\n' "$repo_root/.venv/bin/python" > "$python_entry"
+  chmod 0755 "$python_entry"
+fi
 # shellcheck disable=SC2016 # $PATH must expand when the profile is sourced, not now.
 printf 'export PATH=%q:$PATH\n' "$tool_path" |
   $SUDO tee /etc/profile.d/amp-orb-operation-prometheus.sh >/dev/null
