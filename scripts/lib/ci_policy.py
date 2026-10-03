@@ -18,6 +18,10 @@ DECLARED_TRUNCATION_MARKERS = (
     "patch unavailable / truncated",
     "# omitted:",
 )
+_SUCCESS_OUTCOMES = frozenset(
+    {"pass", "passed", "success", "successful", "verified", "ok"}
+)
+_FAILED_OUTCOMES = frozenset({"fail", "failed", "error", "falsified"})
 
 
 def _actor_id_error(event: dict[str, Any]) -> str | None:
@@ -175,6 +179,30 @@ def _verifier_outcome_present(record: dict[str, Any]) -> bool:
     if not isinstance(verifier, dict):
         return False
     return _text_present(verifier.get("outcome"))
+
+
+def false_success_errors(record: dict[str, Any]) -> list[str]:
+    if record.get("terminal_disposition") != "successful":
+        return []
+    outcome = _verifier_outcome(record)
+    if outcome in _SUCCESS_OUTCOMES:
+        return []
+    if outcome in _FAILED_OUTCOMES:
+        return ["failed verifier became a successful trajectory"]
+    return ["successful terminal lacks independent verifier success"]
+
+
+def _verifier_outcome(record: dict[str, Any]) -> str:
+    provenance = record.get("execution_provenance")
+    if not isinstance(provenance, dict):
+        return ""
+    verifier = provenance.get("verifier")
+    if not isinstance(verifier, dict):
+        return ""
+    outcome = verifier.get("outcome")
+    if not isinstance(outcome, str):
+        return ""
+    return outcome.strip().casefold()
 
 
 def _event_evidence_present(event: Any) -> bool:

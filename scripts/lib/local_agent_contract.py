@@ -13,11 +13,11 @@ from typing import Any
 from export_observable_actions import admitted_trajectory_ids, export_jsonl
 from consumer_contract import future_event_errors
 
+from .ci_policy import false_success_errors
 from .ci_io import ROOT, sha256_file
 from .hermes_normalize import normalize_files
 from .local_agent_privacy import (
     cloud_fallback_errors,
-    false_success_errors,
     hash_errors,
     hidden_reasoning_errors,
     trainable_text_errors,

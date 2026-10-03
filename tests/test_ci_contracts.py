@@ -14,6 +14,7 @@ from lib.ci_contracts import (
     unique_event_errors,
     validation_evidence_errors,
 )
+from lib.hermes_normalize import normalize_files
 
 from consumer_contract import consume, future_event_errors
 from validate_jsonl import load_schema, validate_file
@@ -270,6 +271,30 @@ def test_strict_validator_enforces_validation_evidence(tmp_path):
     path.write_text(json.dumps(record) + "\n")
     errors = validate_file(path, v0, v1, strict_policy=True)
     assert any("missing required validation evidence" in error for error in errors)
+
+
+def test_strict_validator_rejects_successful_record_with_failed_verifier(tmp_path):
+    scenario = ROOT / "tests" / "fixtures" / "local_agent" / "accepted"
+    canonical = tmp_path / "canonical.jsonl"
+    normalize_files(
+        input_path=scenario / "input.jsonl",
+        run_manifest_path=scenario / "run_manifest.json",
+        model_admission_path=scenario / "model_admission.json",
+        output_path=canonical,
+        report_path=tmp_path / "report.json",
+    )
+    record = json.loads(canonical.read_text())
+    record["execution_provenance"]["verifier"]["outcome"] = "fail"
+    canonical.write_text(json.dumps(record) + "\n")
+    v0, v1 = _validators()
+    v1_1 = jsonschema.Draft7Validator(
+        load_schema(ROOT / "schemas" / "trajectory_v1_1.schema.json"),
+        format_checker=jsonschema.Draft7Validator.FORMAT_CHECKER,
+    )
+    errors = validate_file(
+        canonical, v0, v1, strict_policy=True, v1_1_validator=v1_1
+    )
+    assert any("failed verifier became a successful trajectory" in error for error in errors)
 
 
 def test_schema_v1_event_disposition_counts_as_validation_evidence():

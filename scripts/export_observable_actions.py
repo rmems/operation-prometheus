@@ -12,6 +12,7 @@ from __future__ import annotations
 import argparse
 import json
 import sys
+from collections import Counter
 from pathlib import Path
 from typing import Any
 
@@ -42,18 +43,29 @@ def export_record(record: dict[str, Any]) -> dict[str, Any] | None:
 
 
 def export_jsonl(path: Path, admitted_ids: set[str]) -> str:
-    records = _load_records(path)
+    return export_jsonls([path], admitted_ids)
+
+
+def export_jsonls(paths: list[Path], admitted_ids: set[str]) -> str:
+    records = [record for path in paths for record in _load_records(path)]
     if _trajectory_ids(records) != admitted_ids:
         raise ValueError("canonical rows do not match admitted trajectory ids")
     return _render_records(records)
 
 
 def _trajectory_ids(records: list[dict[str, Any]]) -> set[str]:
-    return {
+    identities = [
         record["trajectory_id"]
         for record in records
         if isinstance(record.get("trajectory_id"), str)
-    }
+    ]
+    duplicate = next(
+        (identity for identity, count in Counter(identities).items() if count > 1),
+        None,
+    )
+    if duplicate is not None:
+        raise ValueError(f"duplicate trajectory_id {duplicate}")
+    return set(identities)
 
 
 def _render_records(records: list[dict[str, Any]]) -> str:
@@ -175,8 +187,7 @@ def main(argv: list[str] | None = None) -> int:
     args = parser.parse_args(argv)
     report = json.loads(args.decision_report.read_text(encoding="utf-8"))
     admitted_ids = admitted_trajectory_ids(report)
-    chunks = [export_jsonl(path, admitted_ids) for path in args.inputs]
-    text = "".join(chunks)
+    text = export_jsonls(args.inputs, admitted_ids)
     args.out.parent.mkdir(parents=True, exist_ok=True)
     args.out.write_text(text, encoding="utf-8")
     return 0

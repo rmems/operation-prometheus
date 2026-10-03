@@ -2,13 +2,15 @@
 
 from __future__ import annotations
 
+import json
+
+from lib.ci_policy import false_success_errors
 from lib.local_agent_contract import _exported_row_errors, run_contract
 from lib.local_agent_privacy import (
-    false_success_errors,
     trainable_text_errors,
 )
 
-from export_observable_actions import export_jsonl, export_record
+from export_observable_actions import export_jsonl, export_jsonls, export_record
 
 
 def test_local_agent_contract_accepts_synthetic_fixtures():
@@ -84,6 +86,37 @@ def test_observable_export_requires_existing_admitted_input(tmp_path):
         assert "admitted trajectory ids" in str(exc)
     else:
         raise AssertionError("unadmitted trajectory was exported")
+
+
+def test_observable_export_validates_admission_across_shards(tmp_path):
+    first = tmp_path / "first.jsonl"
+    second = tmp_path / "second.jsonl"
+    first.write_text(
+        '{"trajectory_id":"first","events":[{"actor":{"type":"agent"},"content":"one"}]}\n'
+    )
+    second.write_text(
+        '{"trajectory_id":"second","events":[{"actor":{"type":"agent"},"content":"two"}]}\n'
+    )
+    exported = export_jsonls([first, second], {"first", "second"})
+    assert [json.loads(line)["messages"][0]["content"] for line in exported.splitlines()] == [
+        "one",
+        "two",
+    ]
+
+
+def test_observable_export_rejects_duplicate_trajectory_ids(tmp_path):
+    path = tmp_path / "duplicate.jsonl"
+    row = (
+        '{"trajectory_id":"same","events":'
+        '[{"actor":{"type":"agent"},"content":"duplicate"}]}\n'
+    )
+    path.write_text(row + row)
+    try:
+        export_jsonl(path, {"same"})
+    except ValueError as exc:
+        assert "duplicate trajectory_id same" in str(exc)
+    else:
+        raise AssertionError("duplicate trajectory rows were exported")
 
 
 def test_trainable_text_rejects_secrets_and_private_uris():

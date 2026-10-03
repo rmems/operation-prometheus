@@ -24,10 +24,6 @@ _CLOUD_FALLBACK_TEXT_RE = re.compile(
     r"cloud_fallback_allowed\W+true",
     re.IGNORECASE,
 )
-_SUCCESS_OUTCOMES = frozenset(
-    {"pass", "passed", "success", "successful", "verified", "ok"}
-)
-_FAILED_OUTCOMES = frozenset({"fail", "failed", "error", "falsified"})
 
 
 def hidden_reasoning_errors(value: Any) -> list[str]:
@@ -111,27 +107,3 @@ def trainable_text_errors(text: str) -> list[str]:
 
 def _has_home_path(text: str) -> bool:
     return HOME_PATH_RE.search(text) is not None
-
-
-def false_success_errors(record: dict[str, Any]) -> list[str]:
-    if record.get("terminal_disposition") != "successful":
-        return []
-    outcome = _verifier_outcome(record)
-    if outcome in _SUCCESS_OUTCOMES:
-        return []
-    if outcome in _FAILED_OUTCOMES:
-        return ["failed verifier became a successful trajectory"]
-    return ["successful terminal lacks independent verifier success"]
-
-
-def _verifier_outcome(record: dict[str, Any]) -> str:
-    provenance = record.get("execution_provenance")
-    if not isinstance(provenance, dict):
-        return ""
-    verifier = provenance.get("verifier")
-    if not isinstance(verifier, dict):
-        return ""
-    outcome = verifier.get("outcome")
-    if not isinstance(outcome, str):
-        return ""
-    return outcome.strip().casefold()

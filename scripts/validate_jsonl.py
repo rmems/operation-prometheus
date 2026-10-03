@@ -34,6 +34,7 @@ if str(_SCRIPTS) not in sys.path:
 
 from lib.ci_contracts import (  # noqa: E402
     blank_license_policy_errors,
+    false_success_errors,
     iter_uri_fields,
     private_reference_errors,
     record_identity,
@@ -558,7 +559,14 @@ def _contract_policy_messages(record: dict) -> list[str]:
         *blank_license_policy_errors(record),
         *validation_evidence_errors(record),
         *silent_truncation_errors(record),
+        *_v1_1_false_success_errors(record),
     ]
+
+
+def _v1_1_false_success_errors(record: dict) -> list[str]:
+    if record.get("schema_version") not in _V1_1_VERSIONS:
+        return []
+    return false_success_errors(record)
 
 
 def _version_needs_stable_id(version: object) -> bool:
