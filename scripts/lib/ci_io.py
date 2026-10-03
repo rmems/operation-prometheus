@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+from collections import Counter
 from pathlib import Path
 from typing import Any
 
@@ -43,3 +44,21 @@ def record_identity(record: dict[str, Any]) -> str | None:
     if isinstance(value, str) and value.strip():
         return value.strip()
     return None
+
+
+def canonical_trajectory_ids(records: list[dict[str, Any]]) -> set[str]:
+    identities = [_canonical_trajectory_id(record) for record in records]
+    duplicate = next(
+        (identity for identity, count in Counter(identities).items() if count > 1),
+        None,
+    )
+    if duplicate is not None:
+        raise ValueError(f"duplicate trajectory_id {duplicate}")
+    return set(identities)
+
+
+def _canonical_trajectory_id(record: dict[str, Any]) -> str:
+    identity = record.get("trajectory_id")
+    if not isinstance(identity, str) or not identity.strip():
+        raise ValueError("canonical row has invalid trajectory_id")
+    return identity

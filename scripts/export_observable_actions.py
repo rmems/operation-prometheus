@@ -12,15 +12,15 @@ from __future__ import annotations
 import argparse
 import json
 import sys
-from collections import Counter
 from pathlib import Path
-from typing import Any, cast
+from typing import Any
 
 _SCRIPTS = Path(__file__).resolve().parent
 if str(_SCRIPTS) not in sys.path:
     sys.path.insert(0, str(_SCRIPTS))
 
 from lib.hermes_sanitize import strip_hidden_reasoning  # noqa: E402
+from lib.ci_io import canonical_trajectory_ids  # noqa: E402
 from lib.local_agent_privacy import (  # noqa: E402
     hidden_markup_errors,
     trainable_text_errors,
@@ -51,26 +51,9 @@ def export_jsonl(path: Path, admitted_ids: set[str]) -> str:
 
 def export_jsonls(paths: list[Path], admitted_ids: set[str]) -> str:
     records = [record for path in paths for record in _load_records(path)]
-    if _trajectory_ids(records) != admitted_ids:
+    if canonical_trajectory_ids(records) != admitted_ids:
         raise ValueError("canonical rows do not match admitted trajectory ids")
     return _render_records(records)
-
-
-def _trajectory_ids(records: list[dict[str, Any]]) -> set[str]:
-    raw_identities = [record.get("trajectory_id") for record in records]
-    if not all(
-        isinstance(identity, str) and bool(identity.strip())
-        for identity in raw_identities
-    ):
-        raise ValueError("canonical row has invalid trajectory_id")
-    identities = cast(list[str], raw_identities)
-    duplicate = next(
-        (identity for identity, count in Counter(identities).items() if count > 1),
-        None,
-    )
-    if duplicate is not None:
-        raise ValueError(f"duplicate trajectory_id {duplicate}")
-    return set(identities)
 
 
 def _render_records(records: list[dict[str, Any]]) -> str:
