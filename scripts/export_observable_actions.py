@@ -14,14 +14,17 @@ import json
 import sys
 from collections import Counter
 from pathlib import Path
-from typing import Any
+from typing import Any, cast
 
 _SCRIPTS = Path(__file__).resolve().parent
 if str(_SCRIPTS) not in sys.path:
     sys.path.insert(0, str(_SCRIPTS))
 
-from lib.hermes_sanitize import hidden_markup_remains, strip_hidden_reasoning  # noqa: E402
-from lib.local_agent_privacy import trainable_text_errors  # noqa: E402
+from lib.hermes_sanitize import strip_hidden_reasoning  # noqa: E402
+from lib.local_agent_privacy import (  # noqa: E402
+    hidden_markup_errors,
+    trainable_text_errors,
+)
 
 _ROLE_BY_ACTOR = {
     "human": "user",
@@ -54,12 +57,13 @@ def export_jsonls(paths: list[Path], admitted_ids: set[str]) -> str:
 
 
 def _trajectory_ids(records: list[dict[str, Any]]) -> set[str]:
-    identities: list[str] = []
-    for record in records:
-        identity = record.get("trajectory_id")
-        if not isinstance(identity, str) or not identity.strip():
-            raise ValueError("canonical row has invalid trajectory_id")
-        identities.append(identity)
+    raw_identities = [record.get("trajectory_id") for record in records]
+    if not all(
+        isinstance(identity, str) and bool(identity.strip())
+        for identity in raw_identities
+    ):
+        raise ValueError("canonical row has invalid trajectory_id")
+    identities = cast(list[str], raw_identities)
     duplicate = next(
         (identity for identity, count in Counter(identities).items() if count > 1),
         None,
@@ -132,12 +136,11 @@ def _message(event: Any) -> dict[str, str] | None:
 def _clean_content(content: Any) -> str | None:
     if not isinstance(content, str):
         return None
-    if hidden_markup_remains(content):
-        raise ValueError("hidden reasoning markup remains")
+    privacy_errors = hidden_markup_errors(content)
     cleaned = strip_hidden_reasoning(content)
     if not _nonempty_text(cleaned):
         return None
-    privacy_errors = trainable_text_errors(cleaned)
+    privacy_errors.extend(trainable_text_errors(cleaned))
     if privacy_errors:
         raise ValueError(", ".join(privacy_errors))
     return cleaned

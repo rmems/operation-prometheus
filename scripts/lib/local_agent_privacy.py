@@ -6,7 +6,11 @@ import re
 from typing import Any
 
 from .ci_private_refs import private_reference_errors
-from .hermes_sanitize import contains_header_secret, strip_hidden_reasoning
+from .hermes_sanitize import (
+    contains_header_secret,
+    hidden_markup_remains,
+    strip_hidden_reasoning,
+)
 from .secrets import find_secrets
 
 HOME_PATH_RE = re.compile(
@@ -29,6 +33,12 @@ _CLOUD_FALLBACK_TEXT_RE = re.compile(
 def hidden_reasoning_errors(value: Any) -> list[str]:
     if strip_hidden_reasoning(value) != value:
         return ["hidden reasoning is present"]
+    return []
+
+
+def hidden_markup_errors(value: str) -> list[str]:
+    if hidden_markup_remains(value):
+        return ["hidden reasoning markup remains"]
     return []
 
 
