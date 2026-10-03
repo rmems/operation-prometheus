@@ -1,0 +1,40 @@
+# yaml-language-server: $schema=https://coderabbit.ai/integrations/schema.v2.json
+# CodeRabbit review config for rmems/operation-prometheus.
+language: en-US
+reviews:
+  profile: chill
+  request_changes_workflow: false
+  fail_commit_status: false
+  auto_review:
+    enabled: true
+    drafts: false
+  path_filters:
+  - '**'
+  - '!datasets/jsonl/**'
+  - '!datasets/inventory/**/baseline-report.json'
+  - '!datasets/inventory/**/candidates.jsonl'
+  - '!datasets/inventory/**/duplicates.jsonl'
+  - '!datasets/inventory/**/manifest.json'
+  - '!datasets/inventory/**/repositories.jsonl'
+  path_instructions:
+  - path: scripts/**/*.py
+    instructions: 'Python 3.12 (CI). CI gates include `ruff check scripts/`, `pytest -q`, and JSONL schema validation. Status freshness uses `python scripts/build_status.py --check` for non-data PRs; data-only PRs regenerate status without requiring contributors to commit it. Keep code compatible with the declared Python floor. Dataset builders must be deterministic (stable ordering, no wall-clock in records) so regenerated JSONL diffs stay reviewable.'
+  - path: schemas/**
+    instructions: 'Trajectory schemas are enforced in CI against `datasets/jsonl/` by `scripts/validate_jsonl.py`; other schema families need their dedicated validators and pytest fixtures. Breaking trajectory schema changes need a migration script (see `scripts/migrate_v0_to_v1.py`) and updated fixtures.'
+  - path: datasets/{cards,manifests}/**
+    instructions: 'Dataset cards/manifests: check licensing and provenance statements. Manifest integrity against generated JSONL is enforced by the generator-freshness pytest coverage.'
+  - path: .github/workflows/**
+    instructions: GitHub Actions workflows. Keep `permissions:` least-privilege and job commands in sync with the local gates documented in the repo.
+  tools:
+    ruff:
+      enabled: true
+    actionlint:
+      enabled: true
+    yamllint:
+      enabled: true
+    markdownlint:
+      enabled: true
+    pylint:
+      enabled: false
+    flake8:
+      enabled: false
