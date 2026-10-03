@@ -20,10 +20,12 @@ if str(_SCRIPTS) not in sys.path:
     sys.path.insert(0, str(_SCRIPTS))
 
 from lib.hermes_sanitize import strip_hidden_reasoning  # noqa: E402
+from lib.local_agent_privacy import trainable_text_errors  # noqa: E402
 
 _ROLE_BY_ACTOR = {
     "human": "user",
     "agent": "assistant",
+    "bot": "assistant",
     "application": "system",
 }
 
@@ -39,9 +41,24 @@ def export_record(record: dict[str, Any]) -> dict[str, Any] | None:
     return row
 
 
-def export_jsonl(path: Path) -> str:
+def export_jsonl(path: Path, admitted_ids: set[str]) -> str:
+    records = _load_records(path)
+    if _trajectory_ids(records) != admitted_ids:
+        raise ValueError("canonical rows do not match admitted trajectory ids")
+    return _render_records(records)
+
+
+def _trajectory_ids(records: list[dict[str, Any]]) -> set[str]:
+    return {
+        record["trajectory_id"]
+        for record in records
+        if isinstance(record.get("trajectory_id"), str)
+    }
+
+
+def _render_records(records: list[dict[str, Any]]) -> str:
     lines: list[str] = []
-    for record in _load_records(path):
+    for record in records:
         row = export_record(record)
         if row is None:
             continue
@@ -51,9 +68,21 @@ def export_jsonl(path: Path) -> str:
     return "\n".join(lines) + "\n"
 
 
+def admitted_trajectory_ids(report: dict[str, Any]) -> set[str]:
+    return {
+        row["trajectory_id"]
+        for row in report.get("records", [])
+        if isinstance(row, dict)
+        and row.get("status") == "accepted"
+        and isinstance(row.get("trajectory_id"), str)
+    }
+
+
 def _load_records(path: Path) -> list[dict[str, Any]]:
     records: list[dict[str, Any]] = []
-    if not path.is_file() or path.stat().st_size == 0:
+    if not path.is_file():
+        raise FileNotFoundError(path)
+    if path.stat().st_size == 0:
         return records
     for line in path.read_text(encoding="utf-8").splitlines():
         if not line.strip():
@@ -79,20 +108,36 @@ def _message(event: Any) -> dict[str, str] | None:
     if not isinstance(event, dict):
         return None
     role = _role(event)
-    content = event.get("content")
-    if role is None or not isinstance(content, str):
+    content = _clean_content(event.get("content"))
+    if role is None or content is None:
+        return None
+    return {"role": role, "content": content}
+
+
+def _clean_content(content: Any) -> str | None:
+    if not isinstance(content, str):
         return None
     cleaned = strip_hidden_reasoning(content)
-    if not isinstance(cleaned, str) or not cleaned.strip():
+    if not _nonempty_text(cleaned):
         return None
-    return {"role": role, "content": cleaned}
+    privacy_errors = trainable_text_errors(cleaned)
+    if privacy_errors:
+        raise ValueError(", ".join(privacy_errors))
+    return cleaned
+
+
+def _nonempty_text(value: Any) -> bool:
+    return isinstance(value, str) and bool(value.strip())
 
 
 def _role(event: dict[str, Any]) -> str | None:
     event_type = event.get("event_type") or event.get("type")
     if event_type == "tool_call":
         return "tool"
-    actor = event.get("actor")
+    return _actor_role(event.get("actor"))
+
+
+def _actor_role(actor: Any) -> str | None:
     if not isinstance(actor, dict):
         return None
     return _ROLE_BY_ACTOR.get(str(actor.get("type") or ""))
@@ -125,9 +170,12 @@ def _event_timestamps(events: Any) -> list[str]:
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("inputs", nargs="+", type=Path)
+    parser.add_argument("--decision-report", type=Path, required=True)
     parser.add_argument("--out", type=Path, required=True)
     args = parser.parse_args(argv)
-    chunks = [export_jsonl(path) for path in args.inputs]
+    report = json.loads(args.decision_report.read_text(encoding="utf-8"))
+    admitted_ids = admitted_trajectory_ids(report)
+    chunks = [export_jsonl(path, admitted_ids) for path in args.inputs]
     text = "".join(chunks)
     args.out.parent.mkdir(parents=True, exist_ok=True)
     args.out.write_text(text, encoding="utf-8")

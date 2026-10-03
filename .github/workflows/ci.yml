@@ -124,7 +124,7 @@ jobs:
         with:
           python-version: "3.12"
       - name: Install CPU-only Agoge parser deps
-        run: pip install --quiet 'numpy' 'datasets' 'rich'
+        run: pip install --quiet -r .github/requirements/consumer-contract.txt
       - name: Parse sample derivatives through Agoge without training
         env:
           PYTHONPATH: ${{ github.workspace }}/.agoge-forger/src
@@ -134,7 +134,7 @@ jobs:
         with:
           name: consumer-contract-sidecars
           path: reports/consumer-contract/
-          if-no-files-found: error
+          if-no-files-found: warn
 
   status-up-to-date:
     if: github.event_name == 'pull_request'

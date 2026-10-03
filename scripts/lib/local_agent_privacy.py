@@ -98,7 +98,7 @@ def _is_hash_key(key: str) -> bool:
 
 def trainable_text_errors(text: str) -> list[str]:
     errors = list(private_reference_errors(text))
-    if HOME_PATH_RE.search(text):
+    if _has_home_path(text):
         errors.append("absolute user-home path present")
     if find_secrets(text):
         errors.append("secret-like token pattern present")
@@ -107,6 +107,10 @@ def trainable_text_errors(text: str) -> list[str]:
     if _CLOUD_FALLBACK_TEXT_RE.search(text):
         errors.append("cloud fallback is allowed")
     return errors
+
+
+def _has_home_path(text: str) -> bool:
+    return HOME_PATH_RE.search(text) is not None
 
 
 def false_success_errors(record: dict[str, Any]) -> list[str]:

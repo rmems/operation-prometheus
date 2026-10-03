@@ -9,7 +9,7 @@ SHA256_RE = re.compile(r"^[a-f0-9]{64}$")
 CHECKLIST_RE = re.compile(r"^\s*[-*]\s+\[[ xX]\]", re.MULTILINE)
 CHECK_RUN_CONCLUSION_RE = re.compile(
     r"(?:=(?:success|failure|cancelled|neutral|skipped|pending|timed_out|action_required)\b)"
-    r"|(?:combined_status=)",
+    r"|(?:combined_status=(?:success|failure|cancelled|neutral|skipped|pending|timed_out|action_required)\b)",
     re.IGNORECASE,
 )
 DECLARED_TRUNCATION_MARKERS = (
@@ -118,7 +118,7 @@ def _license_field_error(record: dict[str, Any], field: str) -> str | None:
 
 
 def blank_license_policy_errors(record: dict[str, Any]) -> list[str]:
-    if record.get("schema_version") not in ("1", "1.0", "v1"):
+    if record.get("schema_version") not in _V1_SCHEMA_VERSIONS:
         return []
     errors: list[str] = []
     for field in ("license", "collection_policy"):

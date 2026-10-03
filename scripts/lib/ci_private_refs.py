@@ -40,19 +40,31 @@ def _event_evidence_uris(event: Any) -> list[str]:
 
 
 def _append_artifact_uris(record: dict[str, Any], values: list[str]) -> None:
-    for artifact in record.get("artifacts") or []:
+    artifacts = record.get("artifacts")
+    if not isinstance(artifacts, list):
+        return
+    for artifact in artifacts:
         uri = _artifact_uri(artifact)
         if uri is not None:
             values.append(uri)
 
 
 def _append_event_uris(record: dict[str, Any], values: list[str]) -> None:
-    for event in record.get("events") or []:
+    events = record.get("events")
+    if not isinstance(events, list):
+        return
+    for event in events:
         values.extend(_event_evidence_uris(event))
 
 
 def _append_repository_uris(record: dict[str, Any], values: list[str]) -> None:
-    repository = record.get("repository")
+    _append_one_repository_uri(record.get("repository"), values)
+    provenance = record.get("execution_provenance")
+    if isinstance(provenance, dict):
+        _append_one_repository_uri(provenance.get("repository"), values)
+
+
+def _append_one_repository_uri(repository: Any, values: list[str]) -> None:
     if not isinstance(repository, dict):
         return
     url = repository.get("url")

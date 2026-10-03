@@ -101,30 +101,36 @@ def _prometheus_timestamps(record: dict[str, Any]) -> list[str]:
     return [item for item in raw if isinstance(item, str)]
 
 
-def _payload_event_timestamps(record: dict[str, Any]) -> list[str]:
+def _payload_event_timestamps(record: dict[str, Any]) -> tuple[list[str], list[str]]:
     events = record.get("events")
     if not isinstance(events, list):
-        return []
-    return [
-        event["timestamp"]
-        for event in events
-        if isinstance(event, dict) and isinstance(event.get("timestamp"), str)
-    ]
+        return [], []
+    timestamps: list[str] = []
+    errors: list[str] = []
+    for event in events:
+        stamp = event.get("timestamp") if isinstance(event, dict) else None
+        if isinstance(stamp, str):
+            timestamps.append(stamp)
+        else:
+            errors.append(f"malformed event timestamp {stamp!r}")
+    return timestamps, errors
 
 
-def _event_timestamps(record: dict[str, Any]) -> list[str]:
+def _event_timestamps(record: dict[str, Any]) -> tuple[list[str], list[str]]:
     # Payload events are the authoritative timeline. Metadata timestamps are
     # only used when the derivative has no events list, so the two copies of
     # the same ordered timeline are not concatenated.
     if isinstance(record.get("events"), list) and record.get("events"):
         return _payload_event_timestamps(record)
-    return _prometheus_timestamps(record)
+    return _prometheus_timestamps(record), []
 
 
 def future_event_errors(record: dict[str, Any]) -> list[str]:
     errors: list[str] = _prometheus_timestamp_errors(record)
     last: datetime | None = None
-    for stamp in _event_timestamps(record):
+    timestamps, payload_errors = _event_timestamps(record)
+    errors.extend(payload_errors)
+    for stamp in timestamps:
         try:
             current = _parse_timestamp(stamp)
         except (ValueError, TypeError, OverflowError):

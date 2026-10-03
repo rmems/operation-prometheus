@@ -10,7 +10,7 @@ from collections import Counter
 from pathlib import Path
 from typing import Any
 
-from export_observable_actions import export_jsonl
+from export_observable_actions import admitted_trajectory_ids, export_jsonl
 from consumer_contract import future_event_errors
 
 from .ci_io import ROOT, sha256_file
@@ -72,7 +72,7 @@ def _scenario_errors(scenario: Path, validator: Any) -> list[str]:
     with tempfile.TemporaryDirectory() as first_dir, tempfile.TemporaryDirectory() as second_dir:
         first = _normalize_scenario(scenario, Path(first_dir))
         second = _normalize_scenario(scenario, Path(second_dir))
-        errors = _pair_errors(scenario, expect, validator, first, second)
+        errors = _pair_errors(scenario, expect, validator, (first, second))
     return _prefixed(scenario.name, errors)
 
 
@@ -80,9 +80,9 @@ def _pair_errors(
     scenario: Path,
     expect: dict[str, Any],
     validator: Any,
-    first: dict[str, Any],
-    second: dict[str, Any],
+    runs: tuple[dict[str, Any], dict[str, Any]],
 ) -> list[str]:
+    first, second = runs
     errors: list[str] = []
     if first["output"] != second["output"] or first["report_bytes"] != second["report_bytes"]:
         errors.append("normalizer output is not deterministic")
@@ -91,7 +91,7 @@ def _pair_errors(
     errors.extend(_accounting_errors(report, expect))
     errors.extend(_admission_errors(scenario, report))
     errors.extend(_output_errors(output_path, report, expect, validator))
-    exported = export_jsonl(output_path)
+    exported = export_jsonl(output_path, admitted_trajectory_ids(report))
     errors.extend(_export_errors(scenario, report, exported))
     return errors
 
@@ -167,6 +167,8 @@ def _output_errors(
     errors = _schema_errors(path, records, validator)
     errors.extend(_identity_errors(records))
     errors.extend(_record_policy_errors(records))
+    if len(records) != report.get("accepted_count"):
+        errors.append("canonical row count does not match accepted_count")
     successful = sum(
         1 for record in records if record.get("terminal_disposition") == "successful"
     )
@@ -271,7 +273,16 @@ def _exported_row_errors(row: dict[str, Any]) -> list[str]:
     errors.extend(_message_contract_errors(row))
     for text in _message_texts(row):
         errors.extend(trainable_text_errors(text))
+    for text in _metadata_texts(row):
+        errors.extend(trainable_text_errors(text))
     return errors
+
+
+def _metadata_texts(row: dict[str, Any]) -> list[str]:
+    meta = row.get("_prometheus")
+    if not isinstance(meta, dict):
+        return []
+    return [value for value in meta.values() if isinstance(value, str)]
 
 
 def _message_contract_errors(row: dict[str, Any]) -> list[str]:

@@ -13,7 +13,12 @@ if str(_SCRIPTS) not in sys.path:
     sys.path.insert(0, str(_SCRIPTS))
 
 from lib.ci_contracts import ROOT  # noqa: E402
-from validate_jsonl import load_schema, validate_file  # noqa: E402
+from validate_jsonl import (  # noqa: E402
+    contract_policy_errors,
+    load_schema,
+    policy_errors,
+    validate_file,
+)
 
 try:
     import jsonschema
@@ -83,12 +88,15 @@ def _v0_example_errors(v0) -> list[str]:
     for error in sorted(v0.iter_errors(record), key=lambda item: list(item.path)):
         path = ".".join(str(part) for part in error.absolute_path) or "(root)"
         errors.append(f"{V0_EXAMPLE.name} [{path}] - {error.message}")
+    errors.extend(policy_errors(record, 1, V0_EXAMPLE.name))
+    errors.extend(contract_policy_errors(record, 1, V0_EXAMPLE.name))
     return errors
 
 
 def _file_contract_errors(filepath: Path, v0, v1) -> list[str]:
     file_errors = validate_file(filepath, v0, v1, strict_policy=True)
-    errors = [*file_errors, *round_trip_errors(filepath)]
+    round_trip = round_trip_errors(filepath) if filepath.is_file() else []
+    errors = [*file_errors, *round_trip]
     relative = (
         filepath.name
         if not filepath.is_relative_to(ROOT)

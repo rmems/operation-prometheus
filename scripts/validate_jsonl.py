@@ -27,11 +27,6 @@ try:
     import jsonschema
 except ImportError:
     jsonschema = None
-    print(
-        "ERROR: jsonschema is required. Install with: pip install jsonschema",
-        file=sys.stderr,
-    )
-    sys.exit(2)
 
 _SCRIPTS = Path(__file__).resolve().parent
 if str(_SCRIPTS) not in sys.path:
@@ -42,7 +37,9 @@ from lib.ci_contracts import (  # noqa: E402
     iter_uri_fields,
     private_reference_errors,
     record_identity,
+    silent_truncation_errors,
     unique_event_errors,
+    validation_evidence_errors,
 )
 from lib.hermes_sanitize import (  # noqa: E402
     hidden_markup_remains,
@@ -548,6 +545,10 @@ def contract_policy_errors(record: dict, lineno: int, filename: str) -> list[str
         errors.append(f"  {filename}:{lineno} [policy] - {message}")
     for message in blank_license_policy_errors(record):
         errors.append(f"  {filename}:{lineno} [policy] - {message}")
+    for message in validation_evidence_errors(record):
+        errors.append(f"  {filename}:{lineno} [policy] - {message}")
+    for message in silent_truncation_errors(record):
+        errors.append(f"  {filename}:{lineno} [policy] - {message}")
     return errors
 
 
@@ -604,6 +605,12 @@ def _jsonschema_errors(
 
 
 def main(argv: list[str] | None = None) -> int:
+    if jsonschema is None:
+        print(
+            "ERROR: jsonschema is required. Install with: pip install jsonschema",
+            file=sys.stderr,
+        )
+        return 2
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("files", nargs="+", help="JSONL files to validate")
     parser.add_argument(

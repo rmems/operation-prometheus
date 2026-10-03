@@ -6,6 +6,7 @@ import json
 from pathlib import Path
 
 from lib.ci_contracts import (
+    blank_license_policy_errors,
     is_real_check_run_detail,
     iter_uri_fields,
     private_reference_errors,
@@ -27,7 +28,7 @@ V1_FIXTURE = ROOT / "tests" / "fixtures" / "v1" / "software_valid.jsonl"
 
 
 def _v1_record() -> dict:
-    return json.loads(V1_FIXTURE.read_text())
+    return json.loads(V1_FIXTURE.read_text().splitlines()[0])
 
 
 def _validators():
@@ -87,6 +88,14 @@ def test_patch_mentions_of_localhost_are_not_private_references():
     assert private_reference_errors("//10.0.0.1/private") == ["private host 10.0.0.1"]
     nested = {"repository": {"url": "file:///etc/passwd"}}
     assert iter_uri_fields(nested) == ["file:///etc/passwd"]
+    provenance = {
+        "execution_provenance": {"repository": {"url": "ssh://private.lan/repo"}}
+    }
+    assert iter_uri_fields(provenance) == ["ssh://private.lan/repo"]
+
+
+def test_uri_collection_ignores_schema_invalid_sequences():
+    assert iter_uri_fields({"artifacts": "invalid", "events": 42}) == []
 
 
 def test_blank_license_is_rejected(tmp_path):
@@ -99,9 +108,18 @@ def test_blank_license_is_rejected(tmp_path):
     assert any("license is missing" in error for error in errors)
 
 
+def test_blank_license_is_rejected_for_v1_1():
+    record = {"schema_version": "1.1", "license": "", "collection_policy": " "}
+    assert blank_license_policy_errors(record) == [
+        "license is missing a sourced value",
+        "collection_policy is missing a sourced value",
+    ]
+
+
 def test_check_run_conclusions_are_distinguished_from_checklists():
     assert is_real_check_run_detail("Build & Test=success")
     assert is_real_check_run_detail("combined_status=success")
+    assert not is_real_check_run_detail("combined_status=banana")
     assert not is_real_check_run_detail("- [ ] unit tests")
     prose = {
         "validation": [
@@ -193,6 +211,11 @@ def test_consumer_contract_rejects_malformed_timestamp_metadata():
     assert any("malformed event timestamp" in error for error in future_event_errors(record))
 
 
+def test_consumer_contract_rejects_missing_payload_timestamp():
+    record = {"events": [{"timestamp": "2026-01-01T00:00:00Z"}, {}]}
+    assert future_event_errors(record) == ["malformed event timestamp None"]
+
+
 def test_consumer_contract_does_not_double_count_event_timelines():
     record = {
         "events": [{"timestamp": "2026-01-02T00:00:00Z"}],
@@ -233,6 +256,20 @@ def test_schema_v1_software_without_validation_evidence_is_rejected():
     assert validation_evidence_errors(record) == [
         "missing required validation evidence"
     ]
+
+
+def test_strict_validator_enforces_validation_evidence(tmp_path):
+    v0, v1 = _validators()
+    record = _v1_record()
+    record.pop("validation", None)
+    for event in record["events"]:
+        event.pop("disposition", None)
+    record.pop("validation_outcome", None)
+    record.get("software_payload", {}).pop("validation_outcome", None)
+    path = tmp_path / "missing-evidence.jsonl"
+    path.write_text(json.dumps(record) + "\n")
+    errors = validate_file(path, v0, v1, strict_policy=True)
+    assert any("missing required validation evidence" in error for error in errors)
 
 
 def test_schema_v1_event_disposition_counts_as_validation_evidence():

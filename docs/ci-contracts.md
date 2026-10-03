@@ -6,8 +6,8 @@ download, Ollama daemon, GPU, network call, or token.
 
 ## Pull requests
 
-These jobs run on every PR alongside `lint`, `test`, `validate`,
-`status-up-to-date`, and `shared-files-guard`:
+These jobs run on every PR alongside `lint`, `test`, `validate`, and
+`status-up-to-date`. The label-gated `shared-files-guard` runs on data PRs:
 
 - `trajectory-contract` — v0/v1 schemas, fixture round-trips, unique IDs,
   SHA-256 references, license/policy, sourced actors, secrets, private URIs,
