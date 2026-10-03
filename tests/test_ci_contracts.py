@@ -99,6 +99,15 @@ def test_uri_collection_ignores_schema_invalid_sequences():
     assert iter_uri_fields({"artifacts": "invalid", "events": 42}) == []
 
 
+def test_private_hosts_with_trailing_root_dot_are_rejected():
+    for uri, host in (
+        ("http://localhost./secret", "localhost"),
+        ("http://127.0.0.1./x", "127.0.0.1"),
+        ("http://private.internal./x", "private.internal"),
+    ):
+        assert private_reference_errors(uri) == [f"private host {host}"]
+
+
 def test_blank_license_is_rejected(tmp_path):
     v0, v1 = _validators()
     record = _v1_record()
@@ -205,6 +214,18 @@ def test_consumer_contract_reports_malformed_rows_and_keeps_trajectory_id(tmp_pa
     assert any("Invalid JSON" in error for error in sidecar["errors"])
     assert any("not a JSON object" in error for error in sidecar["errors"])
     assert sidecar["rows"][0]["source_trajectory_id"] == "traj-9"
+
+
+def test_consumer_contract_rejects_blank_normalized_text(tmp_path):
+    def normalize(row, tokenizer=None, index=0):
+        return {"text": "   "}
+
+    path = tmp_path / "blank.jsonl"
+    path.write_text('{"instruction":"nonempty"}\n', encoding="utf-8")
+    sidecar = consume(path, normalize)
+    assert sidecar["ok"] is False
+    assert sidecar["rows"] == []
+    assert any("parser did not return a text row" in error for error in sidecar["errors"])
 
 
 def test_consumer_contract_rejects_malformed_timestamp_metadata():

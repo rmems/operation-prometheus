@@ -102,7 +102,7 @@ def _scheme_policy_hit(parsed: Any) -> str | None:
 
 
 def _host_policy_hit(parsed: Any) -> str | None:
-    host = (parsed.hostname or "").casefold()
+    host = (parsed.hostname or "").casefold().removesuffix(".")
     if host and _is_private_host(host):
         return f"private host {host}"
     return None
