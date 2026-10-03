@@ -528,7 +528,15 @@ def _line_errors(
 
 
 def contract_policy_errors(record: dict, lineno: int, filename: str) -> list[str]:
-    errors: list[str] = []
+    errors = _private_reference_policy_errors(record, lineno, filename)
+    for message in _contract_policy_messages(record):
+        errors.append(f"  {filename}:{lineno} [policy] - {message}")
+    return errors
+
+
+def _private_reference_policy_errors(
+    record: dict, lineno: int, filename: str
+) -> list[str]:
     private_hits: list[str] = []
     seen_private: set[str] = set()
     for text in iter_uri_fields(record):
@@ -536,20 +544,21 @@ def contract_policy_errors(record: dict, lineno: int, filename: str) -> list[str
             if hit not in seen_private:
                 seen_private.add(hit)
                 private_hits.append(hit)
-    if private_hits:
-        errors.append(
+    if not private_hits:
+        return []
+    return [
             f"  {filename}:{lineno} [policy] - private reference present "
             f"({', '.join(private_hits)})"
-        )
-    for message in unique_event_errors(record):
-        errors.append(f"  {filename}:{lineno} [policy] - {message}")
-    for message in blank_license_policy_errors(record):
-        errors.append(f"  {filename}:{lineno} [policy] - {message}")
-    for message in validation_evidence_errors(record):
-        errors.append(f"  {filename}:{lineno} [policy] - {message}")
-    for message in silent_truncation_errors(record):
-        errors.append(f"  {filename}:{lineno} [policy] - {message}")
-    return errors
+    ]
+
+
+def _contract_policy_messages(record: dict) -> list[str]:
+    return [
+        *unique_event_errors(record),
+        *blank_license_policy_errors(record),
+        *validation_evidence_errors(record),
+        *silent_truncation_errors(record),
+    ]
 
 
 def _version_needs_stable_id(version: object) -> bool:
