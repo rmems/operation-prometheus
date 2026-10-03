@@ -202,11 +202,10 @@ def _normalize_row(
         normalized = normalize(payload, None, index=line_number)
     except ValueError as exc:
         return None, f"{path.name}:{line_number} {exc}"
-    if (
-        not isinstance(normalized, dict)
-        or not isinstance(normalized.get("text"), str)
-        or not normalized["text"].strip()
-    ):
+    if not isinstance(normalized, dict):
+        return None, f"{path.name}:{line_number} parser did not return a text row"
+    text = normalized.get("text")
+    if not isinstance(text, str) or not text.strip():
         return None, f"{path.name}:{line_number} parser did not return a text row"
     return normalized, None
 
