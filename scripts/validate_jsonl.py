@@ -547,8 +547,8 @@ def _private_reference_policy_errors(
     if not private_hits:
         return []
     return [
-            f"  {filename}:{lineno} [policy] - private reference present "
-            f"({', '.join(private_hits)})"
+        f"  {filename}:{lineno} [policy] - private reference present "
+        f"({', '.join(private_hits)})"
     ]
 
 
