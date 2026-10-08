@@ -61,7 +61,14 @@ if ls datasets/jsonl/*.jsonl 1>/dev/null 2>&1; then
 else
   echo "No JSONL files found; skipping schema validation."
 fi
+python scripts/trajectory_contract.py
+python scripts/local_agent_contract.py
 # Required before admitting a local model provider (fail-closed; frozen evidence only):
 # python scripts/verify_local_model_admission.py --admissions ... --rights ... \
 #   --probe tests/fixtures/local_model_admission/ollama_probe.json --out report.json
 ```
+
+PR CI also runs `trajectory-contract`, `local-agent-contract`, and
+`consumer-contract`. Those jobs are CPU-only and offline: no model download,
+Ollama daemon, GPU, network call, or token. See
+[docs/ci-contracts.md](docs/ci-contracts.md).
