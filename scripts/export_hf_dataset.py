@@ -174,6 +174,9 @@ tags:
 - trajectories
 size_categories:
 - n<1K
+configs:
+- config_name: default
+  data_files: trajectories.jsonl
 ---
 
 # Operation Prometheus — software-engineering trajectories
