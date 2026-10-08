@@ -33,6 +33,21 @@ def test_repo_license_map_covers_all_jsonl_repos():
     assert {r["repo"] for r in records} <= set(ex.REPO_LICENSES)
 
 
+def test_renamed_repos_are_canonicalized():
+    import export_hf_dataset as ex
+
+    records = ex.load_records()
+    repos = {r["repo"] for r in records}
+    for old, new in ex.REPO_ALIASES.items():
+        assert old not in repos
+        if new in repos:  # alias only asserted when the repo has records
+            assert all(
+                f"github.com/{old}/" not in u
+                for r in records
+                for u in r["source_urls"]
+            )
+
+
 def test_card_lists_every_repo_and_license():
     import export_hf_dataset as ex
 

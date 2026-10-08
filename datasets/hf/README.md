@@ -22,7 +22,7 @@ issue/review signal → code state → patch → validation → outcome.
 - **Records:** 97
 - **Format:** JSONL (`trajectories.jsonl`), schema `pr_trajectory_v0` / `trajectory_v1`
 - **Languages:** Julia, Python, Rust, SystemVerilog
-- **Generated:** 2026-10-08 · sha256 `d0bc760dc74ad8cf…`
+- **Generated:** 2026-10-08 · sha256 `0c130f705223a755…`
 
 ## Record fields
 
@@ -51,6 +51,8 @@ License set represented: Apache-2.0; MIT; MIT OR Apache-2.0.
 |------------|---------|----------------|
 | [Limen-Neural/axon-encoder](https://github.com/Limen-Neural/axon-encoder) | 3 | MIT OR Apache-2.0 |
 | [Limen-Neural/brainstem-daemon](https://github.com/Limen-Neural/brainstem-daemon) | 4 | MIT OR Apache-2.0 |
+| [Limen-Neural/limbic-critic](https://github.com/Limen-Neural/limbic-critic) | 4 | MIT OR Apache-2.0 |
+| [Limen-Neural/myelin-accelerator](https://github.com/Limen-Neural/myelin-accelerator) | 5 | MIT OR Apache-2.0 |
 | [Limen-Neural/neuromod](https://github.com/Limen-Neural/neuromod) | 5 | MIT OR Apache-2.0 |
 | [Limen-Neural/nir-rs](https://github.com/Limen-Neural/nir-rs) | 4 | MIT OR Apache-2.0 |
 | [Limen-Neural/synaptic-mesh](https://github.com/Limen-Neural/synaptic-mesh) | 5 | MIT OR Apache-2.0 |
@@ -62,12 +64,10 @@ License set represented: Apache-2.0; MIT; MIT OR Apache-2.0.
 | [rmems/engram-parser](https://github.com/rmems/engram-parser) | 1 | MIT OR Apache-2.0 |
 | [rmems/grok-ozempic](https://github.com/rmems/grok-ozempic) | 13 | MIT OR Apache-2.0 |
 | [rmems/kinetic-signals](https://github.com/rmems/kinetic-signals) | 5 | MIT OR Apache-2.0 |
-| [rmems/limbic-critic](https://github.com/rmems/limbic-critic) | 4 | MIT OR Apache-2.0 |
-| [rmems/myelin-accelerator](https://github.com/rmems/myelin-accelerator) | 5 | MIT OR Apache-2.0 |
 | [rmems/silicon-hdl](https://github.com/rmems/silicon-hdl) | 5 | MIT OR Apache-2.0 |
 | [rmems/spike-viz](https://github.com/rmems/spike-viz) | 3 | Apache-2.0 |
 | [rmems/thalamic-relay](https://github.com/rmems/thalamic-relay) | 3 | MIT OR Apache-2.0 |
-| [rmems/worktrees-hives](https://github.com/rmems/worktrees-hives) | 5 | Apache-2.0 |
+| [rmems/writ](https://github.com/rmems/writ) | 5 | Apache-2.0 |
 | [rmems/xai-dissect](https://github.com/rmems/xai-dissect) | 4 | MIT OR Apache-2.0 |
 
 ## Intended use

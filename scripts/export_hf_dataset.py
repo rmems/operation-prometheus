@@ -7,8 +7,9 @@ Usage:
     python scripts/export_hf_dataset.py --upload --repo-id <user>/<name> [--private]
 
 The merge step concatenates every committed per-repo JSONL under
-``datasets/jsonl/``, injects a per-record ``source_license`` (the license of the
-originating repository — see ``docs/data-policy.md``), and emits:
+``datasets/jsonl/``, normalizes renamed source repositories (``REPO_ALIASES``),
+injects a per-record ``source_license`` (the license of the originating
+repository — see ``docs/data-policy.md``), and emits:
 
 - ``datasets/hf/trajectories.jsonl`` — one record per line, sorted by record id;
 - ``datasets/hf/README.md``         — the Hugging Face dataset card;
@@ -29,6 +30,7 @@ import os
 import sys
 from datetime import date
 from pathlib import Path
+from typing import Iterator
 
 ROOT = Path(__file__).resolve().parent.parent
 JSONL_DIR = ROOT / "datasets" / "jsonl"
@@ -37,12 +39,23 @@ RECORDS_NAME = "trajectories.jsonl"
 CARD_NAME = "README.md"
 MANIFEST_NAME = "manifest.json"
 
-# SPDX expression for each repo with at least one committed record, verified
-# against the source repository's LICENSE files (2026-10). Dual-licensed Rust
-# repos use the standard "MIT OR Apache-2.0" convention.
+# Source repos renamed after their extracts were collected; records still carry
+# the pre-rename ``repo`` value and ``source_urls``. The export rewrites both so
+# the published dataset points at where the code lives now.
+REPO_ALIASES = {
+    "rmems/limbic-critic": "Limen-Neural/limbic-critic",
+    "rmems/myelin-accelerator": "Limen-Neural/myelin-accelerator",
+    "rmems/worktrees-hives": "rmems/writ",
+}
+
+# SPDX expression for each canonical repo with at least one committed record,
+# verified against the source repository's LICENSE files (2026-10). Dual-
+# licensed repos use the standard "MIT OR Apache-2.0" convention.
 REPO_LICENSES = {
     "Limen-Neural/axon-encoder": "MIT OR Apache-2.0",
     "Limen-Neural/brainstem-daemon": "MIT OR Apache-2.0",
+    "Limen-Neural/limbic-critic": "MIT OR Apache-2.0",
+    "Limen-Neural/myelin-accelerator": "MIT OR Apache-2.0",
     "Limen-Neural/neuromod": "MIT OR Apache-2.0",
     "Limen-Neural/nir-rs": "MIT OR Apache-2.0",
     "Limen-Neural/synaptic-mesh": "MIT OR Apache-2.0",
@@ -54,31 +67,42 @@ REPO_LICENSES = {
     "rmems/engram-parser": "MIT OR Apache-2.0",
     "rmems/grok-ozempic": "MIT OR Apache-2.0",
     "rmems/kinetic-signals": "MIT OR Apache-2.0",
-    "rmems/limbic-critic": "MIT OR Apache-2.0",
-    "rmems/myelin-accelerator": "MIT OR Apache-2.0",
     "rmems/silicon-hdl": "MIT OR Apache-2.0",
     "rmems/spike-viz": "Apache-2.0",
-    "rmems/synaptic-mesh": "MIT OR Apache-2.0",
     "rmems/thalamic-relay": "MIT OR Apache-2.0",
-    "rmems/worktrees-hives": "Apache-2.0",
+    "rmems/writ": "Apache-2.0",
     "rmems/xai-dissect": "MIT OR Apache-2.0",
 }
 
 
-def load_records() -> list[dict]:
-    records = []
+def canonical_repo(repo: str) -> str:
+    return REPO_ALIASES.get(repo, repo)
+
+
+def _canonical_url(url: str) -> str:
+    for old, new in REPO_ALIASES.items():
+        url = url.replace(f"github.com/{old}/", f"github.com/{new}/")
+    return url
+
+
+def _iter_records() -> Iterator[tuple[Path, dict]]:
     for path in sorted(JSONL_DIR.glob("*.jsonl")):
         for line in path.read_text(encoding="utf-8").splitlines():
-            if not line.strip():
-                continue
-            rec = json.loads(line)
-            repo = rec["repo"]
-            license_expr = REPO_LICENSES.get(repo)
-            if license_expr is None:
-                raise SystemExit(f"{path.name}: no license mapping for {repo}")
-            # The record carries the source repo's license, not the tooling's.
-            rec["source_license"] = license_expr
-            records.append(rec)
+            if line.strip():
+                yield path, json.loads(line)
+
+
+def load_records() -> list[dict]:
+    records = []
+    for path, rec in _iter_records():
+        rec["repo"] = canonical_repo(rec["repo"])
+        rec["source_urls"] = [_canonical_url(u) for u in rec.get("source_urls", [])]
+        license_expr = REPO_LICENSES.get(rec["repo"])
+        if license_expr is None:
+            raise SystemExit(f"{path.name}: no license mapping for {rec['repo']}")
+        # The record carries the source repo's license, not the tooling's.
+        rec["source_license"] = license_expr
+        records.append(rec)
     records.sort(key=lambda r: r["id"])
     return records
 
@@ -114,15 +138,15 @@ def build_manifest(records: list[dict], blob: bytes) -> dict:
 
 def build_card(records: list[dict], manifest: dict) -> str:
     repos = manifest["repo_counts"]
-    uses = manifest["training_use_counts"]
-    langs = manifest["language_counts"]
+    use_rows = "\n".join(
+        f"| `{k}` | {v} |" for k, v in manifest["training_use_counts"].items()
+    )
     repo_rows = "\n".join(
         f"| [{repo}](https://github.com/{repo}) | {n} | {REPO_LICENSES[repo]} |"
         for repo, n in repos.items()
     )
-    use_rows = "\n".join(f"| `{k}` | {v} |" for k, v in uses.items())
     license_set = sorted(set(REPO_LICENSES[r] for r in repos))
-    lang_list = ", ".join(langs)
+    lang_list = ", ".join(manifest["language_counts"])
     return f"""---
 license:
 - apache-2.0
@@ -188,31 +212,35 @@ multi-human review. Inspect records before training use.
 """
 
 
-def write_outputs(check: bool) -> int:
+def collect_outputs() -> dict[Path, bytes]:
     records = load_records()
     blob = records_jsonl(records)
     manifest = build_manifest(records, blob)
-    outputs = {
+    return {
         OUT_DIR / RECORDS_NAME: blob,
         OUT_DIR / CARD_NAME: build_card(records, manifest).encode("utf-8"),
         OUT_DIR / MANIFEST_NAME: (json.dumps(manifest, indent=1) + "\n").encode("utf-8"),
     }
-    stale = []
-    for path, content in outputs.items():
-        if path.read_bytes() != content if path.exists() else True:
-            stale.append(path)
-    if check:
-        if stale:
-            print("stale outputs:", *[str(p.relative_to(ROOT)) for p in stale])
-            return 1
-        print(f"up to date: {len(records)} records")
-        return 0
+
+
+def _is_stale(path: Path, content: bytes) -> bool:
+    return not path.exists() or path.read_bytes() != content
+
+
+def _check(outputs: dict[Path, bytes]) -> int:
+    stale = [p for p, c in outputs.items() if _is_stale(p, c)]
+    if stale:
+        print("stale outputs:", *[str(p.relative_to(ROOT)) for p in stale])
+        return 1
+    print("outputs up to date")
+    return 0
+
+
+def _emit(outputs: dict[Path, bytes]) -> None:
     OUT_DIR.mkdir(parents=True, exist_ok=True)
     for path, content in outputs.items():
         path.write_bytes(content)
         print(f"wrote {path.relative_to(ROOT)}")
-    print(f"{len(records)} records across {len(manifest['repo_counts'])} repos")
-    return 0
 
 
 def upload(repo_id: str, private: bool) -> None:
@@ -241,9 +269,10 @@ def main() -> int:
     ap.add_argument("--repo-id", help="Hub dataset id, e.g. rmems/operation-prometheus-trajectories")
     ap.add_argument("--private", action="store_true", help="create the Hub repo as private")
     args = ap.parse_args()
-    rc = write_outputs(check=args.check)
-    if rc or args.check:
-        return rc
+    outputs = collect_outputs()
+    if args.check:
+        return _check(outputs)
+    _emit(outputs)
     if args.upload:
         if not args.repo_id:
             ap.error("--upload requires --repo-id")
