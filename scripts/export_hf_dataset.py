@@ -249,6 +249,27 @@ def _emit(outputs: dict[Path, bytes]) -> None:
         print(f"wrote {path.relative_to(ROOT)}")
 
 
+def _hf_api():
+    token = os.environ.get("HF_TOKEN")
+    if not token:
+        raise SystemExit("HF_TOKEN is not set")
+    try:
+        from huggingface_hub import HfApi
+    except ImportError:
+        raise SystemExit("pip install huggingface_hub first")
+    return HfApi(token=token)
+
+
+def _ensure_repo(api, repo_id: str, private: bool) -> None:
+    api.create_repo(repo_id, repo_type="dataset", private=private, exist_ok=True)
+    info = api.repo_info(repo_id, repo_type="dataset")
+    if info.private != private:
+        raise SystemExit(
+            f"{repo_id} already exists with private={info.private}; "
+            "create_repo does not change visibility — flip it on the Hub first"
+        )
+
+
 def upload(repo_id: str, private: bool, attested: str | None) -> None:
     # docs/data-policy.md requires a manual inspection pass before publish;
     # --attested records who did it.
@@ -257,21 +278,8 @@ def upload(repo_id: str, private: bool, attested: str | None) -> None:
             "--upload requires --attested '<name>' attesting the manual "
             "inspection pass required by docs/data-policy.md"
         )
-    token = os.environ.get("HF_TOKEN")
-    if not token:
-        raise SystemExit("HF_TOKEN is not set")
-    try:
-        from huggingface_hub import HfApi
-    except ImportError:
-        raise SystemExit("pip install huggingface_hub first")
-    api = HfApi(token=token)
-    api.create_repo(repo_id, repo_type="dataset", private=private, exist_ok=True)
-    info = api.repo_info(repo_id, repo_type="dataset")
-    if info.private != private:
-        raise SystemExit(
-            f"{repo_id} already exists with private={info.private}; "
-            "create_repo does not change visibility — flip it on the Hub first"
-        )
+    api = _hf_api()
+    _ensure_repo(api, repo_id, private)
     api.upload_folder(
         repo_id=repo_id,
         repo_type="dataset",
