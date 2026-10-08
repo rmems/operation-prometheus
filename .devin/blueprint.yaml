@@ -3,7 +3,7 @@
 maintenance: |
   # Local venv: runtime deps + lint/test tools (ruff pinned to CI version).
   python3 -m venv .venv
-  .venv/bin/pip install -q -r requirements.txt 'ruff==0.11.12' pytest
+  .venv/bin/pip install -q -r requirements.txt 'ruff==0.11.12' 'pytest==8.4.1'
 knowledge:
   - name: lint
     contents: |
@@ -13,7 +13,12 @@ knowledge:
       .venv/bin/pytest -q
   - name: validate
     contents: |
-      .venv/bin/python scripts/validate_jsonl.py --strict-policy datasets/jsonl/*.jsonl
+      # Mirrors CI: skip cleanly when no JSONL files exist.
+      if ls datasets/jsonl/*.jsonl 1>/dev/null 2>&1; then
+        .venv/bin/python scripts/validate_jsonl.py --strict-policy datasets/jsonl/*.jsonl
+      else
+        echo "No JSONL files to validate yet"
+      fi
   - name: notes
     contents: |
       Data pipeline, no runnable app. AGENTS.md gates: ruff (CI pins 0.11.12 —
@@ -21,3 +26,4 @@ knowledge:
       validation. STATUS.md and docs/source-repos/_index.md are generated;
       never edit. Extract PRs must not touch shared files (shared-files-guard CI).
       datasets/raw/ is gitignored; PROMETHEUS_DATA_ROOT can point elsewhere.
+      Exception: extract PRs labeled `pipeline` or `schema` may edit shared files.
