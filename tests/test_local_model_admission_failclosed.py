@@ -14,10 +14,15 @@ from lib.model_admission import (
     build_admission_report,
     evaluate_admission,
 )
+from local_model_admission_fixtures import (
+    LLAMA31_LICENSE_ID,
+    LLAMA31_PROBE_LICENSE,
+    LLAMA31_TERMS_SHA256,
+)
 
 MODEL = "hermes-3-llama-3.1-8b:q4_k_m"
 DIGEST = "sha256:" + "a" * 64
-TERMS = "b" * 64
+TERMS = LLAMA31_TERMS_SHA256
 
 
 def _candidate(**overrides):
@@ -27,7 +32,7 @@ def _candidate(**overrides):
         "quantization": "Q4_K_M",
         "runtime": "ollama",
         "endpoint": "http://127.0.0.1:11434",
-        "license": "Apache-2.0",
+        "license": LLAMA31_LICENSE_ID,
         "provider_config": {
             "no_cloud": True,
             "cloud_fallback_allowed": False,
@@ -44,7 +49,11 @@ def _rights(**overrides):
         "schema_version": "model_rights_v1",
         "models": {
             MODEL: {
-                "license": "Apache-2.0",
+                "license": LLAMA31_LICENSE_ID,
+                "custom_license": {
+                    "identifier": LLAMA31_LICENSE_ID,
+                    "text_sha256": TERMS,
+                },
                 "terms_sha256": TERMS,
                 "terms_source": "upstream/LICENSE",
             },
@@ -65,7 +74,7 @@ def _probe(**overrides):
         "show": {
             MODEL: {
                 "details": {"quantization_level": "Q4_K_M"},
-                "license": "Apache-2.0",
+                "license": LLAMA31_PROBE_LICENSE,
             }
         },
     }
@@ -81,10 +90,10 @@ def _inputs(rights=None, probe=None, digests=None):
     )
 
 
-def _evaluate(candidate=None, rights=None, probe=None):
+def _evaluate(candidate=None, rights=None, probe=None, digests=None):
     return evaluate_admission(
         candidate if candidate is not None else _candidate(),
-        inputs=_inputs(rights=rights, probe=probe),
+        inputs=_inputs(rights=rights, probe=probe, digests=digests),
     )
 
 
@@ -93,6 +102,20 @@ def _assert_never_accepted(row):
 
 
 # --- 1. Complete emitted evidence bound into the digest --------------------
+
+def test_terms_digest_differs_from_frozen_rights_file_when_digests_bound():
+    row = _evaluate(
+        _candidate(),
+        digests={
+            "admissions": "e" * 64,
+            "rights": "f" * 64,
+            "probe": "a" * 64,
+        },
+    )
+    report = row["report"]
+    assert report["decision"] == "accepted"
+    assert report["rights"]["terms_sha256"] != report["input_digests"]["rights"]
+
 
 def test_accepted_evidence_is_complete_and_bound():
     row = _evaluate()
@@ -103,7 +126,7 @@ def test_accepted_evidence_is_complete_and_bound():
     assert report["runtime"]["version"] == "0.5.4"
     assert report["runtime"]["endpoint"] == "http://127.0.0.1:11434"
     assert report["rights"]["terms_source"] == "upstream/LICENSE"
-    assert report["rights"]["identifier"] == "Apache-2.0"
+    assert report["rights"]["identifier"] == LLAMA31_LICENSE_ID
     assert report["rights"]["terms_sha256"] == TERMS
     assert report["provider"]["name"] == "hermes-agent"
     assert report["provider"]["config"]["cloud_fallback_allowed"] is False

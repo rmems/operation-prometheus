@@ -10,6 +10,7 @@ from __future__ import annotations
 import re
 from typing import Any
 
+from .model_admission_evidence import sha256_bytes
 from .model_admission_rights_expr import expression_tokens
 
 LICENSE_REF_RE = re.compile(r"^LicenseRef-[A-Za-z0-9.-]+$")
@@ -38,6 +39,27 @@ UNKNOWN_LICENSE_IDS = frozenset(
     {"NOASSERTION", "NONE", "OTHER", "UNKNOWN", "UNLICENSED",
      "SEE LICENSE", "SEE-LICENSE"}
 )
+
+
+def probe_license_consistent(
+    probe_license: Any,
+    *,
+    rights_identifier: str | None,
+    terms_sha256: str | None,
+) -> bool:
+    """Return True when Ollama license text or id matches frozen rights evidence."""
+    if not isinstance(probe_license, str):
+        return True
+    if not probe_license.strip():
+        return True
+    normalized = normalize_license_id(probe_license.strip())
+    if rights_identifier is not None and normalized == rights_identifier:
+        return True
+    if terms_sha256 is not None and sha256_bytes(
+        probe_license.encode("utf-8")
+    ) == terms_sha256:
+        return True
+    return False
 
 
 def normalize_license_id(value: Any) -> str | None:
