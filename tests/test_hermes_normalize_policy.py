@@ -336,29 +336,78 @@ def test_manifest_verifier_subject_cannot_be_reused_for_another_trace(tmp_path: 
     assert "verifier_subject_mismatch" in reasons
 
 
-@pytest.mark.parametrize(
-    ("overrides", "run_id"),
-    [
-        ({"rights": {"identifier": "MIT"}}, "run-rights-mismatch"),
-        (
-            {
-                "rights": {"terms_sha256": "b" * 64},
-                "input_digests": {"rights": "c" * 64},
-            },
-            "run-rights-digest-mismatch",
-        ),
-    ],
-)
-def test_admitted_rights_must_match_output_and_frozen_terms(
-    tmp_path: Path, overrides: dict, run_id: str
-):
-    admission = default_admission(**overrides)
+def test_admitted_rights_must_match_manifest_output_license(tmp_path: Path):
+    admission = default_admission(rights={"identifier": "MIT"})
     paths = write_scenario(
         tmp_path,
-        [hermes_record(run_id=run_id)],
+        [hermes_record(run_id="run-rights-mismatch")],
         admission=admission,
     )
     _assert_rejected_with_reason(paths, "rights_mismatch")
+
+
+def test_admitted_terms_digest_may_differ_from_rights_file_digest(tmp_path: Path):
+    admission = default_admission(
+        rights={"terms_sha256": "a" * 64},
+        input_digests={
+            "admissions": "d" * 64,
+            "probe": "c" * 64,
+            "rights": "b" * 64,
+        },
+    )
+    paths = write_scenario(
+        tmp_path,
+        [hermes_record(run_id="run-rights-digest-distinct")],
+        admission=admission,
+    )
+    assert _run(paths) == 0
+    assert _load_jsonl(paths["output"])
+
+
+def test_tampered_terms_sha256_fails_evidence_digest(tmp_path: Path):
+    paths = write_scenario(
+        tmp_path,
+        [hermes_record(run_id="run-rights-tamper")],
+    )
+    admission = json.loads(paths["admission"].read_text(encoding="utf-8"))
+    admission["rights"]["terms_sha256"] = "f" * 64
+    write_json(paths["admission"], admission)
+    _assert_rejected_with_reason(paths, "evidence_digest")
+
+
+def test_offline_accepted_admission_fixture_passes_normalizer(tmp_path: Path):
+    fixture_path = (
+        ROOT / "tests" / "fixtures" / "local_model_admission" / "accepted_report.json"
+    )
+    admission = seal_admission(json.loads(fixture_path.read_text(encoding="utf-8")))
+    assert admission["rights"]["terms_sha256"] != admission["input_digests"]["rights"]
+    model = dict(admission["model"])
+    if model.get("upstream_revision") is None:
+        model.pop("upstream_revision", None)
+    provider_config = admission["provider"]["config"]
+    paths = write_scenario(
+        tmp_path,
+        [hermes_record(run_id="run-admission-fixture")],
+        admission=admission,
+        manifest_overrides={
+            "output_license": admission["rights"]["identifier"],
+            "model": model,
+            "ollama": {
+                "runtime": admission["runtime"]["name"],
+                "version": admission["runtime"]["version"],
+                "endpoint": admission["runtime"]["endpoint"],
+                "config": {
+                    "num_ctx": provider_config.get("num_ctx"),
+                },
+            },
+        },
+    )
+    manifest = json.loads(paths["manifest"].read_text(encoding="utf-8"))
+    if admission["model"].get("upstream_revision") is None:
+        manifest["model"].pop("upstream_revision", None)
+    write_json(paths["manifest"], manifest)
+    assert _run(paths) == 0
+    assert _load_jsonl(paths["output"])
 
 
 def test_normalized_output_passes_strict_jsonl_validator(tmp_path: Path):

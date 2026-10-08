@@ -24,7 +24,7 @@
         "parameter_size": "8.0B",
         "quantization_level": "Q4_K_M"
       },
-      "license": "Apache-2.0"
+      "license": "Llama 3.1 Community License Agreement (fixture excerpt)\n\nUse of Llama 3.1 materials is governed by Meta's Llama 3.1 Community License,\nnot Apache-2.0. This file stores a truncated synthetic excerpt for offline tests.\n"
     },
     "hermes-3-llama-3.1-70b:q4_k_m": {
       "details": {
