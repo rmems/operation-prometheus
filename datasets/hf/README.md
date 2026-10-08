@@ -1,7 +1,6 @@
 ---
-license:
-- apache-2.0
-- mit
+license: other
+license_name: mixed-per-record
 pretty_name: Operation Prometheus trajectories
 tags:
 - code
@@ -19,10 +18,10 @@ Pull-request engineering trajectories extracted from public GitHub history by
 [operation-prometheus](https://github.com/rmems/operation-prometheus):
 issue/review signal → code state → patch → validation → outcome.
 
-- **Records:** 97
+- **Records:** 96
 - **Format:** JSONL (`trajectories.jsonl`), schema `pr_trajectory_v0` / `trajectory_v1`
 - **Languages:** Julia, Python, Rust, SystemVerilog
-- **Generated:** 2026-10-08 · sha256 `0c130f705223a755…`
+- **sha256:** `67090714f80e9482…`
 
 ## Record fields
 
@@ -37,14 +36,16 @@ issue/review signal → code state → patch → validation → outcome.
 | `bug-prediction` | 3 |
 | `feature` | 39 |
 | `repair` | 22 |
-| `review-to-patch` | 22 |
+| `review-to-patch` | 21 |
 | `validation` | 11 |
 
 ## Source repositories and license / provenance
 
 Each record's `source_license` is the license of its originating repository —
-this dataset is **not** under a single blanket license. The export tooling and
-schemas are Apache-2.0; that does not relicense source-derived content.
+this dataset is **not** under a single blanket license, which is why the card
+declares `license: other` / `mixed-per-record` rather than MIT or Apache-2.0
+for the whole. The export tooling and schemas are Apache-2.0; that does not
+relicense source-derived content.
 License set represented: Apache-2.0; MIT; MIT OR Apache-2.0.
 
 | Repository | Records | Source license |
@@ -62,7 +63,7 @@ License set represented: Apache-2.0; MIT; MIT OR Apache-2.0.
 | [rmems/agoge-forger](https://github.com/rmems/agoge-forger) | 4 | Apache-2.0 |
 | [rmems/corinth-canal](https://github.com/rmems/corinth-canal) | 12 | MIT OR Apache-2.0 |
 | [rmems/engram-parser](https://github.com/rmems/engram-parser) | 1 | MIT OR Apache-2.0 |
-| [rmems/grok-ozempic](https://github.com/rmems/grok-ozempic) | 13 | MIT OR Apache-2.0 |
+| [rmems/grok-ozempic](https://github.com/rmems/grok-ozempic) | 12 | MIT OR Apache-2.0 |
 | [rmems/kinetic-signals](https://github.com/rmems/kinetic-signals) | 5 | MIT OR Apache-2.0 |
 | [rmems/silicon-hdl](https://github.com/rmems/silicon-hdl) | 5 | MIT OR Apache-2.0 |
 | [rmems/spike-viz](https://github.com/rmems/spike-viz) | 3 | Apache-2.0 |

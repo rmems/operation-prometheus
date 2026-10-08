@@ -4,7 +4,8 @@
 Usage:
     python scripts/export_hf_dataset.py                # write datasets/hf/
     python scripts/export_hf_dataset.py --check        # fail if outputs are stale
-    python scripts/export_hf_dataset.py --upload --repo-id <user>/<name> [--private]
+    python scripts/export_hf_dataset.py --upload --repo-id <user>/<name> \
+        --attested <name> [--private]
 
 The merge step concatenates every committed per-repo JSONL under
 ``datasets/jsonl/``, normalizes renamed source repositories (``REPO_ALIASES``),
@@ -28,7 +29,6 @@ import hashlib
 import json
 import os
 import sys
-from datetime import date
 from pathlib import Path
 from typing import Iterator
 
@@ -93,7 +93,10 @@ def _iter_records() -> Iterator[tuple[Path, dict]]:
 
 
 def load_records() -> list[dict]:
-    records = []
+    # Re-extracts of the same PR across schema versions share an ``id`` (e.g.
+    # grok-ozempic #42 in both v0 and v1); the later file wins so the corpus
+    # stays one row per trajectory.
+    by_id: dict[str, dict] = {}
     for path, rec in _iter_records():
         rec["repo"] = canonical_repo(rec["repo"])
         rec["source_urls"] = [_canonical_url(u) for u in rec.get("source_urls", [])]
@@ -102,9 +105,8 @@ def load_records() -> list[dict]:
             raise SystemExit(f"{path.name}: no license mapping for {rec['repo']}")
         # The record carries the source repo's license, not the tooling's.
         rec["source_license"] = license_expr
-        records.append(rec)
-    records.sort(key=lambda r: r["id"])
-    return records
+        by_id[rec["id"]] = rec
+    return [by_id[k] for k in sorted(by_id)]
 
 
 def records_jsonl(records: list[dict]) -> bytes:
@@ -121,9 +123,10 @@ def _counts(records: list[dict], key: str) -> dict[str, int]:
 
 
 def build_manifest(records: list[dict], blob: bytes) -> dict:
+    # No timestamp: outputs must rebuild byte-identically or --check goes stale
+    # every midnight.
     return {
         "name": "operation-prometheus-trajectories",
-        "generated_at": date.today().isoformat(),
         "generator": "scripts/export_hf_dataset.py",
         "record_count": len(records),
         "sha256": hashlib.sha256(blob).hexdigest(),
@@ -132,7 +135,9 @@ def build_manifest(records: list[dict], blob: bytes) -> dict:
         "training_use_counts": _counts(records, "training_use"),
         "repo_counts": _counts(records, "repo"),
         "language_counts": _counts(records, "language"),
-        "repo_licenses": dict(sorted(REPO_LICENSES.items())),
+        "repo_licenses": {
+            repo: REPO_LICENSES[repo] for repo in _counts(records, "repo")
+        },
     }
 
 
@@ -148,9 +153,8 @@ def build_card(records: list[dict], manifest: dict) -> str:
     license_set = sorted(set(REPO_LICENSES[r] for r in repos))
     lang_list = ", ".join(manifest["language_counts"])
     return f"""---
-license:
-- apache-2.0
-- mit
+license: other
+license_name: mixed-per-record
 pretty_name: Operation Prometheus trajectories
 tags:
 - code
@@ -171,7 +175,7 @@ issue/review signal → code state → patch → validation → outcome.
 - **Records:** {manifest['record_count']}
 - **Format:** JSONL (`{RECORDS_NAME}`), schema `pr_trajectory_v0` / `trajectory_v1`
 - **Languages:** {lang_list}
-- **Generated:** {manifest['generated_at']} · sha256 `{manifest['sha256'][:16]}…`
+- **sha256:** `{manifest['sha256'][:16]}…`
 
 ## Record fields
 
@@ -188,8 +192,10 @@ issue/review signal → code state → patch → validation → outcome.
 ## Source repositories and license / provenance
 
 Each record's `source_license` is the license of its originating repository —
-this dataset is **not** under a single blanket license. The export tooling and
-schemas are Apache-2.0; that does not relicense source-derived content.
+this dataset is **not** under a single blanket license, which is why the card
+declares `license: other` / `mixed-per-record` rather than MIT or Apache-2.0
+for the whole. The export tooling and schemas are Apache-2.0; that does not
+relicense source-derived content.
 License set represented: {"; ".join(license_set)}.
 
 | Repository | Records | Source license |
@@ -243,7 +249,14 @@ def _emit(outputs: dict[Path, bytes]) -> None:
         print(f"wrote {path.relative_to(ROOT)}")
 
 
-def upload(repo_id: str, private: bool) -> None:
+def upload(repo_id: str, private: bool, attested: str | None) -> None:
+    # docs/data-policy.md requires a manual inspection pass before publish;
+    # --attested records who did it.
+    if not attested:
+        raise SystemExit(
+            "--upload requires --attested '<name>' attesting the manual "
+            "inspection pass required by docs/data-policy.md"
+        )
     token = os.environ.get("HF_TOKEN")
     if not token:
         raise SystemExit("HF_TOKEN is not set")
@@ -253,11 +266,17 @@ def upload(repo_id: str, private: bool) -> None:
         raise SystemExit("pip install huggingface_hub first")
     api = HfApi(token=token)
     api.create_repo(repo_id, repo_type="dataset", private=private, exist_ok=True)
+    info = api.repo_info(repo_id, repo_type="dataset")
+    if info.private != private:
+        raise SystemExit(
+            f"{repo_id} already exists with private={info.private}; "
+            "create_repo does not change visibility — flip it on the Hub first"
+        )
     api.upload_folder(
         repo_id=repo_id,
         repo_type="dataset",
         folder_path=str(OUT_DIR),
-        commit_message="Export operation-prometheus trajectories",
+        commit_message=f"Export operation-prometheus trajectories (inspected by {attested})",
     )
     print(f"uploaded to https://huggingface.co/datasets/{repo_id}")
 
@@ -268,6 +287,7 @@ def main() -> int:
     ap.add_argument("--upload", action="store_true", help="push datasets/hf/ to the Hub")
     ap.add_argument("--repo-id", help="Hub dataset id, e.g. rmems/operation-prometheus-trajectories")
     ap.add_argument("--private", action="store_true", help="create the Hub repo as private")
+    ap.add_argument("--attested", help="name of whoever ran the pre-publish manual inspection")
     args = ap.parse_args()
     outputs = collect_outputs()
     if args.check:
@@ -276,7 +296,7 @@ def main() -> int:
     if args.upload:
         if not args.repo_id:
             ap.error("--upload requires --repo-id")
-        upload(args.repo_id, args.private)
+        upload(args.repo_id, args.private, args.attested)
     return 0
 
 

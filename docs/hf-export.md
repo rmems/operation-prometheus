@@ -14,13 +14,19 @@ a single Hub-ready dataset under `datasets/hf/`:
 python scripts/export_hf_dataset.py           # regenerate datasets/hf/
 python scripts/export_hf_dataset.py --check   # fail if outputs are stale (CI)
 python scripts/export_hf_dataset.py --upload \
-    --repo-id <user>/<dataset> [--private]    # push to the Hub (needs HF_TOKEN)
+    --repo-id <user>/<dataset> --attested <name> [--private]
 ```
 
-`--upload` requires `huggingface_hub` and `HF_TOKEN` in the environment. It
-creates the dataset repo if needed (`--private` to keep it private) and uploads
-only the three export files — never `datasets/raw/` or other gitignored
-material.
+`--upload` requires `huggingface_hub`, `HF_TOKEN` in the environment, and
+`--attested` naming whoever ran the pre-publish manual inspection (recorded in
+the upload commit message). It creates the dataset repo if needed — but never
+flips an existing repo's visibility; if `--private` disagrees with the Hub it
+exits instead of publishing. Uploads only the three export files — never
+`datasets/raw/` or other gitignored material.
+
+Re-extracts of the same PR across schema versions share a record `id`; the
+export dedupes by `id` (later file wins) and rewrites renamed repos via
+`REPO_ALIASES` so the corpus stays one row per trajectory.
 
 ## Before publishing
 

@@ -71,6 +71,21 @@ def test_committed_outputs_fresh():
     assert (out / ex.RECORDS_NAME).read_bytes() == blob
     assert (out / ex.CARD_NAME).read_bytes() == ex.build_card(records, manifest).encode()
     on_disk = json.loads((out / ex.MANIFEST_NAME).read_text(encoding="utf-8"))
-    on_disk.pop("generated_at")
-    manifest.pop("generated_at")
     assert on_disk == manifest
+
+
+def test_duplicate_record_ids_deduped():
+    """A re-extracted PR across schema versions must not double-count."""
+    import export_hf_dataset as ex
+
+    records = ex.load_records()
+    ids = [r["id"] for r in records]
+    assert len(ids) == len(set(ids))
+
+
+def test_manifest_license_table_scoped_to_records():
+    import export_hf_dataset as ex
+
+    records = ex.load_records()
+    manifest = ex.build_manifest(records, ex.records_jsonl(records))
+    assert set(manifest["repo_licenses"]) == set(manifest["repo_counts"])

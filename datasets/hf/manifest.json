@@ -1,16 +1,15 @@
 {
  "name": "operation-prometheus-trajectories",
- "generated_at": "2026-10-08",
  "generator": "scripts/export_hf_dataset.py",
- "record_count": 97,
- "sha256": "0c130f705223a7550dabf690eb16fbfd9f45e98208263e35858fa36d6156bb9f",
- "bytes": 5292018,
+ "record_count": 96,
+ "sha256": "67090714f80e94824d3821b4449eae893b3bdc09e86c1d379760b9cfb51142b2",
+ "bytes": 5245986,
  "records_file": "trajectories.jsonl",
  "training_use_counts": {
   "bug-prediction": 3,
   "feature": 39,
   "repair": 22,
-  "review-to-patch": 22,
+  "review-to-patch": 21,
   "validation": 11
  },
  "repo_counts": {
@@ -27,7 +26,7 @@
   "rmems/agoge-forger": 4,
   "rmems/corinth-canal": 12,
   "rmems/engram-parser": 1,
-  "rmems/grok-ozempic": 13,
+  "rmems/grok-ozempic": 12,
   "rmems/kinetic-signals": 5,
   "rmems/silicon-hdl": 5,
   "rmems/spike-viz": 3,
@@ -37,7 +36,7 @@
  },
  "language_counts": {
   "Julia": 7,
-  "Python": 15,
+  "Python": 14,
   "Rust": 70,
   "SystemVerilog": 5
  },
