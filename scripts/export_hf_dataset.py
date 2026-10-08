@@ -28,6 +28,7 @@ import argparse
 import hashlib
 import json
 import os
+import re
 import sys
 from pathlib import Path
 from typing import Iterator
@@ -81,12 +82,21 @@ def canonical_repo(repo: str) -> str:
 
 def _canonical_url(url: str) -> str:
     for old, new in REPO_ALIASES.items():
-        url = url.replace(f"github.com/{old}/", f"github.com/{new}/")
+        url = re.sub(
+            rf"github\.com/{re.escape(old)}(?=[/#?]|$)", f"github.com/{new}", url
+        )
     return url
 
 
+def _jsonl_version(path: Path) -> tuple[str, int]:
+    # Order per-repo files by schema version (v0, v1, …) so dedupe keeps the
+    # newest extract; unrelated repos sort by name as before.
+    m = re.search(r"-v(\d+)\.jsonl$", path.name)
+    return (path.name[: m.start()], int(m.group(1))) if m else (path.name, -1)
+
+
 def _iter_records() -> Iterator[tuple[Path, dict]]:
-    for path in sorted(JSONL_DIR.glob("*.jsonl")):
+    for path in sorted(JSONL_DIR.glob("*.jsonl"), key=_jsonl_version):
         for line in path.read_text(encoding="utf-8").splitlines():
             if line.strip():
                 yield path, json.loads(line)
@@ -105,7 +115,7 @@ def load_records() -> list[dict]:
             raise SystemExit(f"{path.name}: no license mapping for {rec['repo']}")
         # The record carries the source repo's license, not the tooling's.
         rec["source_license"] = license_expr
-        by_id[rec["id"]] = rec
+        by_id[rec["id"]] = rec  # last (highest -vN) file wins
     return [by_id[k] for k in sorted(by_id)]
 
 
@@ -280,12 +290,17 @@ def upload(repo_id: str, private: bool, attested: str | None) -> None:
         )
     api = _hf_api()
     _ensure_repo(api, repo_id, private)
-    api.upload_folder(
-        repo_id=repo_id,
-        repo_type="dataset",
-        folder_path=str(OUT_DIR),
-        commit_message=f"Export operation-prometheus trajectories (inspected by {attested})",
-    )
+    message = f"Export operation-prometheus trajectories (inspected by {attested})"
+    # upload_file per known artifact: upload_folder would also ship any stray
+    # file that ever lands in datasets/hf/.
+    for name in (RECORDS_NAME, CARD_NAME, MANIFEST_NAME):
+        api.upload_file(
+            repo_id=repo_id,
+            repo_type="dataset",
+            path_or_fileobj=str(OUT_DIR / name),
+            path_in_repo=name,
+            commit_message=message,
+        )
     print(f"uploaded to https://huggingface.co/datasets/{repo_id}")
 
 
@@ -304,6 +319,8 @@ def main() -> int:
     if args.upload:
         if not args.repo_id:
             ap.error("--upload requires --repo-id")
+        if not args.attested:
+            ap.error("--upload requires --attested")
         upload(args.repo_id, args.private, args.attested)
     return 0
 
