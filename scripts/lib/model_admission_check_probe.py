@@ -15,7 +15,6 @@ from .model_admission_evidence import (
 from .model_admission_rights import normalize_license_id
 
 PROBE_SCHEMA_VERSION = "ollama_probe_v1"
-LONG_LICENSE_TEXT_MIN_LEN = 81
 
 
 @dataclass(frozen=True)
@@ -181,10 +180,6 @@ def _probe_license_text(show: dict[str, Any]) -> str | None:
     return probe_license
 
 
-def _probe_license_is_long_text(probe_license: str) -> bool:
-    return "\n" in probe_license or len(probe_license) >= LONG_LICENSE_TEXT_MIN_LEN
-
-
 def _probe_license_matches_identifier(
     probe_license: str, rights_license: str
 ) -> bool:
@@ -215,8 +210,6 @@ def _license_reasons(
     terms = sha256_or_none(binding.terms_sha256)
     if terms is not None:
         return _license_reasons_with_terms(probe_license, terms)
-    if _probe_license_is_long_text(probe_license):
-        return ["probe_license_conflict"]
     return ["probe_license_conflict"]
 
 
