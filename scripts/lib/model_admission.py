@@ -168,7 +168,7 @@ def evaluate_admission(candidate: Any, *, inputs: AdmissionInputs) -> dict:
 
     if model:
         p_rej, p_quar = probe_reasons(
-            model, candidate, inputs.probe, rights_license
+            model, candidate, inputs.probe, rights_license, terms
         )
         rejected += p_rej
         quarantined += p_quar

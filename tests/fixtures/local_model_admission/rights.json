@@ -2,9 +2,13 @@
   "schema_version": "model_rights_v1",
   "models": {
     "hermes-3-llama-3.1-8b:q4_k_m": {
-      "license": "Apache-2.0",
-      "terms_sha256": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
-      "terms_source": "upstream/LICENSE"
+      "license": "LicenseRef-Llama-3.1-Community",
+      "custom_license": {
+        "identifier": "LicenseRef-Llama-3.1-Community",
+        "text_sha256": "27cb3bd4ec55bccebabdaec1bf9cf631b390235f94b7d887f5058d47538d1945"
+      },
+      "terms_sha256": "27cb3bd4ec55bccebabdaec1bf9cf631b390235f94b7d887f5058d47538d1945",
+      "terms_source": "upstream/META_LLAMA3.1_LICENSE"
     },
     "hermes-3-llama-3.1-70b:q4_k_m": {
       "license": "LicenseRef-Hermes-Community",

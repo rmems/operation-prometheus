@@ -78,7 +78,10 @@ python scripts/verify_local_model_admission.py \
 disabled and all redirects refused. It performs no model pulls, no GPU work,
 and no network access beyond the loopback daemon. Live responses are parsed
 with the same strict parser as frozen inputs (duplicate keys, non-finite
-numbers such as `1e999`, and non-finite constants rejected).
+numbers such as `1e999`, and non-finite constants rejected). When `/api/show`
+returns full license text, probe binding compares the SHA-256 of that exact
+string to the frozen `terms_sha256` from rights evidence; a probe that still
+returns a bare SPDX or `LicenseRef-*` identifier continues to match directly.
 
 ## Reason codes
 

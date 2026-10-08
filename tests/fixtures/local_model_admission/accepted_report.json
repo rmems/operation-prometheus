@@ -1,47 +1,47 @@
 {
-  "cloud_fallback_allowed": false,
+  "schema_version": "local_model_admission_v1",
   "decision": "accepted",
-  "evidence_digest": "b1256bfbe42e665924bceafac4fd0fac05d41794ebe917e05f887546e22dc8c1",
-  "fallback_evidence": {
-    "cloud_fallback_allowed": false,
-    "no_cloud": true,
-    "remote_endpoints": [],
-    "unsanitized_keys": []
-  },
-  "input_digests": {
-    "admissions": "b81c1c90dedb6ee44b9df60deaae0261bfec3f547a5c4685fcd884938972591e",
-    "probe": "1284667559feff063a8260d8402440b13c0eb6e35a3c3172c2f1b0381995727a",
-    "rights": "8cebf8b4e3d3ea6dc519ac7088263150589517003db4f02a3843725f76ed64e0"
-  },
+  "reasons": [],
   "model": {
     "name": "hermes-3-llama-3.1-8b",
+    "tag": "q4_k_m",
     "ollama_digest": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
     "quantization": "Q4_K_M",
-    "tag": "q4_k_m",
     "upstream_revision": null
   },
-  "probe": {
-    "endpoint": "http://127.0.0.1:11434",
-    "timestamp": "2026-09-21T12:00:00Z"
+  "runtime": {
+    "name": "ollama",
+    "version": "0.5.4",
+    "endpoint": "http://127.0.0.1:11434"
+  },
+  "rights": {
+    "identifier": "LicenseRef-Llama-3.1-Community",
+    "terms_source": "upstream/META_LLAMA3.1_LICENSE",
+    "terms_sha256": "27cb3bd4ec55bccebabdaec1bf9cf631b390235f94b7d887f5058d47538d1945"
   },
   "provider": {
+    "name": "hermes-agent",
     "config": {
-      "cloud_fallback_allowed": false,
       "no_cloud": true,
-      "num_ctx": 8192
-    },
-    "name": "hermes-agent"
+      "num_ctx": 8192,
+      "cloud_fallback_allowed": false
+    }
   },
-  "reasons": [],
-  "rights": {
-    "identifier": "Apache-2.0",
-    "terms_sha256": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
-    "terms_source": "upstream/LICENSE"
+  "cloud_fallback_allowed": false,
+  "fallback_evidence": {
+    "no_cloud": true,
+    "cloud_fallback_allowed": false,
+    "unsanitized_keys": [],
+    "remote_endpoints": []
   },
-  "runtime": {
-    "endpoint": "http://127.0.0.1:11434",
-    "name": "ollama",
-    "version": "0.5.4"
+  "probe": {
+    "timestamp": "2026-09-21T12:00:00Z",
+    "endpoint": "http://127.0.0.1:11434"
   },
-  "schema_version": "local_model_admission_v1"
+  "input_digests": {
+    "admissions": "6f7a3d9f2cf09522abf3651de239b2051322c494c4fc24565600ff81b04dc351",
+    "probe": "7463940c10617705ef6720ec42a93cd84b04d9f423d9306d424f5eaa8eb92232",
+    "rights": "4dee6ae721b51d59c9d1aacabee6b8712ec0859162ecbd664c4f75ec4237c5cd"
+  },
+  "evidence_digest": "2ce5109eeefe9a02ba1b10e4719866274a95857b90c0e2529064476e6d00ef34"
 }

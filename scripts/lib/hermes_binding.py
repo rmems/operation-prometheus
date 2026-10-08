@@ -178,10 +178,10 @@ def _rights_errors(manifest: dict[str, Any], rights: Any, digests: Any) -> list[
         return ["admission_schema"]
     if rights.get("identifier") != manifest.get("output_license"):
         return ["rights_mismatch"]
-    if not isinstance(digests, dict) or rights.get("terms_sha256") != digests.get(
-        "rights"
-    ):
+    if not _is_sha256(rights.get("terms_sha256")):
         return ["rights_mismatch"]
+    if not isinstance(digests, dict) or not _is_sha256(digests.get("rights")):
+        return ["admission_schema"]
     return []
 
 

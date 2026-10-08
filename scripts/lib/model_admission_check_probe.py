@@ -8,6 +8,8 @@ from .model_admission_evidence import (
     canonical_loopback_endpoint,
     ollama_digest_or_none,
     parse_rfc3339_tz,
+    sha256_bytes,
+    sha256_or_none,
 )
 from .model_admission_rights import normalize_license_id
 
@@ -163,16 +165,28 @@ def _quantization_reasons(
 
 
 def _license_reasons(
-    rights_license: str | None, show: dict[str, Any]
+    rights_license: str | None,
+    terms_sha256: str | None,
+    show: dict[str, Any],
 ) -> list[str]:
     probe_license = show.get("license")
-    if _text(probe_license) is None:
+    if not isinstance(probe_license, str) or not probe_license.strip():
         return []
-    if rights_license is None or normalize_license_id(
-        probe_license
-    ) != rights_license:
+    if rights_license is None:
         return ["probe_license_conflict"]
-    return []
+    probe_id = normalize_license_id(probe_license.strip())
+    if probe_id == rights_license:
+        return []
+    terms = sha256_or_none(terms_sha256)
+    if terms is not None:
+        if sha256_bytes(probe_license.encode("utf-8")) == terms:
+            return []
+        return ["probe_license_conflict"]
+    if probe_id == rights_license or probe_license.strip() == rights_license:
+        return []
+    if "\n" in probe_license or len(probe_license) > 80:
+        return []
+    return ["probe_license_conflict"]
 
 
 def _show_reasons(
@@ -180,13 +194,14 @@ def _show_reasons(
     candidate: dict[str, Any],
     probe: dict[str, Any],
     rights_license: str | None,
+    terms_sha256: str | None,
 ) -> tuple[list[str], list[str]]:
     """Cross-check `/api/show` details against the candidate/rights row."""
     show = _show_entry(probe, model)
     if show is None:
         return [], ["probe_evidence_missing"]
     rejected, quarantined = _quantization_reasons(candidate, show)
-    rejected += _license_reasons(rights_license, show)
+    rejected += _license_reasons(rights_license, terms_sha256, show)
     return rejected, quarantined
 
 
@@ -195,6 +210,7 @@ def probe_reasons(
     candidate: dict[str, Any],
     probe: dict[str, Any] | None,
     rights_license: str | None,
+    terms_sha256: str | None = None,
 ) -> tuple[list[str], list[str]]:
     if not isinstance(probe, dict):
         return [], ["probe_evidence_missing"]
@@ -207,7 +223,9 @@ def probe_reasons(
     rej, quar = _identity_reasons(model, probe, candidate)
     rejected += rej
     quarantined += quar
-    rej, quar = _show_reasons(model, candidate, probe, rights_license)
+    rej, quar = _show_reasons(
+        model, candidate, probe, rights_license, terms_sha256
+    )
     rejected += rej
     quarantined += quar
     return rejected, quarantined

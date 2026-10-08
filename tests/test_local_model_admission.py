@@ -13,7 +13,13 @@ from lib.model_admission import (
 
 MODEL = "hermes-3-llama-3.1-8b:q4_k_m"
 DIGEST = "sha256:" + "a" * 64
-TERMS = "b" * 64
+LLAMA31_PROBE_LICENSE = (
+    "Llama 3.1 Community License Agreement (fixture excerpt)\n\n"
+    "Use of Llama 3.1 materials is governed by Meta's Llama 3.1 Community License,\n"
+    "not Apache-2.0. This file stores a truncated synthetic excerpt for offline tests.\n"
+)
+LLAMA31_LICENSE = "LicenseRef-Llama-3.1-Community"
+TERMS = "27cb3bd4ec55bccebabdaec1bf9cf631b390235f94b7d887f5058d47538d1945"
 
 
 def _candidate(**overrides):
@@ -23,7 +29,7 @@ def _candidate(**overrides):
         "quantization": "Q4_K_M",
         "runtime": "ollama",
         "endpoint": "http://127.0.0.1:11434",
-        "license": "Apache-2.0",
+        "license": LLAMA31_LICENSE,
         "provider_config": {"no_cloud": True, "cloud_fallback_allowed": False, "num_ctx": 8192},
         "probed_at": "2026-09-21T12:00:00Z",
     }
@@ -35,7 +41,15 @@ def _rights(**overrides):
     rights = {
         "schema_version": "model_rights_v1",
         "models": {
-            MODEL: {"license": "Apache-2.0", "terms_sha256": TERMS, "terms_source": "upstream/LICENSE"},
+            MODEL: {
+                "license": LLAMA31_LICENSE,
+                "custom_license": {
+                    "identifier": LLAMA31_LICENSE,
+                    "text_sha256": TERMS,
+                },
+                "terms_sha256": TERMS,
+                "terms_source": "upstream/META_LLAMA3.1_LICENSE",
+            },
         },
     }
     rights.update(overrides)
@@ -50,7 +64,12 @@ def _probe(**overrides):
         "endpoint": "http://127.0.0.1:11434",
         "probed_at": "2026-09-21T12:00:00Z",
         "models": [{"name": MODEL, "digest": DIGEST}],
-        "show": {MODEL: {"details": {"quantization_level": "Q4_K_M"}}},
+        "show": {
+            MODEL: {
+                "details": {"quantization_level": "Q4_K_M"},
+                "license": LLAMA31_PROBE_LICENSE,
+            }
+        },
     }
     probe.update(overrides)
     return probe
@@ -76,7 +95,7 @@ def test_clean_candidate_is_accepted():
     row = _evaluate()
     assert row["disposition"] == "accepted"
     assert row["reason_codes"] == []
-    assert row["license_family"] == "spdx"
+    assert row["license_family"] == "custom"
     assert len(row["report"]["evidence_digest"]) == 64
 
 
@@ -101,7 +120,10 @@ def test_missing_rights_row_quarantines():
 def test_unknown_license_quarantines_without_guessing():
     rights = _rights()
     rights["models"][MODEL]["license"] = "NOASSERTION"
-    row = _evaluate(_candidate(license="NOASSERTION"), rights=rights)
+    del rights["models"][MODEL]["custom_license"]
+    probe = _probe()
+    probe["show"][MODEL]["license"] = "NOASSERTION"
+    row = _evaluate(_candidate(license="NOASSERTION"), rights=rights, probe=probe)
     assert row["disposition"] == "quarantined"
     assert "license_unknown" in row["reason_codes"]
     assert row["license_family"] == "unknown"
@@ -110,7 +132,10 @@ def test_unknown_license_quarantines_without_guessing():
 def test_missing_license_quarantines():
     rights = _rights()
     del rights["models"][MODEL]["license"]
-    row = _evaluate(rights=rights)
+    del rights["models"][MODEL]["custom_license"]
+    probe = _probe()
+    del probe["show"][MODEL]["license"]
+    row = _evaluate(rights=rights, probe=probe)
     assert row["disposition"] == "quarantined"
     assert "license_missing" in row["reason_codes"]
 
@@ -208,7 +233,7 @@ def test_report_shape_and_counts():
         "rejected": 0,
     }
     assert report["closed"] is False
-    assert "spdx" in report["license_families"]
+    assert "custom" in report["license_families"]
     assert report["input_digests"] == {"admissions": "e" * 64}
 
 
