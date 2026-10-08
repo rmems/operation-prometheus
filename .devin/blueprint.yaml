@@ -1,0 +1,23 @@
+# https://docs.devin.ai/onboard-devin/environment-yaml
+# Commands run from the repo root.
+maintenance: |
+  # Local venv: runtime deps + lint/test tools (ruff pinned to CI version).
+  python3 -m venv .venv
+  .venv/bin/pip install -q -r requirements.txt 'ruff==0.11.12' pytest
+knowledge:
+  - name: lint
+    contents: |
+      .venv/bin/ruff check scripts/
+  - name: test
+    contents: |
+      .venv/bin/pytest -q
+  - name: validate
+    contents: |
+      .venv/bin/python scripts/validate_jsonl.py --strict-policy datasets/jsonl/*.jsonl
+  - name: notes
+    contents: |
+      Data pipeline, no runnable app. AGENTS.md gates: ruff (CI pins 0.11.12 —
+      newer ruff reports ~107 extra findings), pytest, strict-policy JSONL
+      validation. STATUS.md and docs/source-repos/_index.md are generated;
+      never edit. Extract PRs must not touch shared files (shared-files-guard CI).
+      datasets/raw/ is gitignored; PROMETHEUS_DATA_ROOT can point elsewhere.
