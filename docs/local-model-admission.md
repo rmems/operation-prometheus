@@ -82,6 +82,8 @@ numbers such as `1e999`, and non-finite constants rejected). When `/api/show`
 returns full license text, probe binding compares the SHA-256 of that exact
 string to the frozen `terms_sha256` from rights evidence; a probe that still
 returns a bare SPDX or `LicenseRef-*` identifier continues to match directly.
+Long or multi-line license text without a valid frozen `terms_sha256` to verify
+against is rejected (`probe_license_conflict`), not deferred.
 
 ## Reason codes
 

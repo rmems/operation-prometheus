@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from dataclasses import dataclass
 from typing import Any
 
 from .model_admission_evidence import (
@@ -14,6 +15,15 @@ from .model_admission_evidence import (
 from .model_admission_rights import normalize_license_id
 
 PROBE_SCHEMA_VERSION = "ollama_probe_v1"
+LONG_LICENSE_TEXT_MIN_LEN = 81
+
+
+@dataclass(frozen=True)
+class RightsProbeBinding:
+    """Rights fields used when cross-checking probe ``/api/show`` license evidence."""
+
+    identifier: str | None
+    terms_sha256: str | None
 
 
 def _text(value: Any) -> str | None:
@@ -164,28 +174,49 @@ def _quantization_reasons(
     return [], []
 
 
-def _license_reasons(
-    rights_license: str | None,
-    terms_sha256: str | None,
-    show: dict[str, Any],
-) -> list[str]:
+def _probe_license_text(show: dict[str, Any]) -> str | None:
     probe_license = show.get("license")
     if not isinstance(probe_license, str) or not probe_license.strip():
+        return None
+    return probe_license
+
+
+def _probe_license_is_long_text(probe_license: str) -> bool:
+    return "\n" in probe_license or len(probe_license) >= LONG_LICENSE_TEXT_MIN_LEN
+
+
+def _probe_license_matches_identifier(
+    probe_license: str, rights_license: str
+) -> bool:
+    return normalize_license_id(probe_license.strip()) == rights_license
+
+
+def _probe_license_matches_terms_digest(probe_license: str, terms: str) -> bool:
+    return sha256_bytes(probe_license.encode("utf-8")) == terms
+
+
+def _license_reasons_with_terms(probe_license: str, terms: str) -> list[str]:
+    if _probe_license_matches_terms_digest(probe_license, terms):
         return []
+    return ["probe_license_conflict"]
+
+
+def _license_reasons(
+    binding: RightsProbeBinding, show: dict[str, Any]
+) -> list[str]:
+    probe_license = _probe_license_text(show)
+    if probe_license is None:
+        return []
+    rights_license = binding.identifier
     if rights_license is None:
         return ["probe_license_conflict"]
-    probe_id = normalize_license_id(probe_license.strip())
-    if probe_id == rights_license:
+    if _probe_license_matches_identifier(probe_license, rights_license):
         return []
-    terms = sha256_or_none(terms_sha256)
+    terms = sha256_or_none(binding.terms_sha256)
     if terms is not None:
-        if sha256_bytes(probe_license.encode("utf-8")) == terms:
-            return []
+        return _license_reasons_with_terms(probe_license, terms)
+    if _probe_license_is_long_text(probe_license):
         return ["probe_license_conflict"]
-    if probe_id == rights_license or probe_license.strip() == rights_license:
-        return []
-    if "\n" in probe_license or len(probe_license) > 80:
-        return []
     return ["probe_license_conflict"]
 
 
@@ -193,15 +224,14 @@ def _show_reasons(
     model: str,
     candidate: dict[str, Any],
     probe: dict[str, Any],
-    rights_license: str | None,
-    terms_sha256: str | None,
+    binding: RightsProbeBinding,
 ) -> tuple[list[str], list[str]]:
     """Cross-check `/api/show` details against the candidate/rights row."""
     show = _show_entry(probe, model)
     if show is None:
         return [], ["probe_evidence_missing"]
     rejected, quarantined = _quantization_reasons(candidate, show)
-    rejected += _license_reasons(rights_license, terms_sha256, show)
+    rejected += _license_reasons(binding, show)
     return rejected, quarantined
 
 
@@ -209,8 +239,7 @@ def probe_reasons(
     model: str,
     candidate: dict[str, Any],
     probe: dict[str, Any] | None,
-    rights_license: str | None,
-    terms_sha256: str | None = None,
+    binding: RightsProbeBinding,
 ) -> tuple[list[str], list[str]]:
     if not isinstance(probe, dict):
         return [], ["probe_evidence_missing"]
@@ -223,9 +252,7 @@ def probe_reasons(
     rej, quar = _identity_reasons(model, probe, candidate)
     rejected += rej
     quarantined += quar
-    rej, quar = _show_reasons(
-        model, candidate, probe, rights_license, terms_sha256
-    )
+    rej, quar = _show_reasons(model, candidate, probe, binding)
     rejected += rej
     quarantined += quar
     return rejected, quarantined

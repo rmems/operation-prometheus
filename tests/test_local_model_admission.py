@@ -112,7 +112,12 @@ def test_evidence_digest_changes_with_any_bound_field():
 
 
 def test_missing_rights_row_quarantines():
-    row = _evaluate(rights={"schema_version": "model_rights_v1", "models": {}})
+    probe = _probe()
+    del probe["show"][MODEL]["license"]
+    row = _evaluate(
+        rights={"schema_version": "model_rights_v1", "models": {}},
+        probe=probe,
+    )
     assert row["disposition"] == "quarantined"
     assert "rights_evidence_missing" in row["reason_codes"]
 

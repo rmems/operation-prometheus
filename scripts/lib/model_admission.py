@@ -20,7 +20,7 @@ from .model_admission_check_fields import (
     runtime_reasons,
     unsanitized_field_reasons,
 )
-from .model_admission_check_probe import probe_reasons
+from .model_admission_check_probe import RightsProbeBinding, probe_reasons
 from .model_admission_check_rights import rights_reasons
 from .model_admission_evidence import (
     canonical_loopback_endpoint,
@@ -168,7 +168,10 @@ def evaluate_admission(candidate: Any, *, inputs: AdmissionInputs) -> dict:
 
     if model:
         p_rej, p_quar = probe_reasons(
-            model, candidate, inputs.probe, rights_license, terms
+            model,
+            candidate,
+            inputs.probe,
+            RightsProbeBinding(identifier=rights_license, terms_sha256=terms),
         )
         rejected += p_rej
         quarantined += p_quar

@@ -254,6 +254,16 @@ def test_probe_show_license_text_digest_mismatch_rejected():
     assert "probe_license_conflict" in row["reason_codes"]
 
 
+def test_probe_long_license_text_without_terms_digest_rejected():
+    rights = _rights()
+    del rights["models"][MODEL]["terms_sha256"]
+    del rights["models"][MODEL]["custom_license"]
+    row = _evaluate(rights=rights)
+    assert row["disposition"] == "rejected"
+    assert "probe_license_conflict" in row["reason_codes"]
+    assert "terms_digest_missing" in row["reason_codes"]
+
+
 def test_missing_probe_timestamp_quarantines():
     probe = _probe()
     del probe["probed_at"]
