@@ -291,16 +291,19 @@ def upload(repo_id: str, private: bool, attested: str | None) -> None:
     api = _hf_api()
     _ensure_repo(api, repo_id, private)
     message = f"Export operation-prometheus trajectories (inspected by {attested})"
-    # upload_file per known artifact: upload_folder would also ship any stray
-    # file that ever lands in datasets/hf/.
-    for name in (RECORDS_NAME, CARD_NAME, MANIFEST_NAME):
-        api.upload_file(
-            repo_id=repo_id,
-            repo_type="dataset",
-            path_or_fileobj=str(OUT_DIR / name),
-            path_in_repo=name,
-            commit_message=message,
-        )
+    # one create_commit for all artifacts: atomic (no half-published export)
+    # and scoped to the known files, unlike upload_folder.
+    from huggingface_hub import CommitOperationAdd
+
+    api.create_commit(
+        repo_id=repo_id,
+        repo_type="dataset",
+        commit_message=message,
+        operations=[
+            CommitOperationAdd(path_in_repo=name, path_or_fileobj=str(OUT_DIR / name))
+            for name in (RECORDS_NAME, CARD_NAME, MANIFEST_NAME)
+        ],
+    )
     print(f"uploaded to https://huggingface.co/datasets/{repo_id}")
 
 
