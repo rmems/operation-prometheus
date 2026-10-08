@@ -187,7 +187,11 @@ def _probe_license_matches_identifier(
 
 
 def _probe_license_matches_terms_digest(probe_license: str, terms: str) -> bool:
-    return sha256_bytes(probe_license.encode("utf-8")) == terms
+    try:
+        digest = sha256_bytes(probe_license.encode("utf-8"))
+    except UnicodeEncodeError:
+        return False
+    return digest == terms
 
 
 def _license_reasons_with_terms(probe_license: str, terms: str) -> list[str]:

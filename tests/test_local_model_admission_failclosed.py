@@ -14,6 +14,7 @@ from lib.model_admission import (
     build_admission_report,
     evaluate_admission,
 )
+from lib.model_admission_evidence import render_report
 
 MODEL = "hermes-3-llama-3.1-8b:q4_k_m"
 DIGEST = "sha256:" + "a" * 64
@@ -264,6 +265,14 @@ def test_probe_long_license_text_without_terms_digest_rejected():
     assert "terms_digest_missing" in row["reason_codes"]
 
 
+def test_probe_license_lone_surrogate_fail_closed():
+    probe = _probe()
+    probe["show"][MODEL]["license"] = "bad\uD800license"
+    row = _evaluate(probe=probe)
+    assert row["disposition"] == "rejected"
+    assert "probe_license_conflict" in row["reason_codes"]
+
+
 def test_missing_probe_timestamp_quarantines():
     probe = _probe()
     del probe["probed_at"]
@@ -360,6 +369,12 @@ def test_accepted_report_fixture_matches_locked_schema():
     assert report["model"]["tag"] == "q4_k_m"
     assert report["cloud_fallback_allowed"] is False
     assert report["fallback_evidence"]["cloud_fallback_allowed"] is False
+
+
+def test_accepted_report_fixture_matches_render_report_bytes():
+    raw = (FIXTURE_DIR / "accepted_report.json").read_bytes()
+    decision = json.loads(raw.decode("utf-8"))
+    assert raw == render_report(decision)
 
 
 def test_schema_rejects_forged_accepted_with_nulls():
