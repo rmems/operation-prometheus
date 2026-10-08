@@ -173,15 +173,13 @@ def _model_valid(model: Any) -> bool:
     )
 
 
-def _rights_errors(manifest: dict[str, Any], rights: Any, digests: Any) -> list[str]:
+def _rights_errors(manifest: dict[str, Any], rights: Any, _digests: Any) -> list[str]:
     if not _object_fields(rights, ("identifier", "terms_source", "terms_sha256")):
         return ["admission_schema"]
     if rights.get("identifier") != manifest.get("output_license"):
         return ["rights_mismatch"]
-    if not isinstance(digests, dict) or rights.get("terms_sha256") != digests.get(
-        "rights"
-    ):
-        return ["rights_mismatch"]
+    if not _is_sha256(rights.get("terms_sha256")):
+        return ["admission_schema"]
     return []
 
 

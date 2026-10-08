@@ -10,10 +10,15 @@ from lib.model_admission import (
     build_admission_report,
     evaluate_admission,
 )
+from local_model_admission_fixtures import (
+    LLAMA31_LICENSE_ID,
+    LLAMA31_PROBE_LICENSE,
+    LLAMA31_TERMS_SHA256,
+)
 
 MODEL = "hermes-3-llama-3.1-8b:q4_k_m"
 DIGEST = "sha256:" + "a" * 64
-TERMS = "b" * 64
+TERMS = LLAMA31_TERMS_SHA256
 
 
 def _candidate(**overrides):
@@ -23,7 +28,7 @@ def _candidate(**overrides):
         "quantization": "Q4_K_M",
         "runtime": "ollama",
         "endpoint": "http://127.0.0.1:11434",
-        "license": "Apache-2.0",
+        "license": LLAMA31_LICENSE_ID,
         "provider_config": {"no_cloud": True, "cloud_fallback_allowed": False, "num_ctx": 8192},
         "probed_at": "2026-09-21T12:00:00Z",
     }
@@ -35,7 +40,15 @@ def _rights(**overrides):
     rights = {
         "schema_version": "model_rights_v1",
         "models": {
-            MODEL: {"license": "Apache-2.0", "terms_sha256": TERMS, "terms_source": "upstream/LICENSE"},
+            MODEL: {
+                "license": LLAMA31_LICENSE_ID,
+                "custom_license": {
+                    "identifier": LLAMA31_LICENSE_ID,
+                    "text_sha256": TERMS,
+                },
+                "terms_sha256": TERMS,
+                "terms_source": "upstream/LICENSE",
+            },
         },
     }
     rights.update(overrides)
@@ -50,7 +63,12 @@ def _probe(**overrides):
         "endpoint": "http://127.0.0.1:11434",
         "probed_at": "2026-09-21T12:00:00Z",
         "models": [{"name": MODEL, "digest": DIGEST}],
-        "show": {MODEL: {"details": {"quantization_level": "Q4_K_M"}}},
+        "show": {
+            MODEL: {
+                "details": {"quantization_level": "Q4_K_M"},
+                "license": LLAMA31_PROBE_LICENSE,
+            }
+        },
     }
     probe.update(overrides)
     return probe
@@ -76,7 +94,7 @@ def test_clean_candidate_is_accepted():
     row = _evaluate()
     assert row["disposition"] == "accepted"
     assert row["reason_codes"] == []
-    assert row["license_family"] == "spdx"
+    assert row["license_family"] == "custom"
     assert len(row["report"]["evidence_digest"]) == 64
 
 
@@ -101,6 +119,7 @@ def test_missing_rights_row_quarantines():
 def test_unknown_license_quarantines_without_guessing():
     rights = _rights()
     rights["models"][MODEL]["license"] = "NOASSERTION"
+    del rights["models"][MODEL]["custom_license"]
     row = _evaluate(_candidate(license="NOASSERTION"), rights=rights)
     assert row["disposition"] == "quarantined"
     assert "license_unknown" in row["reason_codes"]
@@ -110,7 +129,8 @@ def test_unknown_license_quarantines_without_guessing():
 def test_missing_license_quarantines():
     rights = _rights()
     del rights["models"][MODEL]["license"]
-    row = _evaluate(rights=rights)
+    del rights["models"][MODEL]["custom_license"]
+    row = _evaluate(_candidate(license=None), rights=rights)
     assert row["disposition"] == "quarantined"
     assert "license_missing" in row["reason_codes"]
 
@@ -119,6 +139,26 @@ def test_conflicting_rights_rejected():
     row = _evaluate(_candidate(license="MIT"))
     assert row["disposition"] == "rejected"
     assert "rights_conflict" in row["reason_codes"]
+
+
+def test_probe_full_license_text_matches_frozen_terms_digest():
+    row = _evaluate()
+    assert row["disposition"] == "accepted"
+
+
+def test_probe_short_license_identifier_still_accepted():
+    probe = _probe()
+    probe["show"][MODEL]["license"] = LLAMA31_LICENSE_ID
+    row = _evaluate(probe=probe)
+    assert row["disposition"] == "accepted"
+
+
+def test_probe_license_text_hash_mismatch_rejected():
+    probe = _probe()
+    probe["show"][MODEL]["license"] = LLAMA31_PROBE_LICENSE + "tampered\n"
+    row = _evaluate(probe=probe)
+    assert row["disposition"] == "rejected"
+    assert "probe_license_conflict" in row["reason_codes"]
 
 
 def test_custom_license_ref_needs_matching_terms_digest():
@@ -208,7 +248,7 @@ def test_report_shape_and_counts():
         "rejected": 0,
     }
     assert report["closed"] is False
-    assert "spdx" in report["license_families"]
+    assert "custom" in report["license_families"]
     assert report["input_digests"] == {"admissions": "e" * 64}
 
 

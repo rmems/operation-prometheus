@@ -40,7 +40,7 @@
   "input_digests": {
     "admissions": "dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd",
     "probe": "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
-    "rights": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+    "rights": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"
   },
-  "evidence_digest": "bccb5d7df3ecb8bdc107f4832509f4a1b9a84195c9ebe94cd30ddd417d2abc6d"
+  "evidence_digest": "a38353c9b8e987b9837dae69bf6219737c392aa52283bef877e91778817e2353"
 }

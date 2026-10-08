@@ -1,7 +1,7 @@
 {
   "cloud_fallback_allowed": false,
   "decision": "accepted",
-  "evidence_digest": "b1256bfbe42e665924bceafac4fd0fac05d41794ebe917e05f887546e22dc8c1",
+  "evidence_digest": "4ce7e302f6cedd22a95d288882a54cef1084043ad4b186ec14a8421762a267aa",
   "fallback_evidence": {
     "cloud_fallback_allowed": false,
     "no_cloud": true,
@@ -9,9 +9,9 @@
     "unsanitized_keys": []
   },
   "input_digests": {
-    "admissions": "b81c1c90dedb6ee44b9df60deaae0261bfec3f547a5c4685fcd884938972591e",
-    "probe": "1284667559feff063a8260d8402440b13c0eb6e35a3c3172c2f1b0381995727a",
-    "rights": "8cebf8b4e3d3ea6dc519ac7088263150589517003db4f02a3843725f76ed64e0"
+    "admissions": "e9ac76c2cf6a355ede31cd67b927fbf44a4370ff18d56962fc0f4b046ace0639",
+    "probe": "1f7621c727a57f70bf7c331e1bd750d1ab0db3d7fcaf81ecdb7396f352307c39",
+    "rights": "3da5b62e92ef7c2847cf675502c06a74a049affb9ee09b3456654ffb770eaf6c"
   },
   "model": {
     "name": "hermes-3-llama-3.1-8b",
@@ -34,8 +34,8 @@
   },
   "reasons": [],
   "rights": {
-    "identifier": "Apache-2.0",
-    "terms_sha256": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+    "identifier": "LicenseRef-Llama-3.1",
+    "terms_sha256": "a5e6aed84d3966675579fe1e508540d06f5ed4d10b88062e9b05ca75d39fc484",
     "terms_source": "upstream/LICENSE"
   },
   "runtime": {
