@@ -23,7 +23,7 @@ offline) with the CI pins `ruff==0.11.12`, `pytest==8.4.1`, `jsonschema[format]=
 | `python scripts/verify_local_model_admission.py ...` | not run (needs admission and rights evidence files; fail-closed) |
 | `python scripts/collect_pr_records.py`, `collect_source_inventory.py`, `list_merged_prs.py` | not run (call the live GitHub API; deliberately not run here) |
 
-Run `ruff check scripts/` and `pytest -q` before committing; CI fails on either.
+Run the required validation commands from `AGENTS.md` before committing; CI fails on `ruff` or `pytest` errors.
 
 ## Architecture map
 
