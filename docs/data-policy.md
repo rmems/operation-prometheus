@@ -46,6 +46,14 @@ collector are ignored without retaining their names or metadata. See
 [eligibility-ledger.md](eligibility-ledger.md) for the pagination,
 conservation, and read-only guarantees.
 
+## Trainable Hermes exports
+
+Local Hermes runs become trainable rows only after an accepted local-model
+admission and independent verification. The observable-action export keeps
+user, assistant, and tool messages. It excludes hidden reasoning, secrets,
+credentials, local paths, private URIs, and cloud fallback. Hermes
+`completed` is execution metadata, not a successful outcome.
+
 ## Manual Inspection Requirement
 
 Before any generated dataset is published or used for training:

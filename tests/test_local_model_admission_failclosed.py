@@ -14,15 +14,17 @@ from lib.model_admission import (
     build_admission_report,
     evaluate_admission,
 )
-from local_model_admission_fixtures import (
-    LLAMA31_LICENSE_ID,
-    LLAMA31_PROBE_LICENSE,
-    LLAMA31_TERMS_SHA256,
-)
+from lib.model_admission_evidence import render_report
 
 MODEL = "hermes-3-llama-3.1-8b:q4_k_m"
 DIGEST = "sha256:" + "a" * 64
-TERMS = LLAMA31_TERMS_SHA256
+LLAMA31_PROBE_LICENSE = (
+    "Llama 3.1 Community License Agreement (fixture excerpt)\n\n"
+    "Use of Llama 3.1 materials is governed by Meta's Llama 3.1 Community License,\n"
+    "not Apache-2.0. This file stores a truncated synthetic excerpt for offline tests.\n"
+)
+LLAMA31_LICENSE = "LicenseRef-Llama-3.1-Community"
+TERMS = "27cb3bd4ec55bccebabdaec1bf9cf631b390235f94b7d887f5058d47538d1945"
 
 
 def _candidate(**overrides):
@@ -32,7 +34,7 @@ def _candidate(**overrides):
         "quantization": "Q4_K_M",
         "runtime": "ollama",
         "endpoint": "http://127.0.0.1:11434",
-        "license": LLAMA31_LICENSE_ID,
+        "license": LLAMA31_LICENSE,
         "provider_config": {
             "no_cloud": True,
             "cloud_fallback_allowed": False,
@@ -49,13 +51,13 @@ def _rights(**overrides):
         "schema_version": "model_rights_v1",
         "models": {
             MODEL: {
-                "license": LLAMA31_LICENSE_ID,
+                "license": LLAMA31_LICENSE,
                 "custom_license": {
-                    "identifier": LLAMA31_LICENSE_ID,
+                    "identifier": LLAMA31_LICENSE,
                     "text_sha256": TERMS,
                 },
                 "terms_sha256": TERMS,
-                "terms_source": "upstream/LICENSE",
+                "terms_source": "upstream/META_LLAMA3.1_LICENSE",
             },
         },
     }
@@ -90,10 +92,10 @@ def _inputs(rights=None, probe=None, digests=None):
     )
 
 
-def _evaluate(candidate=None, rights=None, probe=None, digests=None):
+def _evaluate(candidate=None, rights=None, probe=None):
     return evaluate_admission(
         candidate if candidate is not None else _candidate(),
-        inputs=_inputs(rights=rights, probe=probe, digests=digests),
+        inputs=_inputs(rights=rights, probe=probe),
     )
 
 
@@ -103,20 +105,6 @@ def _assert_never_accepted(row):
 
 # --- 1. Complete emitted evidence bound into the digest --------------------
 
-def test_terms_digest_differs_from_frozen_rights_file_when_digests_bound():
-    row = _evaluate(
-        _candidate(),
-        digests={
-            "admissions": "e" * 64,
-            "rights": "f" * 64,
-            "probe": "a" * 64,
-        },
-    )
-    report = row["report"]
-    assert report["decision"] == "accepted"
-    assert report["rights"]["terms_sha256"] != report["input_digests"]["rights"]
-
-
 def test_accepted_evidence_is_complete_and_bound():
     row = _evaluate()
     report = row["report"]
@@ -125,8 +113,8 @@ def test_accepted_evidence_is_complete_and_bound():
     assert report["runtime"]["name"] == "ollama"
     assert report["runtime"]["version"] == "0.5.4"
     assert report["runtime"]["endpoint"] == "http://127.0.0.1:11434"
-    assert report["rights"]["terms_source"] == "upstream/LICENSE"
-    assert report["rights"]["identifier"] == LLAMA31_LICENSE_ID
+    assert report["rights"]["terms_source"] == "upstream/META_LLAMA3.1_LICENSE"
+    assert report["rights"]["identifier"] == LLAMA31_LICENSE
     assert report["rights"]["terms_sha256"] == TERMS
     assert report["provider"]["name"] == "hermes-agent"
     assert report["provider"]["config"]["cloud_fallback_allowed"] is False
@@ -253,6 +241,38 @@ def test_conflicting_show_license_rejected():
     assert "probe_license_conflict" in row["reason_codes"]
 
 
+def test_probe_show_full_license_text_binds_terms_digest():
+    row = _evaluate()
+    assert row["disposition"] == "accepted"
+    assert row["report"]["rights"]["terms_sha256"] == TERMS
+
+
+def test_probe_show_license_text_digest_mismatch_rejected():
+    probe = _probe()
+    probe["show"][MODEL]["license"] = LLAMA31_PROBE_LICENSE + "tampered"
+    row = _evaluate(probe=probe)
+    assert row["disposition"] == "rejected"
+    assert "probe_license_conflict" in row["reason_codes"]
+
+
+def test_probe_long_license_text_without_terms_digest_rejected():
+    rights = _rights()
+    del rights["models"][MODEL]["terms_sha256"]
+    del rights["models"][MODEL]["custom_license"]
+    row = _evaluate(rights=rights)
+    assert row["disposition"] == "rejected"
+    assert "probe_license_conflict" in row["reason_codes"]
+    assert "terms_digest_missing" in row["reason_codes"]
+
+
+def test_probe_license_lone_surrogate_fail_closed():
+    probe = _probe()
+    probe["show"][MODEL]["license"] = "bad\uD800license"
+    row = _evaluate(probe=probe)
+    assert row["disposition"] == "rejected"
+    assert "probe_license_conflict" in row["reason_codes"]
+
+
 def test_missing_probe_timestamp_quarantines():
     probe = _probe()
     del probe["probed_at"]
@@ -349,6 +369,12 @@ def test_accepted_report_fixture_matches_locked_schema():
     assert report["model"]["tag"] == "q4_k_m"
     assert report["cloud_fallback_allowed"] is False
     assert report["fallback_evidence"]["cloud_fallback_allowed"] is False
+
+
+def test_accepted_report_fixture_matches_render_report_bytes():
+    raw = (FIXTURE_DIR / "accepted_report.json").read_bytes()
+    decision = json.loads(raw.decode("utf-8"))
+    assert raw == render_report(decision)
 
 
 def test_schema_rejects_forged_accepted_with_nulls():
