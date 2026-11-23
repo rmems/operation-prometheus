@@ -110,7 +110,10 @@ def load_records() -> list[dict]:
     for path, rec in _iter_records():
         rec["repo"] = canonical_repo(rec["repo"])
         rec["source_urls"] = [_canonical_url(u) for u in rec.get("source_urls", [])]
-        license_expr = REPO_LICENSES.get(rec["repo"])
+        # The curated map is authoritative where defined; external ingests
+        # (e.g. nvidia/Open-SWE-Traces) carry the source repo's license on the
+        # record itself, which is equally evidence-backed.
+        license_expr = REPO_LICENSES.get(rec["repo"]) or rec.get("license")
         if license_expr is None:
             raise SystemExit(f"{path.name}: no license mapping for {rec['repo']}")
         # The record carries the source repo's license, not the tooling's.
@@ -145,22 +148,21 @@ def build_manifest(records: list[dict], blob: bytes) -> dict:
         "training_use_counts": _counts(records, "training_use"),
         "repo_counts": _counts(records, "repo"),
         "language_counts": _counts(records, "language"),
-        "repo_licenses": {
-            repo: REPO_LICENSES[repo] for repo in _counts(records, "repo")
-        },
+        "repo_licenses": {r["repo"]: r["source_license"] for r in records},
     }
 
 
 def build_card(records: list[dict], manifest: dict) -> str:
     repos = manifest["repo_counts"]
+    licenses = manifest["repo_licenses"]
     use_rows = "\n".join(
         f"| `{k}` | {v} |" for k, v in manifest["training_use_counts"].items()
     )
     repo_rows = "\n".join(
-        f"| [{repo}](https://github.com/{repo}) | {n} | {REPO_LICENSES[repo]} |"
+        f"| [{repo}](https://github.com/{repo}) | {n} | {licenses[repo]} |"
         for repo, n in repos.items()
     )
-    license_set = sorted(set(REPO_LICENSES[r] for r in repos))
+    license_set = sorted(set(licenses[r] for r in repos))
     lang_list = ", ".join(manifest["language_counts"])
     return f"""---
 license: other
