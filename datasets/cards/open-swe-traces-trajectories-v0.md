@@ -44,8 +44,15 @@ evidence.
 - `validation[].detail` names the upstream evaluation explicitly; `type:
   "test", result: "pass"` reflects resolved=1.
 - `review_signals` absent on every record — trajectory distillates have no
-  review evidence. The v0→v1 migration admits all 300 and marks
-  `unavailable_fields: ["review_signals"]` per record.
+  review evidence.
+- **No merge timestamp exists upstream**: the sidecar carries the PR's real
+  `created_at`, never `timestamp`/`merged_at`. v0→v1 migration therefore
+  refuses all records `missing_terminal_timestamp` — fail-closed by design
+  rather than dating merges at PR creation. Recovering merge times would need
+  live GitHub collection, which this lane deliberately avoids.
+- Patches are preserved byte-for-byte from the source parquet (no `strip()`):
+  a trailing `" "` context line is hunk-significant — stripping it desyncs the
+  last hunk's declared counts.
 - `quality_score` = 0.8 on all records (pipeline `score_quality` heuristic:
   merged + issue_context + passing validation; no review bonus possible).
 
@@ -54,7 +61,11 @@ evidence.
 - SWE-bench Verified (500 rows) + SWE-bench Lite (323 rows) instance IDs:
   **zero overlap** with any candidate `instance_id`.
 - Repo overlap: `pvlib/pvlib-python` only → forced `eval_only`.
-- Split rule (repo-level, deterministic): `sha256(repo)[:8] % 5 == 0` → eval.
+- Split rule (repo-level, deterministic, case-folded):
+  `sha256(repo.casefold())[:8] % 5 == 0` → eval. Case variants
+  (`OceanParcels/parcels` vs `OceanParcels/Parcels`) are one repo for both
+  dedup and splitting.
+- SWE-bench fetch pinned: Verified @ `c104f840cc67…`, Lite @ `6ec7bb89b934…`.
 
 ## Regeneration
 

@@ -77,6 +77,11 @@ SCAFFOLD_BY_DIR = {
 ALLOWED_LICENSES = frozenset({"MIT", "Apache-2.0", "BSD-2-Clause", "BSD-3-Clause"})
 TARGET_LANGUAGES = {"python": "Python", "rust": "Rust"}
 CAP_PER_INSTANCE = 3
+# Evaluation sets excluded from training; pinned like every other fetch.
+SWE_BENCH_REVISIONS = {
+    "princeton-nlp/SWE-bench_Verified": "c104f840cc67f8b6eec6f759ebc8b2693d585d4a",
+    "princeton-nlp/SWE-bench_Lite": "6ec7bb89b9342f664a54a6e0a6ea6501d3437cc2",
+}
 # strict-policy treats a >=96KiB patch without a declared truncation marker as
 # silently truncated; the ~32k-token training budget is looser than that anyway.
 PATCH_BYTE_CAP = 96 * 1024
@@ -364,8 +369,10 @@ def stage_records() -> dict:
             if meta is None:
                 counts["excluded_missing_metadata"] += 1
                 continue
-            patch = ((meta.get("model_patch") or {}).get("patch") or "").strip()
-            if not patch:
+            # Preserve the upstream patch byte-for-byte: strip() would eat a
+            # trailing " " context line and desync the last hunk's counts.
+            patch = (meta.get("model_patch") or {}).get("patch") or ""
+            if not patch.strip():
                 counts["excluded_empty_model_patch"] += 1
                 continue
             if len(patch.encode("utf-8")) >= PATCH_BYTE_CAP:
@@ -437,6 +444,10 @@ def _v0_record(
     created_at = (upstream_entry.get("created_at") or "").strip()
     # GitHub-created timestamps arrive naive ("YYYY-MM-DD HH:MM:SS"); they are
     # UTC by construction, so normalize losslessly to RFC-3339 Z form.
+    # This is the reference PR's *creation* instant — the upstream data has no
+    # merge timestamp — so it goes in `created_at`, never `timestamp`/`merged_at`:
+    # for outcome=merged the migrator treats those as the terminal instant and
+    # would otherwise date the merge at PR creation.
     timestamp = None
     if created_at:
         timestamp = (
@@ -481,9 +492,11 @@ def _v0_record(
     record["quality_score"] = score_quality(record)
     # Documented migration extensions (real upstream evidence, never fabricated;
     # omitted when the upstream field is absent so the migrator quarantines
-    # honestly rather than migrating a null).
+    # honestly rather than migrating a null). With no merge timestamp in the
+    # source, outcome=merged records refuse `missing_terminal_timestamp` in v1
+    # migration — fail-closed by design, not silently mislabeled.
     if timestamp:
-        record["timestamp"] = timestamp
+        record["created_at"] = timestamp
     base_oid = (upstream_entry.get("base_commit") or "").strip()
     if base_oid:
         record["base_oid"] = base_oid
@@ -493,7 +506,7 @@ def _v0_record(
 def _strip_extensions(record: dict) -> dict:
     """Remove migration extension keys; the committed JSONL is strict v0."""
     stripped = dict(record)
-    stripped.pop("timestamp", None)
+    stripped.pop("created_at", None)
     stripped.pop("base_oid", None)
     return stripped
 
@@ -523,7 +536,8 @@ def stage_curate() -> dict:
         lambda: collections.defaultdict(list)
     )
     for rec in records:
-        by_lang[rec["language"]][rec["repo"]].append(rec)
+        # case-folded: OceanParcels/parcels and OceanParcels/Parcels are one repo
+        by_lang[rec["language"]][rec["repo"].lower()].append(rec)
     for language in ("Python", "Rust"):
         repos = sorted(by_lang[language])
         picked = 0
@@ -584,24 +598,32 @@ def stage_split() -> dict:
 
     swe_bench: dict[str, set] = {"repos": set(), "instance_ids": set()}
     api = HfApi()
-    for name in ("princeton-nlp/SWE-bench_Verified", "princeton-nlp/SWE-bench_Lite"):
-        info = api.dataset_info(name)
+    for name, revision in SWE_BENCH_REVISIONS.items():
+        info = api.dataset_info(name, revision=revision)
         parquet = [s.rfilename for s in info.siblings if s.rfilename.endswith(".parquet")]
         for rfilename in parquet:
-            path = hf_hub_download(name, rfilename, repo_type="dataset")
+            path = hf_hub_download(
+                name, rfilename, repo_type="dataset", revision=revision
+            )
             table = pq.read_table(path, columns=["instance_id", "repo"])
             for row in table.to_pylist():
-                swe_bench["repos"].add(row["repo"])
+                swe_bench["repos"].add(row["repo"].lower())
                 swe_bench["instance_ids"].add(row["instance_id"])
 
-    repo_overlap = sorted(set(filtered_repos) & swe_bench["repos"])
+    # Repo identity is case-insensitive on GitHub; fold before comparing or
+    # hashing so case variants can never land on opposite sides of the split.
+    canonical = {r.lower(): r for r in filtered_repos}
+    repo_overlap = sorted(
+        canonical[k] for k in set(canonical) & swe_bench["repos"]
+    )
     iid_overlap = sorted(filtered_iids & swe_bench["instance_ids"])
-    holdout = set(repo_overlap)
+    holdout = {r.lower() for r in repo_overlap}
 
     split: dict[str, list[str]] = {"train": [], "eval": [], "eval_only_swebench": []}
-    for repo in filtered_repos:
-        digest = int(hashlib.sha256(repo.encode("utf-8")).hexdigest()[:8], 16)
-        if repo in holdout:
+    for key in sorted(canonical):
+        repo = canonical[key]
+        digest = int(hashlib.sha256(key.encode("utf-8")).hexdigest()[:8], 16)
+        if key in holdout:
             split["eval_only_swebench"].append(repo)
         elif digest % 5 == 0:
             split["eval"].append(repo)
@@ -610,8 +632,11 @@ def stage_split() -> dict:
     return {
         "swe_bench_repo_overlap": repo_overlap,
         "swe_bench_instance_id_overlap": iid_overlap,
-        "repo_split": {k: sorted(v) for k, v in split.items()},
-        "split_rule": "eval iff sha256(repo)[:8] % 5 == 0; SWE-bench-overlap repos forced eval_only",
+        "repo_split": split,
+        "split_rule": (
+            "eval iff sha256(repo.casefold())[:8] % 5 == 0; "
+            "SWE-bench-overlap repos forced eval_only"
+        ),
     }
 
 
@@ -628,6 +653,8 @@ def main(argv: list[str] | None = None) -> int:
     stage = args.stage
     if stage in ("all", "census"):
         stage_census()
+    if stage in ("all", "upstream"):
+        stage_upstream()
     if stage in ("all", "filter"):
         stage_filter()
     if stage in ("all", "records"):
@@ -635,6 +662,13 @@ def main(argv: list[str] | None = None) -> int:
     if stage in ("all", "curate"):
         curate_summary = stage_curate()
         logger.info("curate: %s", curate_summary)
+    verify_summary = split_summary = None
+    if stage in ("all", "verify"):
+        verify_summary = stage_verify()
+        logger.info("verify: %s", verify_summary)
+    if stage in ("all", "split"):
+        split_summary = stage_split()
+        logger.info("split: %s", split_summary)
     if stage == "all":
         report = {
             "revision": HF_REVISION,
@@ -643,8 +677,8 @@ def main(argv: list[str] | None = None) -> int:
             "filter": _load_json(CANDIDATES_PATH, {}).get("counts", {}),
             "records": _load_json(RECORDS_PATH, {}).get("counts", {}),
             "curate": curate_summary,
-            "verify": stage_verify(),
-            "split": stage_split(),
+            "verify": verify_summary,
+            "split": split_summary,
         }
         _write_json(REPORT_PATH, report)
         logger.info("wrote %s", REPORT_PATH)

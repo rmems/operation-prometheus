@@ -24,7 +24,7 @@ issue/review signal → code state → patch → validation → outcome.
 - **Records:** 396
 - **Format:** JSONL (`trajectories.jsonl`), schema `pr_trajectory_v0` / `trajectory_v1`
 - **Languages:** Julia, Python, Rust, SystemVerilog
-- **sha256:** `77fe21e75afe5aba…`
+- **sha256:** `4820bc4b853468c3…`
 
 ## Record fields
 
@@ -37,9 +37,9 @@ issue/review signal → code state → patch → validation → outcome.
 | Bucket | Records |
 |--------|---------|
 | `bug-prediction` | 3 |
-| `feature` | 165 |
-| `other` | 22 |
-| `repair` | 174 |
+| `feature` | 166 |
+| `other` | 23 |
+| `repair` | 172 |
 | `review-to-patch` | 21 |
 | `validation` | 11 |
 
@@ -88,10 +88,8 @@ License set represented: Apache-2.0; BSD-2-Clause; BSD-3-Clause; MIT; MIT OR Apa
 | [HTTP-APIs/hydrus](https://github.com/HTTP-APIs/hydrus) | 1 | MIT |
 | [IAMconsortium/pyam](https://github.com/IAMconsortium/pyam) | 1 | Apache-2.0 |
 | [IDSIA/sacred](https://github.com/IDSIA/sacred) | 1 | MIT |
-| [JonathonReinhart/scuba](https://github.com/JonathonReinhart/scuba) | 1 | MIT |
 | [Keats/tera](https://github.com/Keats/tera) | 1 | MIT |
 | [Keats/validator](https://github.com/Keats/validator) | 1 | MIT |
-| [Kozea/WeasyPrint](https://github.com/Kozea/WeasyPrint) | 1 | BSD-3-Clause |
 | [Leafwing-Studios/leafwing-input-manager](https://github.com/Leafwing-Studios/leafwing-input-manager) | 1 | Apache-2.0 |
 | [Limen-Neural/axon-encoder](https://github.com/Limen-Neural/axon-encoder) | 3 | MIT OR Apache-2.0 |
 | [Limen-Neural/brainstem-daemon](https://github.com/Limen-Neural/brainstem-daemon) | 4 | MIT OR Apache-2.0 |
@@ -101,69 +99,14 @@ License set represented: Apache-2.0; BSD-2-Clause; BSD-3-Clause; MIT; MIT OR Apa
 | [Limen-Neural/nir-rs](https://github.com/Limen-Neural/nir-rs) | 4 | MIT OR Apache-2.0 |
 | [Limen-Neural/synaptic-mesh](https://github.com/Limen-Neural/synaptic-mesh) | 5 | MIT OR Apache-2.0 |
 | [ManevilleF/hexx](https://github.com/ManevilleF/hexx) | 1 | Apache-2.0 |
-| [ManiacalLabs/BiblioPixel](https://github.com/ManiacalLabs/BiblioPixel) | 1 | MIT |
 | [MarcoIeni/release-plz](https://github.com/MarcoIeni/release-plz) | 1 | Apache-2.0 |
-| [MarketSquare/robotframework-robocop](https://github.com/MarketSquare/robotframework-robocop) | 1 | Apache-2.0 |
-| [MartinThoma/flake8-simplify](https://github.com/MartinThoma/flake8-simplify) | 1 | MIT |
-| [Materials-Consortia/optimade-python-tools](https://github.com/Materials-Consortia/optimade-python-tools) | 1 | MIT |
 | [MiSawa/xq](https://github.com/MiSawa/xq) | 1 | MIT |
 | [Migorithm/duva](https://github.com/Migorithm/duva) | 1 | Apache-2.0 |
-| [NCAR/geocat-comp](https://github.com/NCAR/geocat-comp) | 1 | Apache-2.0 |
-| [NTNU-IHB/PythonFMU](https://github.com/NTNU-IHB/PythonFMU) | 1 | MIT |
-| [Neoteroi/BlackSheep](https://github.com/Neoteroi/BlackSheep) | 1 | MIT |
 | [Nukesor/comfy-table](https://github.com/Nukesor/comfy-table) | 1 | MIT |
-| [OCR-D/core](https://github.com/OCR-D/core) | 1 | Apache-2.0 |
-| [OceanParcels/Parcels](https://github.com/OceanParcels/Parcels) | 1 | MIT |
-| [OceanParcels/parcels](https://github.com/OceanParcels/parcels) | 1 | MIT |
-| [OpenMDAO/dymos](https://github.com/OpenMDAO/dymos) | 1 | Apache-2.0 |
-| [OpenMined/PySyft](https://github.com/OpenMined/PySyft) | 1 | Apache-2.0 |
-| [OpenNMT/OpenNMT-tf](https://github.com/OpenNMT/OpenNMT-tf) | 1 | MIT |
 | [OpenZeppelin/rust-contracts-stylus](https://github.com/OpenZeppelin/rust-contracts-stylus) | 1 | MIT |
-| [Ouranosinc/xclim](https://github.com/Ouranosinc/xclim) | 1 | Apache-2.0 |
-| [Parquery/icontract](https://github.com/Parquery/icontract) | 1 | MIT |
-| [PennyLaneAI/pennylane](https://github.com/PennyLaneAI/pennylane) | 1 | Apache-2.0 |
-| [PlasmaPy/PlasmaPy](https://github.com/PlasmaPy/PlasmaPy) | 1 | BSD-3-Clause |
-| [PrefectHQ/prefect-aws](https://github.com/PrefectHQ/prefect-aws) | 1 | Apache-2.0 |
-| [PyCQA/bandit](https://github.com/PyCQA/bandit) | 1 | Apache-2.0 |
-| [PyCQA/docformatter](https://github.com/PyCQA/docformatter) | 1 | MIT |
-| [PyCQA/pyflakes](https://github.com/PyCQA/pyflakes) | 1 | MIT |
-| [PyFilesystem/pyfilesystem2](https://github.com/PyFilesystem/pyfilesystem2) | 1 | MIT |
-| [PyPSA/linopy](https://github.com/PyPSA/linopy) | 1 | MIT |
-| [PyThaiNLP/pythainlp](https://github.com/PyThaiNLP/pythainlp) | 1 | Apache-2.0 |
-| [PyVRP/PyVRP](https://github.com/PyVRP/PyVRP) | 1 | MIT |
-| [Python-Markdown/markdown](https://github.com/Python-Markdown/markdown) | 1 | BSD-3-Clause |
-| [QCHackers/tqec](https://github.com/QCHackers/tqec) | 1 | Apache-2.0 |
-| [QCoDeS/Qcodes](https://github.com/QCoDeS/Qcodes) | 1 | MIT |
-| [Qiskit-Extensions/circuit-knitting-toolbox](https://github.com/Qiskit-Extensions/circuit-knitting-toolbox) | 1 | Apache-2.0 |
-| [Qiskit/qiskit](https://github.com/Qiskit/qiskit) | 1 | Apache-2.0 |
-| [Qiskit/qiskit-ibm-runtime](https://github.com/Qiskit/qiskit-ibm-runtime) | 1 | Apache-2.0 |
-| [Qiskit/qiskit-terra](https://github.com/Qiskit/qiskit-terra) | 1 | Apache-2.0 |
-| [Quansight/ragna](https://github.com/Quansight/ragna) | 1 | BSD-3-Clause |
-| [QuantEcon/QuantEcon.py](https://github.com/QuantEcon/QuantEcon.py) | 1 | MIT |
-| [Quantum-Accelerators/quacc](https://github.com/Quantum-Accelerators/quacc) | 1 | BSD-3-Clause |
-| [RadioAstronomySoftwareGroup/pyuvdata](https://github.com/RadioAstronomySoftwareGroup/pyuvdata) | 1 | BSD-2-Clause |
-| [ResearchObject/ro-crate-py](https://github.com/ResearchObject/ro-crate-py) | 1 | Apache-2.0 |
-| [SciTools/cartopy](https://github.com/SciTools/cartopy) | 1 | BSD-3-Clause |
-| [SciTools/iris](https://github.com/SciTools/iris) | 1 | BSD-3-Clause |
-| [Scille/umongo](https://github.com/Scille/umongo) | 1 | MIT |
 | [SeaQL/sea-orm](https://github.com/SeaQL/sea-orm) | 1 | Apache-2.0 |
-| [SebRut/pygrocy](https://github.com/SebRut/pygrocy) | 1 | MIT |
-| [Senth/minecraft-mod-manager](https://github.com/Senth/minecraft-mod-manager) | 1 | MIT |
-| [SpikeInterface/spikeinterface](https://github.com/SpikeInterface/spikeinterface) | 1 | MIT |
 | [Stebalien/tempfile](https://github.com/Stebalien/tempfile) | 1 | Apache-2.0 |
-| [StingraySoftware/stingray](https://github.com/StingraySoftware/stingray) | 1 | MIT |
-| [Stranger6667/postmarker](https://github.com/Stranger6667/postmarker) | 1 | MIT |
 | [TedDriggs/darling](https://github.com/TedDriggs/darling) | 1 | MIT |
-| [Textualize/rich](https://github.com/Textualize/rich) | 1 | MIT |
-| [TobikoData/sqlmesh](https://github.com/TobikoData/sqlmesh) | 1 | Apache-2.0 |
-| [Toblerity/Shapely](https://github.com/Toblerity/Shapely) | 1 | BSD-3-Clause |
-| [USEPA/haztrak](https://github.com/USEPA/haztrak) | 1 | MIT |
-| [Unidata/siphon](https://github.com/Unidata/siphon) | 1 | BSD-3-Clause |
-| [Unleash/unleash-client-python](https://github.com/Unleash/unleash-client-python) | 1 | MIT |
-| [VirtusLab/git-machete](https://github.com/VirtusLab/git-machete) | 1 | MIT |
-| [WorksApplications/sudachi.rs](https://github.com/WorksApplications/sudachi.rs) | 1 | Apache-2.0 |
-| [XKNX/xknx](https://github.com/XKNX/xknx) | 1 | MIT |
-| [XLSForm/pyxform](https://github.com/XLSForm/pyxform) | 1 | BSD-2-Clause |
 | [aaugustin/websockets](https://github.com/aaugustin/websockets) | 1 | BSD-3-Clause |
 | [ably/ably-python](https://github.com/ably/ably-python) | 1 | Apache-2.0 |
 | [actix/actix-web](https://github.com/actix/actix-web) | 1 | Apache-2.0 |
@@ -264,29 +207,85 @@ License set represented: Apache-2.0; BSD-2-Clause; BSD-3-Clause; MIT; MIT OR Apa
 | [django/channels](https://github.com/django/channels) | 1 | BSD-3-Clause |
 | [djc/askama](https://github.com/djc/askama) | 1 | Apache-2.0 |
 | [dotenv-linter/dotenv-linter](https://github.com/dotenv-linter/dotenv-linter) | 1 | MIT |
+| [dpkp/kafka-python](https://github.com/dpkp/kafka-python) | 1 | Apache-2.0 |
 | [dprint/dprint-plugin-typescript](https://github.com/dprint/dprint-plugin-typescript) | 1 | MIT |
+| [dr-leo/pandaSDMX](https://github.com/dr-leo/pandaSDMX) | 1 | Apache-2.0 |
+| [drivendataorg/cloudpathlib](https://github.com/drivendataorg/cloudpathlib) | 1 | MIT |
 | [dtolnay/anyhow](https://github.com/dtolnay/anyhow) | 1 | Apache-2.0 |
 | [dtolnay/async-trait](https://github.com/dtolnay/async-trait) | 1 | Apache-2.0 |
 | [dtolnay/cxx](https://github.com/dtolnay/cxx) | 1 | Apache-2.0 |
 | [dtolnay/paste](https://github.com/dtolnay/paste) | 1 | Apache-2.0 |
 | [dtolnay/syn](https://github.com/dtolnay/syn) | 1 | Apache-2.0 |
 | [dtolnay/thiserror](https://github.com/dtolnay/thiserror) | 1 | Apache-2.0 |
+| [duartegroup/autodE](https://github.com/duartegroup/autodE) | 1 | MIT |
+| [dwavesystems/dwave-system](https://github.com/dwavesystems/dwave-system) | 1 | Apache-2.0 |
+| [dynaconf/dynaconf](https://github.com/dynaconf/dynaconf) | 1 | MIT |
+| [ecmwf/earthkit-data](https://github.com/ecmwf/earthkit-data) | 1 | Apache-2.0 |
+| [edgi-govdata-archiving/wayback](https://github.com/edgi-govdata-archiving/wayback) | 1 | BSD-3-Clause |
 | [embassy-rs/embassy](https://github.com/embassy-rs/embassy) | 1 | Apache-2.0 |
 | [emit-rs/emit](https://github.com/emit-rs/emit) | 1 | Apache-2.0 |
+| [encode/httpx](https://github.com/encode/httpx) | 1 | BSD-3-Clause |
+| [ericmjl/pyjanitor](https://github.com/ericmjl/pyjanitor) | 1 | MIT |
+| [ethereum/web3.py](https://github.com/ethereum/web3.py) | 1 | MIT |
+| [executablebooks/MyST-Parser](https://github.com/executablebooks/MyST-Parser) | 1 | MIT |
+| [exercism/python](https://github.com/exercism/python) | 1 | MIT |
 | [extendr/extendr](https://github.com/extendr/extendr) | 1 | MIT |
+| [facebookexperimental/usort](https://github.com/facebookexperimental/usort) | 1 | MIT |
+| [facebookresearch/hydra](https://github.com/facebookresearch/hydra) | 1 | MIT |
+| [facelessuser/soupsieve](https://github.com/facelessuser/soupsieve) | 1 | MIT |
+| [falconry/falcon](https://github.com/falconry/falcon) | 1 | Apache-2.0 |
 | [farcaster-project/farcaster-node](https://github.com/farcaster-project/farcaster-node) | 1 | MIT |
+| [fatiando/harmonica](https://github.com/fatiando/harmonica) | 1 | BSD-3-Clause |
+| [fatiando/verde](https://github.com/fatiando/verde) | 1 | BSD-3-Clause |
 | [fitzgen/bumpalo](https://github.com/fitzgen/bumpalo) | 1 | Apache-2.0 |
+| [frictionlessdata/tabulator-py](https://github.com/frictionlessdata/tabulator-py) | 1 | MIT |
+| [fsspec/gcsfs](https://github.com/fsspec/gcsfs) | 1 | BSD-3-Clause |
 | [fujiapple852/trippy](https://github.com/fujiapple852/trippy) | 1 | Apache-2.0 |
+| [gammapy/gammapy](https://github.com/gammapy/gammapy) | 1 | BSD-3-Clause |
+| [geofileops/geofileops](https://github.com/geofileops/geofileops) | 1 | BSD-3-Clause |
+| [geopandas/geopandas](https://github.com/geopandas/geopandas) | 1 | BSD-3-Clause |
+| [geopy/geopy](https://github.com/geopy/geopy) | 1 | MIT |
+| [getmoto/moto](https://github.com/getmoto/moto) | 1 | Apache-2.0 |
+| [getsentry/responses](https://github.com/getsentry/responses) | 1 | Apache-2.0 |
 | [gfx-rs/wgpu](https://github.com/gfx-rs/wgpu) | 1 | Apache-2.0 |
 | [gimli-rs/object](https://github.com/gimli-rs/object) | 1 | Apache-2.0 |
+| [github/issue-metrics](https://github.com/github/issue-metrics) | 1 | MIT |
+| [gitpython-developers/GitPython](https://github.com/gitpython-developers/GitPython) | 1 | BSD-3-Clause |
 | [gleam-lang/gleam](https://github.com/gleam-lang/gleam) | 1 | Apache-2.0 |
+| [globus/globus-sdk-python](https://github.com/globus/globus-sdk-python) | 1 | Apache-2.0 |
+| [glotzerlab/signac](https://github.com/glotzerlab/signac) | 1 | BSD-3-Clause |
 | [gluesql/gluesql](https://github.com/gluesql/gluesql) | 1 | Apache-2.0 |
 | [godot-rust/godot-rust](https://github.com/godot-rust/godot-rust) | 1 | MIT |
 | [google/argh](https://github.com/google/argh) | 1 | BSD-3-Clause |
 | [google/autocxx](https://github.com/google/autocxx) | 1 | Apache-2.0 |
+| [google/google-api-python-client](https://github.com/google/google-api-python-client) | 1 | Apache-2.0 |
+| [google/jax](https://github.com/google/jax) | 1 | Apache-2.0 |
+| [google/turbinia](https://github.com/google/turbinia) | 1 | Apache-2.0 |
+| [googleapis/google-api-python-client](https://github.com/googleapis/google-api-python-client) | 1 | Apache-2.0 |
+| [googleapis/python-api-core](https://github.com/googleapis/python-api-core) | 1 | Apache-2.0 |
+| [googleapis/python-bigquery](https://github.com/googleapis/python-bigquery) | 1 | Apache-2.0 |
+| [googlefonts/ufo2ft](https://github.com/googlefonts/ufo2ft) | 1 | MIT |
+| [gorakhargosh/watchdog](https://github.com/gorakhargosh/watchdog) | 1 | Apache-2.0 |
+| [graphql-python/graphene](https://github.com/graphql-python/graphene) | 1 | MIT |
+| [greyli/apiflask](https://github.com/greyli/apiflask) | 1 | MIT |
+| [gtalarico/pyairtable](https://github.com/gtalarico/pyairtable) | 1 | MIT |
+| [h5py/h5py](https://github.com/h5py/h5py) | 1 | BSD-3-Clause |
+| [hhursev/recipe-scrapers](https://github.com/hhursev/recipe-scrapers) | 1 | MIT |
+| [hikari-py/hikari](https://github.com/hikari-py/hikari) | 1 | MIT |
+| [hoburg/gpkit](https://github.com/hoburg/gpkit) | 1 | MIT |
+| [holoviz/holoviews](https://github.com/holoviz/holoviews) | 1 | BSD-3-Clause |
 | [huff-language/huff-rs](https://github.com/huff-language/huff-rs) | 1 | Apache-2.0 |
+| [huge-success/sanic](https://github.com/huge-success/sanic) | 1 | MIT |
+| [huggingface/transformers](https://github.com/huggingface/transformers) | 1 | Apache-2.0 |
 | [hyperium/hyper](https://github.com/hyperium/hyper) | 1 | MIT |
+| [igorbenav/fastcrud](https://github.com/igorbenav/fastcrud) | 1 | MIT |
 | [image-rs/image-tiff](https://github.com/image-rs/image-tiff) | 1 | MIT |
+| [innobi/pantab](https://github.com/innobi/pantab) | 1 | BSD-3-Clause |
+| [ipython/traitlets](https://github.com/ipython/traitlets) | 1 | BSD-3-Clause |
+| [ishepard/pydriller](https://github.com/ishepard/pydriller) | 1 | Apache-2.0 |
+| [iterative/dvc](https://github.com/iterative/dvc) | 1 | Apache-2.0 |
+| [iver56/audiomentations](https://github.com/iver56/audiomentations) | 1 | MIT |
+| [jax-ml/jax](https://github.com/jax-ml/jax) | 1 | Apache-2.0 |
 | [jugglerchris/rust-html2text](https://github.com/jugglerchris/rust-html2text) | 1 | MIT |
 | [kbknapp/clap-rs](https://github.com/kbknapp/clap-rs) | 1 | Apache-2.0 |
 | [keep-starknet-strange/beerus](https://github.com/keep-starknet-strange/beerus) | 1 | MIT |
@@ -374,6 +373,7 @@ License set represented: Apache-2.0; BSD-2-Clause; BSD-3-Clause; MIT; MIT OR Apa
 | [tweag/nickel](https://github.com/tweag/nickel) | 1 | MIT |
 | [typst/hayagriva](https://github.com/typst/hayagriva) | 1 | Apache-2.0 |
 | [wafflespeanut/paperclip](https://github.com/wafflespeanut/paperclip) | 1 | Apache-2.0 |
+| [wizardsardine/liana](https://github.com/wizardsardine/liana) | 1 | BSD-3-Clause |
 
 ## Intended use
 
