@@ -37,6 +37,7 @@ One record per PR. See [datasets/README.md](../../datasets/README.md) for commit
 | [rmems/myelin-accelerator](https://github.com/rmems/myelin-accelerator) | [myelin-accelerator.md](myelin-accelerator.md) | v0 extracted |
 | [Limen-Neural/neuromod](https://github.com/Limen-Neural/neuromod) | [neuromod.md](neuromod.md) | v0 extracted |
 | [Limen-Neural/nir-rs](https://github.com/Limen-Neural/nir-rs) | [nir-rs.md](nir-rs.md) | v0 extracted |
+| [nvidia/Open-SWE-Traces](https://huggingface.co/datasets/nvidia/Open-SWE-Traces) | [open-swe-traces.md](open-swe-traces.md) | v0 extracted (external ingest) |
 | [rmems/silicon-hdl](https://github.com/rmems/silicon-hdl) | [silicon-hdl.md](silicon-hdl.md) | v0 extracted |
 | [rmems/spike-viz](https://github.com/rmems/spike-viz) | [spike-viz.md](spike-viz.md) | v0 extracted |
 | [rmems/SpikeStream.jl](https://github.com/rmems/SpikeStream.jl) | [spikestream-jl.md](spikestream-jl.md) | v0 extracted |
