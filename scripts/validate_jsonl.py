@@ -58,8 +58,14 @@ SCHEMA_V1_PATH = (
 SCHEMA_V1_1_PATH = (
     Path(__file__).resolve().parent.parent / "schemas" / "trajectory_v1_1.schema.json"
 )
+SCHEMA_FIRST_PARTY_HERMES_PATH = (
+    Path(__file__).resolve().parent.parent
+    / "schemas"
+    / "first_party_hermes_trajectory.schema.json"
+)
 _V1_VERSIONS = frozenset({"1", "1.0", "v1"})
 _V1_1_VERSIONS = frozenset({"1.1", "v1.1"})
+_FIRST_PARTY_HERMES_VERSIONS = frozenset({"first_party_hermes_trajectory_v1"})
 _SUCCESS_OUTCOMES = frozenset(
     {"pass", "passed", "success", "successful", "verified", "ok"}
 )
@@ -83,6 +89,7 @@ class _LineValidationContext:
     validators: tuple[
         jsonschema.Draft7Validator,
         jsonschema.Draft7Validator,
+        jsonschema.Draft7Validator | None,
         jsonschema.Draft7Validator | None,
     ]
     strict_policy: bool
@@ -210,6 +217,12 @@ def _versioned_policy_errors(
     errors: list[str] = []
     if schema_version in _V1_1_VERSIONS and _contains_hidden_reasoning(record):
         errors.append(f"{location} [policy] - hidden reasoning is not allowed in v1.1")
+    if schema_version in _FIRST_PARTY_HERMES_VERSIONS:
+        if _contains_hidden_reasoning(record):
+            errors.append(
+                f"{location} [policy] - hidden reasoning is not allowed in first-party Hermes artifacts"
+            )
+        return errors
     if schema_version not in _V1_VERSIONS and schema_version not in _V1_1_VERSIONS:
         return errors
     events = record.get("events")
@@ -438,10 +451,18 @@ def _select_validator(
     v0_validator: jsonschema.Draft7Validator,
     v1_validator: jsonschema.Draft7Validator,
     v1_1_validator: jsonschema.Draft7Validator | None,
+    first_party_hermes_validator: jsonschema.Draft7Validator | None = None,
 ) -> jsonschema.Draft7Validator:
     if not isinstance(record, dict):
         return v0_validator
     version = record.get("schema_version")
+    if version in _FIRST_PARTY_HERMES_VERSIONS:
+        if first_party_hermes_validator is None:
+            first_party_hermes_validator = jsonschema.Draft7Validator(
+                load_schema(SCHEMA_FIRST_PARTY_HERMES_PATH),
+                format_checker=jsonschema.Draft7Validator.FORMAT_CHECKER,
+            )
+        return first_party_hermes_validator
     if version in _V1_1_VERSIONS:
         if v1_1_validator is None:
             v1_1_validator = jsonschema.Draft7Validator(
@@ -459,21 +480,32 @@ def validate_file(
     *validators: jsonschema.Draft7Validator,
     strict_policy: bool = False,
     v1_1_validator: jsonschema.Draft7Validator | None = None,
+    first_party_hermes_validator: jsonschema.Draft7Validator | None = None,
 ) -> list[str]:
     """Validate a single JSONL file. Returns list of error strings."""
     if len(validators) != 2:
         raise TypeError("validate_file requires v0 and v1 validators")
     v0_validator, v1_validator = validators
+    if first_party_hermes_validator is None and SCHEMA_FIRST_PARTY_HERMES_PATH.exists():
+        first_party_hermes_validator = jsonschema.Draft7Validator(
+            load_schema(SCHEMA_FIRST_PARTY_HERMES_PATH),
+            format_checker=jsonschema.Draft7Validator.FORMAT_CHECKER,
+        )
     context = _LineValidationContext(
         filename=filepath.name,
-        validators=(v0_validator, v1_validator, v1_1_validator),
+        validators=(
+            v0_validator,
+            v1_validator,
+            v1_1_validator,
+            first_party_hermes_validator,
+        ),
         strict_policy=strict_policy,
         seen_ids={},
     )
     errors: list[str] = []
     count = 0
     try:
-        with open(filepath) as f:
+        with open(filepath, encoding="utf-8") as f:
             for lineno, line in enumerate(f, start=1):
                 line = line.strip()
                 if not line:
@@ -518,8 +550,19 @@ def _line_errors(
         return [f"  {context.filename}:{lineno} - Invalid JSON: {exc}"]
     if _contains_nonfinite(record):
         return [f"  {context.filename}:{lineno} - Invalid JSON: non-finite number"]
-    v0_validator, v1_validator, v1_1_validator = context.validators
-    validator = _select_validator(record, v0_validator, v1_validator, v1_1_validator)
+    (
+        v0_validator,
+        v1_validator,
+        v1_1_validator,
+        first_party_hermes_validator,
+    ) = context.validators
+    validator = _select_validator(
+        record,
+        v0_validator,
+        v1_validator,
+        v1_1_validator,
+        first_party_hermes_validator,
+    )
     errors = _jsonschema_errors(record, validator, lineno, context.filename)
     if context.strict_policy and isinstance(record, dict):
         errors.extend(policy_errors(record, lineno, context.filename))
@@ -554,10 +597,11 @@ def _private_reference_policy_errors(
 
 
 def _contract_policy_messages(record: dict) -> list[str]:
+    first_party = record.get("schema_version") in _FIRST_PARTY_HERMES_VERSIONS
     return [
         *unique_event_errors(record),
         *blank_license_policy_errors(record),
-        *validation_evidence_errors(record),
+        *([] if first_party else validation_evidence_errors(record)),
         *silent_truncation_errors(record),
         *_v1_1_false_success_errors(record),
     ]
@@ -652,6 +696,12 @@ def main(argv: list[str] | None = None) -> int:
             load_schema(SCHEMA_V1_1_PATH),
             format_checker=jsonschema.Draft7Validator.FORMAT_CHECKER,
         )
+    first_party_hermes_validator = None
+    if SCHEMA_FIRST_PARTY_HERMES_PATH.exists():
+        first_party_hermes_validator = jsonschema.Draft7Validator(
+            load_schema(SCHEMA_FIRST_PARTY_HERMES_PATH),
+            format_checker=jsonschema.Draft7Validator.FORMAT_CHECKER,
+        )
 
     all_errors: list[str] = []
 
@@ -663,6 +713,7 @@ def main(argv: list[str] | None = None) -> int:
             v1_validator,
             strict_policy=args.strict_policy,
             v1_1_validator=v1_1_validator,
+            first_party_hermes_validator=first_party_hermes_validator,
         )
         all_errors.extend(file_errors)
         if not file_errors:
