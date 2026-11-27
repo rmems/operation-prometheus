@@ -106,16 +106,8 @@ class _SessionRead:
 
 def convert_files(**options: Any) -> dict[str, Any]:
     """Convert all Hermes sessions bound by one medsynth batch manifest."""
-    batch_manifest_path = Path(options.pop("batch_manifest_path"))
-    session_root = Path(options.pop("session_root"))
-    output_path = Path(options.pop("output_path"))
-    report_path = Path(options.pop("report_path"))
-    source = options.pop("source", None)
-    if options:
-        unexpected = ", ".join(sorted(options))
-        raise TypeError(f"unexpected convert_files arguments: {unexpected}")
-    if source is not None and not isinstance(source, LocalFileBoundary):
-        raise TypeError("source must be a LocalFileBoundary")
+    paths, source = _conversion_options(options)
+    batch_manifest_path, session_root, output_path, report_path = paths
     boundary = source or LocalFileBoundary()
     session_names, session_root_reasons = _session_file_names(session_root)
     input_paths = [
@@ -136,16 +128,37 @@ def convert_files(**options: Any) -> dict[str, Any]:
             boundary=boundary,
         )
     )
-    admitted = [canonical_dumps(artifact) for artifact in artifacts]
-    output_text = ("\n".join(admitted) + "\n") if admitted else ""
     report = _build_report(decisions, manifest, sha256_bytes(manifest_bytes))
+    newline = chr(10)
     _atomic_write_pair(
         output_path,
-        output_text.encode("utf-8"),
+        _artifact_jsonl_bytes(artifacts),
         report_path,
-        (canonical_dumps(report) + "\n").encode("utf-8"),
+        (canonical_dumps(report) + newline).encode("utf-8"),
     )
     return report
+
+
+def _conversion_options(options: dict[str, Any]) -> tuple[tuple[Path, Path, Path, Path], Any]:
+    paths = tuple(
+        Path(options.pop(name))
+        for name in ("batch_manifest_path", "session_root", "output_path", "report_path")
+    )
+    source = options.pop("source", None)
+    if options:
+        unexpected = ", ".join(sorted(options))
+        raise TypeError(f"unexpected convert_files arguments: {unexpected}")
+    if source is not None and not isinstance(source, LocalFileBoundary):
+        raise TypeError("source must be a LocalFileBoundary")
+    return paths, source
+
+
+def _artifact_jsonl_bytes(artifacts: list[dict[str, Any]]) -> bytes:
+    if not artifacts:
+        return b""
+    newline = chr(10)
+    text = newline.join(canonical_dumps(artifact) for artifact in artifacts) + newline
+    return text.encode("utf-8")
 
 
 def _session_file_names(session_root: Path) -> tuple[list[str], list[str]]:

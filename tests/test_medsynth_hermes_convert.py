@@ -309,12 +309,10 @@ def _assert_envelope_refusal(
     envelope: dict,
     session_text: str | None,
     expected_reason: str,
-    *,
-    manifest_pin_sha256: str = PIN_SHA256,
 ) -> None:
     paths = _write_case(
         tmp_path,
-        manifest=_manifest([envelope], pin_entry_sha256=manifest_pin_sha256),
+        manifest=_manifest([envelope], pin_entry_sha256=envelope["pin_entry_sha256"]),
         session_text=session_text,
     )
     report = _run(paths)
@@ -377,7 +375,6 @@ def test_pin_entry_hash_mismatch_is_refused(tmp_path: Path):
         envelope,
         session_text,
         "pin_entry_hash_mismatch",
-        manifest_pin_sha256="0" * 64,
     )
 
 
