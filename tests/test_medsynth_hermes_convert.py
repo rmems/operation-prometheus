@@ -304,20 +304,32 @@ def test_invalid_raw_session_record_is_refused(tmp_path: Path):
     assert "invalid_hermes_record" in report["records"][0]["reason_codes"]
 
 
+def _assert_envelope_refusal(
+    tmp_path: Path,
+    envelope: dict,
+    session_text: str | None,
+    expected_reason: str,
+    *,
+    manifest_pin_sha256: str = PIN_SHA256,
+) -> None:
+    paths = _write_case(
+        tmp_path,
+        manifest=_manifest([envelope], pin_entry_sha256=manifest_pin_sha256),
+        session_text=session_text,
+    )
+    report = _run(paths)
+    assert report["refused_count"] == 1
+    assert expected_reason in report["records"][0]["reason_codes"]
+
+
 def test_envelope_must_match_manifest_teacher_pin(tmp_path: Path):
     session_text = _session_text()
     envelope = _envelope(
         _sha256_text(session_text), model_id="deepseek/renamed-model"
     )
-    paths = _write_case(
-        tmp_path,
-        manifest=_manifest([envelope]),
-        session_text=session_text,
+    _assert_envelope_refusal(
+        tmp_path, envelope, session_text, "rights_envelope_mismatch"
     )
-    report = _run(paths)
-    assert report["refused_count"] == 1
-    assert "rights_envelope_mismatch" in report["records"][0]["reason_codes"]
-
 
 def test_secret_bearing_session_is_refused(tmp_path: Path):
     session = _session()
@@ -341,15 +353,7 @@ def test_unsafe_session_file_name_is_refused(tmp_path: Path):
     envelope = _envelope(
         _sha256_text(session_text), session_file="../outside.session.json"
     )
-    paths = _write_case(
-        tmp_path,
-        manifest=_manifest([envelope]),
-        session_text=None,
-    )
-    report = _run(paths)
-    assert report["refused_count"] == 1
-    assert "unsafe_session_file" in report["records"][0]["reason_codes"]
-
+    _assert_envelope_refusal(tmp_path, envelope, None, "unsafe_session_file")
 
 def test_windows_drive_paths_are_local_file_boundary_paths():
     assert not _is_remote(r"C:\Users\example\manifest.json")
@@ -368,15 +372,13 @@ def test_empty_teacher_batch_is_recorded_as_refusal(tmp_path: Path):
 def test_pin_entry_hash_mismatch_is_refused(tmp_path: Path):
     session_text = _session_text()
     envelope = _envelope(_sha256_text(session_text), pin_entry_sha256="0" * 64)
-    paths = _write_case(
+    _assert_envelope_refusal(
         tmp_path,
-        manifest=_manifest([envelope], pin_entry_sha256="0" * 64),
-        session_text=session_text,
+        envelope,
+        session_text,
+        "pin_entry_hash_mismatch",
+        manifest_pin_sha256="0" * 64,
     )
-    report = _run(paths)
-    assert report["refused_count"] == 1
-    assert "pin_entry_hash_mismatch" in report["records"][0]["reason_codes"]
-
 
 
 def test_output_cannot_overwrite_bound_session(tmp_path: Path):

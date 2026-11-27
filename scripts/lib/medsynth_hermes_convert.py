@@ -596,13 +596,16 @@ def _trace_event(message: Any, index: int, final_assistant: int) -> dict[str, An
         "ordinal": index + 1,
         "role": role,
     }
-    name = message.get("name")
-    if isinstance(name, str) and name:
-        event["name"] = name
-    timestamp = message.get("timestamp")
-    if isinstance(timestamp, str) and timestamp:
-        event["timestamp"] = timestamp
+    event.update(_optional_event_fields(message))
     return event
+
+
+def _optional_event_fields(message: dict[str, Any]) -> dict[str, str]:
+    return {
+        key: value
+        for key in ("name", "timestamp")
+        if isinstance((value := message.get(key)), str) and value
+    }
 
 
 def _event_kind(role: str, index: int, final_assistant: int) -> str:
@@ -716,27 +719,18 @@ def _build_report(
     }
 
 
-def _refusal(
-    *,
-    reasons: list[str],
-    batch_id: str | None = None,
-    record_id: str | None = None,
-    rights_envelope_sha256: str | None = None,
-    session_file: str | None = None,
-    session_id: Any = None,
-    session_sha256: str | None = None,
-    trajectory_id: str | None = None,
-) -> dict[str, Any]:
+def _refusal(*, reasons: list[str], **fields: Any) -> dict[str, Any]:
+    session_id = fields.get("session_id")
     return {
-        "batch_id": batch_id,
-        "record_id": record_id,
+        "batch_id": fields.get("batch_id"),
+        "record_id": fields.get("record_id"),
         "reason_codes": _unique_reasons(reasons),
-        "rights_envelope_sha256": rights_envelope_sha256,
-        "session_file": session_file,
+        "rights_envelope_sha256": fields.get("rights_envelope_sha256"),
+        "session_file": fields.get("session_file"),
         "session_id": session_id if _nonempty_str(session_id) else None,
-        "session_sha256": session_sha256,
+        "session_sha256": fields.get("session_sha256"),
         "status": "refused",
-        "trajectory_id": trajectory_id,
+        "trajectory_id": fields.get("trajectory_id"),
     }
 
 
