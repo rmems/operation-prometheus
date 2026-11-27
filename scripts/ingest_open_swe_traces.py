@@ -689,48 +689,59 @@ def stage_split() -> dict:
     }
 
 
+STAGE_FUNCS = {
+    "census": stage_census,
+    "upstream": stage_upstream,
+    "filter": stage_filter,
+    "records": stage_records,
+    "curate": stage_curate,
+    "verify": stage_verify,
+    "split": stage_split,
+}
+# Only the summary-producing stages are logged; the cached-index stages are quiet.
+LOGGED_STAGES = ("curate", "verify", "split")
+
+
+def _run_stages(stage: str) -> dict[str, dict]:
+    """Run the requested stage(s) in pipeline order; collect summaries."""
+    summaries: dict[str, dict] = {}
+    for name, func in STAGE_FUNCS.items():
+        if stage not in ("all", name):
+            continue
+        summaries[name] = func()
+        if name in LOGGED_STAGES:
+            logger.info("%s: %s", name, summaries[name])
+    return summaries
+
+
+def _write_report(summaries: dict[str, dict]) -> None:
+    report = {
+        "revision": HF_REVISION,
+        "config": "v1.0",
+        "census": _load_json(CENSUS_PATH, {}),
+        "filter": _load_json(CANDIDATES_PATH, {}).get("counts", {}),
+        "records": _load_json(RECORDS_PATH, {}).get("counts", {}),
+        "curate": summaries.get("curate"),
+        "verify": summaries.get("verify"),
+        "split": summaries.get("split"),
+    }
+    _write_json(REPORT_PATH, report)
+    logger.info("wrote %s", REPORT_PATH)
+
+
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument(
         "--stage",
         default="all",
-        choices=["all", "census", "upstream", "filter", "records", "curate", "verify", "split"],
+        choices=["all", *STAGE_FUNCS],
     )
     args = parser.parse_args(argv)
     logging.basicConfig(level=logging.INFO, format="%(levelname)s %(message)s")
 
-    stage = args.stage
-    if stage in ("all", "census"):
-        stage_census()
-    if stage in ("all", "upstream"):
-        stage_upstream()
-    if stage in ("all", "filter"):
-        stage_filter()
-    if stage in ("all", "records"):
-        stage_records()
-    if stage in ("all", "curate"):
-        curate_summary = stage_curate()
-        logger.info("curate: %s", curate_summary)
-    verify_summary = split_summary = None
-    if stage in ("all", "verify"):
-        verify_summary = stage_verify()
-        logger.info("verify: %s", verify_summary)
-    if stage in ("all", "split"):
-        split_summary = stage_split()
-        logger.info("split: %s", split_summary)
-    if stage == "all":
-        report = {
-            "revision": HF_REVISION,
-            "config": "v1.0",
-            "census": _load_json(CENSUS_PATH, {}),
-            "filter": _load_json(CANDIDATES_PATH, {}).get("counts", {}),
-            "records": _load_json(RECORDS_PATH, {}).get("counts", {}),
-            "curate": curate_summary,
-            "verify": verify_summary,
-            "split": split_summary,
-        }
-        _write_json(REPORT_PATH, report)
-        logger.info("wrote %s", REPORT_PATH)
+    summaries = _run_stages(args.stage)
+    if args.stage == "all":
+        _write_report(summaries)
     return 0
 
 
