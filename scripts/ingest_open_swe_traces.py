@@ -274,6 +274,42 @@ def _pull_url_for(instance_id: str, upstream_entry: dict) -> tuple[str, str] | N
     return repo, f"https://github.com/{repo}/pull/{iid['num']}"
 
 
+def _candidate_from_row(name: str, row: dict, upstream: dict, counts) -> dict | None:
+    """One filter-pipeline candidate, or None after counting the exclusion."""
+    if row["resolved"] != 1:
+        counts["excluded_not_resolved"] += 1
+        return None
+    counts["resolved"] += 1
+    if row["language"] not in TARGET_LANGUAGES:
+        counts["excluded_language"] += 1
+        return None
+    if row["license"] not in ALLOWED_LICENSES:
+        counts["excluded_license"] += 1
+        return None
+    entry = upstream.get(row["instance_id"])
+    if entry is None:
+        counts["excluded_no_upstream_join"] += 1
+        return None
+    pull = _pull_url_for(row["instance_id"], entry)
+    if pull is None:
+        counts["excluded_no_pr_number"] += 1
+        return None
+    repo, pull_url = pull
+    parts = name.split("/")
+    return {
+        "trajectory_id": row["trajectory_id"],
+        "instance_id": row["instance_id"],
+        "repo": repo,
+        "pull_url": pull_url,
+        "pr_number": int(IID_RE.match(row["instance_id"])["num"]),
+        "language": row["language"],
+        "license": row["license"],
+        "file": name,
+        "scaffold": SCAFFOLD_BY_DIR.get(parts[1], parts[1]),
+        "teacher": TEACHER_BY_DIR.get(parts[2], parts[2]),
+    }
+
+
 def stage_filter() -> dict:
     """Apply the GH#88 filter pipeline; group candidates per instance."""
     if CANDIDATES_PATH.exists():
@@ -284,42 +320,9 @@ def stage_filter() -> dict:
     per_instance: dict[str, list[dict]] = collections.defaultdict(list)
     for name, row in _iter_light_rows():
         counts["total"] += 1
-        if row["resolved"] != 1:
-            counts["excluded_not_resolved"] += 1
-            continue
-        counts["resolved"] += 1
-        if row["language"] not in TARGET_LANGUAGES:
-            counts["excluded_language"] += 1
-            continue
-        if row["license"] not in ALLOWED_LICENSES:
-            counts["excluded_license"] += 1
-            continue
-        entry = upstream.get(row["instance_id"])
-        if entry is None:
-            counts["excluded_no_upstream_join"] += 1
-            continue
-        pull = _pull_url_for(row["instance_id"], entry)
-        if pull is None:
-            counts["excluded_no_pr_number"] += 1
-            continue
-        repo, pull_url = pull
-        parts = name.split("/")
-        scaffold = SCAFFOLD_BY_DIR.get(parts[1], parts[1])
-        teacher = TEACHER_BY_DIR.get(parts[2], parts[2])
-        per_instance[row["instance_id"]].append(
-            {
-                "trajectory_id": row["trajectory_id"],
-                "instance_id": row["instance_id"],
-                "repo": repo,
-                "pull_url": pull_url,
-                "pr_number": int(IID_RE.match(row["instance_id"])["num"]),
-                "language": row["language"],
-                "license": row["license"],
-                "file": name,
-                "scaffold": scaffold,
-                "teacher": teacher,
-            }
-        )
+        cand = _candidate_from_row(name, row, upstream, counts)
+        if cand is not None:
+            per_instance[row["instance_id"]].append(cand)
 
     candidates: list[dict] = []
     for instance_id, group in per_instance.items():
@@ -365,32 +368,11 @@ def stage_records() -> dict:
         }
         del table
         for trajectory_id, cand in sorted(wanted.items()):
-            meta = metadata_by_id.get(trajectory_id)
-            if meta is None:
-                counts["excluded_missing_metadata"] += 1
-                continue
-            # Preserve the upstream patch byte-for-byte: strip() would eat a
-            # trailing " " context line and desync the last hunk's counts.
-            patch = (meta.get("model_patch") or {}).get("patch") or ""
-            if not patch.strip():
-                counts["excluded_empty_model_patch"] += 1
-                continue
-            if len(patch.encode("utf-8")) >= PATCH_BYTE_CAP:
-                counts["excluded_patch_over_96kib_budget"] += 1
-                continue
-            upstream_entry = upstream[cand["instance_id"]]
-            if not (upstream_entry.get("problem_statement") or "").strip():
-                counts["excluded_empty_problem_statement"] += 1
-                continue
-            category = meta.get("category") or "other"
-            record = _v0_record(cand, meta, patch, category, upstream_entry)
-            policy_hits = _policy_screen(record)
-            if policy_hits:
-                counts["excluded_policy_sensitive"] += 1
-                for hit in policy_hits:
-                    counts[f"policy_{hit}"] += 1
-                continue
-            records.append(record)
+            record = _record_for_candidate(
+                cand, metadata_by_id.get(trajectory_id), upstream, counts
+            )
+            if record is not None:
+                records.append(record)
         del metadata_by_id
         logger.info("records %d/%d %s", index + 1, len(files), name)
 
@@ -400,15 +382,49 @@ def stage_records() -> dict:
     return result
 
 
+def _record_exclusion_reason(cand, meta, upstream) -> str | None:
+    """First exclusion reason for one candidate, or None when it passes."""
+    if meta is None:
+        return "excluded_missing_metadata"
+    patch = (meta.get("model_patch") or {}).get("patch") or ""
+    if not patch.strip():
+        return "excluded_empty_model_patch"
+    if len(patch.encode("utf-8")) >= PATCH_BYTE_CAP:
+        return "excluded_patch_over_96kib_budget"
+    upstream_entry = upstream[cand["instance_id"]]
+    if not (upstream_entry.get("problem_statement") or "").strip():
+        return "excluded_empty_problem_statement"
+    return None
+
+
+def _record_for_candidate(cand, meta, upstream, counts) -> dict | None:
+    """Build one strict-v0 record or count the exclusion and return None."""
+    reason = _record_exclusion_reason(cand, meta, upstream)
+    if reason is not None:
+        counts[reason] += 1
+        return None
+    # Preserve the upstream patch byte-for-byte: strip() would eat a
+    # trailing " " context line and desync the last hunk's counts.
+    patch = (meta.get("model_patch") or {}).get("patch") or ""
+    record = _v0_record(cand, meta, patch, upstream[cand["instance_id"]])
+    policy_hits = _policy_screen(record)
+    if policy_hits:
+        counts["excluded_policy_sensitive"] += 1
+        for hit in policy_hits:
+            counts[f"policy_{hit}"] += 1
+        return None
+    return record
+
+
 def _iter_strings(obj):
     if isinstance(obj, str):
         yield obj
-    elif isinstance(obj, dict):
-        for key, value in obj.items():
-            if isinstance(key, str):
-                yield key
-            yield from _iter_strings(value)
-    elif isinstance(obj, list):
+        return
+    if isinstance(obj, dict):
+        # JSON object keys are always strings.
+        yield from _iter_strings(list(obj.items()))
+        return
+    if isinstance(obj, (list, tuple)):
         for value in obj:
             yield from _iter_strings(value)
 
@@ -428,33 +444,49 @@ def _policy_screen(record: dict) -> list[str]:
     return hits
 
 
-def _v0_record(
-    cand: dict, meta: dict, patch: str, category: str, upstream_entry: dict
-) -> dict:
-    """One strict pr_trajectory_v0 record plus migration extension fields."""
-    teacher_name = ((meta.get("teacher_model") or {}).get("name")) or cand["teacher"]
-    has_upstream_patch = upstream_entry["has_reference_patch"]
-    has_test_patch = upstream_entry["has_test_patch"]
-    evidence_bits = [
+def _evidence_detail(upstream_entry: dict) -> str:
+    bits = [
         f"resolved=1 in {HF_DATASET}@{HF_REVISION[:12]}",
         "upstream FAIL_TO_PASS evaluation",
-        "test_patch present" if has_test_patch else "no test_patch recorded",
-        "reference_patch present" if has_upstream_patch else "no reference_patch",
+        (
+            "test_patch present"
+            if upstream_entry["has_test_patch"]
+            else "no test_patch recorded"
+        ),
+        (
+            "reference_patch present"
+            if upstream_entry["has_reference_patch"]
+            else "no reference_patch"
+        ),
     ]
-    created_at = (upstream_entry.get("created_at") or "").strip()
-    # GitHub-created timestamps arrive naive ("YYYY-MM-DD HH:MM:SS"); they are
-    # UTC by construction, so normalize losslessly to RFC-3339 Z form.
-    # This is the reference PR's *creation* instant — the upstream data has no
-    # merge timestamp — so it goes in `created_at`, never `timestamp`/`merged_at`:
-    # for outcome=merged the migrator treats those as the terminal instant and
-    # would otherwise date the merge at PR creation.
-    timestamp = None
-    if created_at:
-        timestamp = (
-            created_at
-            if created_at.endswith("Z") or "+" in created_at[10:]
-            else created_at.replace(" ", "T") + "Z"
-        )
+    return "; ".join(bits)
+
+
+def _rfc3339_utc(naive_or_z: str) -> str | None:
+    """Normalize a GitHub timestamp to RFC-3339 Z form (UTC by construction)."""
+    created_at = naive_or_z.strip()
+    if not created_at:
+        return None
+    if created_at.endswith("Z") or "+" in created_at[10:]:
+        return created_at
+    return created_at.replace(" ", "T") + "Z"
+
+
+def _before_context(cand: dict, upstream_entry: dict, teacher_name: str) -> str:
+    return (
+        f"Repository {cand['repo']} at base_commit "
+        f"{upstream_entry['base_commit']} (language {cand['language']}, "
+        f"license {cand['license']}). Source instance "
+        f"{cand['instance_id']} from {UPSTREAM_DATASET}@"
+        f"{UPSTREAM_REVISION[:12]}; teacher {teacher_name} via "
+        f"{cand['scaffold']} harness; trajectory {cand['trajectory_id']}."
+    )
+
+
+def _v0_record(cand: dict, meta: dict, patch: str, upstream_entry: dict) -> dict:
+    """One strict pr_trajectory_v0 record plus migration extension fields."""
+    category = meta.get("category") or "other"
+    teacher_name = ((meta.get("teacher_model") or {}).get("name")) or cand["teacher"]
     record = {
         "id": f"oswe-{cand['trajectory_id']}",
         "repo": cand["repo"],
@@ -465,20 +497,13 @@ def _v0_record(
         "domain": "general",
         "task_type": CATEGORY_TO_TASK_TYPE.get(category, "other"),
         "issue_context": upstream_entry["problem_statement"],
-        "before_context": (
-            f"Repository {cand['repo']} at base_commit "
-            f"{upstream_entry['base_commit']} (language {cand['language']}, "
-            f"license {cand['license']}). Source instance "
-            f"{cand['instance_id']} from {UPSTREAM_DATASET}@"
-            f"{UPSTREAM_REVISION[:12]}; teacher {teacher_name} via "
-            f"{cand['scaffold']} harness; trajectory {cand['trajectory_id']}."
-        ),
+        "before_context": _before_context(cand, upstream_entry, teacher_name),
         "patch": patch,
         "validation": [
             {
                 "type": "test",
                 "result": "pass",
-                "detail": "; ".join(evidence_bits),
+                "detail": _evidence_detail(upstream_entry),
             }
         ],
         # outcome describes the reference PR's state. SWE-bench-family tasks are
@@ -495,8 +520,9 @@ def _v0_record(
     # honestly rather than migrating a null). With no merge timestamp in the
     # source, outcome=merged records refuse `missing_terminal_timestamp` in v1
     # migration — fail-closed by design, not silently mislabeled.
-    if timestamp:
-        record["created_at"] = timestamp
+    created_at = _rfc3339_utc(upstream_entry.get("created_at") or "")
+    if created_at:
+        record["created_at"] = created_at
     base_oid = (upstream_entry.get("base_commit") or "").strip()
     if base_oid:
         record["base_oid"] = base_oid
@@ -523,6 +549,26 @@ def _parse_diff_files(patch: str) -> int:
     return len(re.findall(r"^diff --git ", patch, flags=re.M))
 
 
+def _group_casefolded_repo(records) -> dict[str, list[dict]]:
+    """Group records by lowercased repo: case variants are one repo."""
+    groups: dict[str, list[dict]] = collections.defaultdict(list)
+    for rec in records:
+        groups[rec["repo"].lower()].append(rec)
+    return groups
+
+
+def _round_robin_pick(buckets: dict[str, list[dict]], limit: int) -> list[dict]:
+    """One record per repo per pass over sorted repos until limit is hit."""
+    picked: list[dict] = []
+    repos = sorted(buckets)
+    while len(picked) < limit and repos:
+        for repo in repos:
+            if buckets[repo] and len(picked) < limit:
+                picked.append(buckets[repo].pop(0))
+        repos = [r for r in repos if buckets[r]]
+    return picked
+
+
 def stage_curate() -> dict:
     """Deterministic repo-stratified subsample + full filtered JSONL."""
     data = stage_records()
@@ -532,21 +578,15 @@ def stage_curate() -> dict:
         return rec["id"]
 
     curated: list[dict] = []
-    by_lang: dict[str, dict[str, list[dict]]] = collections.defaultdict(
-        lambda: collections.defaultdict(list)
-    )
-    for rec in records:
-        # case-folded: OceanParcels/parcels and OceanParcels/Parcels are one repo
-        by_lang[rec["language"]][rec["repo"].lower()].append(rec)
     for language in ("Python", "Rust"):
-        repos = sorted(by_lang[language])
-        picked = 0
-        while picked < CURATED_PER_LANGUAGE and repos:
-            for repo in repos:
-                if by_lang[language][repo] and picked < CURATED_PER_LANGUAGE:
-                    curated.append(by_lang[language][repo].pop(0))
-                    picked += 1
-            repos = [r for r in repos if by_lang[language][r]]
+        curated.extend(
+            _round_robin_pick(
+                _group_casefolded_repo(
+                    (r for r in records if r["language"] == language)
+                ),
+                CURATED_PER_LANGUAGE,
+            )
+        )
     curated.sort(key=_sort_key)
 
     filtered_sorted = sorted(records, key=_sort_key)
@@ -584,6 +624,34 @@ def stage_verify() -> dict:
     return {"rust_sample_size": len(sample), "rust_sample": checks}
 
 
+def _swebench_rows(name: str, revision: str):
+    """Yield SWE-bench rows for every parquet file at the pinned revision."""
+    info = HfApi().dataset_info(name, revision=revision)
+    parquet = [s.rfilename for s in info.siblings if s.rfilename.endswith(".parquet")]
+    for rfilename in parquet:
+        path = hf_hub_download(name, rfilename, repo_type="dataset", revision=revision)
+        for row in pq.read_table(path, columns=["instance_id", "repo"]).to_pylist():
+            yield row
+
+
+def _load_swebench_sets() -> dict[str, set]:
+    """Case-folded repo set + instance-id set across both SWE-bench eval sets."""
+    swe_bench: dict[str, set] = {"repos": set(), "instance_ids": set()}
+    for name, revision in SWE_BENCH_REVISIONS.items():
+        for row in _swebench_rows(name, revision):
+            swe_bench["repos"].add(row["repo"].lower())
+            swe_bench["instance_ids"].add(row["instance_id"])
+    return swe_bench
+
+
+def _split_bucket(repo_key: str, holdout: set) -> str:
+    """Deterministic train/eval bucket for one case-folded repo key."""
+    if repo_key in holdout:
+        return "eval_only_swebench"
+    digest = int(hashlib.sha256(repo_key.encode("utf-8")).hexdigest()[:8], 16)
+    return "eval" if digest % 5 == 0 else "train"
+
+
 def stage_split() -> dict:
     """SWE-bench contamination check + deterministic repo split."""
     records = stage_records()["records"]
@@ -596,19 +664,7 @@ def stage_split() -> dict:
     }
     filtered_repos = sorted({r["repo"] for r in records})
 
-    swe_bench: dict[str, set] = {"repos": set(), "instance_ids": set()}
-    api = HfApi()
-    for name, revision in SWE_BENCH_REVISIONS.items():
-        info = api.dataset_info(name, revision=revision)
-        parquet = [s.rfilename for s in info.siblings if s.rfilename.endswith(".parquet")]
-        for rfilename in parquet:
-            path = hf_hub_download(
-                name, rfilename, repo_type="dataset", revision=revision
-            )
-            table = pq.read_table(path, columns=["instance_id", "repo"])
-            for row in table.to_pylist():
-                swe_bench["repos"].add(row["repo"].lower())
-                swe_bench["instance_ids"].add(row["instance_id"])
+    swe_bench = _load_swebench_sets()
 
     # Repo identity is case-insensitive on GitHub; fold before comparing or
     # hashing so case variants can never land on opposite sides of the split.
@@ -621,14 +677,7 @@ def stage_split() -> dict:
 
     split: dict[str, list[str]] = {"train": [], "eval": [], "eval_only_swebench": []}
     for key in sorted(canonical):
-        repo = canonical[key]
-        digest = int(hashlib.sha256(key.encode("utf-8")).hexdigest()[:8], 16)
-        if key in holdout:
-            split["eval_only_swebench"].append(repo)
-        elif digest % 5 == 0:
-            split["eval"].append(repo)
-        else:
-            split["train"].append(repo)
+        split[_split_bucket(key, holdout)].append(canonical[key])
     return {
         "swe_bench_repo_overlap": repo_overlap,
         "swe_bench_instance_id_overlap": iid_overlap,
