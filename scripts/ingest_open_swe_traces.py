@@ -27,6 +27,7 @@ import json
 import logging
 import re
 import sys
+from itertools import islice, zip_longest
 from pathlib import Path
 
 import fsspec
@@ -353,21 +354,8 @@ def stage_records() -> dict:
     records: list[dict] = []
     files = sorted(by_file)
     for index, name in enumerate(files):
-        wanted = by_file[name]
-        with fs.open(_resolve_url(name)) as handle:
-            table = pq.ParquetFile(handle).read(
-                columns=[
-                    "trajectory_id",
-                    "metadata.category",
-                    "metadata.model_patch",
-                    "metadata.teacher_model.name",
-                ]
-            )
-        metadata_by_id = {
-            row["trajectory_id"]: row["metadata"] for row in table.to_pylist()
-        }
-        del table
-        for trajectory_id, cand in sorted(wanted.items()):
+        metadata_by_id = _fetch_metadata_by_id(fs, name)
+        for trajectory_id, cand in sorted(by_file[name].items()):
             record = _record_for_candidate(
                 cand, metadata_by_id.get(trajectory_id), upstream, counts
             )
@@ -382,11 +370,30 @@ def stage_records() -> dict:
     return result
 
 
+def _fetch_metadata_by_id(fs, name: str) -> dict[str, dict]:
+    """trajectory_id -> metadata struct for one parquet file, projected narrow."""
+    with fs.open(_resolve_url(name)) as handle:
+        table = pq.ParquetFile(handle).read(
+            columns=[
+                "trajectory_id",
+                "metadata.category",
+                "metadata.model_patch",
+                "metadata.teacher_model.name",
+            ]
+        )
+    return {row["trajectory_id"]: row["metadata"] for row in table.to_pylist()}
+
+
+def _model_patch(meta: dict) -> str:
+    """The trajectory's patch text, byte-exact as upstream authored it."""
+    return (meta.get("model_patch") or {}).get("patch") or ""
+
+
 def _record_exclusion_reason(cand, meta, upstream) -> str | None:
     """First exclusion reason for one candidate, or None when it passes."""
     if meta is None:
         return "excluded_missing_metadata"
-    patch = (meta.get("model_patch") or {}).get("patch") or ""
+    patch = _model_patch(meta)
     if not patch.strip():
         return "excluded_empty_model_patch"
     if len(patch.encode("utf-8")) >= PATCH_BYTE_CAP:
@@ -405,8 +412,7 @@ def _record_for_candidate(cand, meta, upstream, counts) -> dict | None:
         return None
     # Preserve the upstream patch byte-for-byte: strip() would eat a
     # trailing " " context line and desync the last hunk's counts.
-    patch = (meta.get("model_patch") or {}).get("patch") or ""
-    record = _v0_record(cand, meta, patch, upstream[cand["instance_id"]])
+    record = _v0_record(cand, meta, _model_patch(meta), upstream[cand["instance_id"]])
     policy_hits = _policy_screen(record)
     if policy_hits:
         counts["excluded_policy_sensitive"] += 1
@@ -483,10 +489,30 @@ def _before_context(cand: dict, upstream_entry: dict, teacher_name: str) -> str:
     )
 
 
+def _teacher_name(meta: dict, cand: dict) -> str:
+    """Teacher from trajectory metadata, falling back to the config dir."""
+    teacher = meta.get("teacher_model") or {}
+    return teacher.get("name") or cand["teacher"]
+
+
+def _attach_extensions(record: dict, upstream_entry: dict) -> None:
+    # Documented migration extensions (real upstream evidence, never fabricated;
+    # omitted when the upstream field is absent so the migrator quarantines
+    # honestly rather than migrating a null). With no merge timestamp in the
+    # source, outcome=merged records refuse `missing_terminal_timestamp` in v1
+    # migration — fail-closed by design, not silently mislabeled.
+    created_at = _rfc3339_utc(upstream_entry.get("created_at") or "")
+    if created_at:
+        record["created_at"] = created_at
+    base_oid = (upstream_entry.get("base_commit") or "").strip()
+    if base_oid:
+        record["base_oid"] = base_oid
+
+
 def _v0_record(cand: dict, meta: dict, patch: str, upstream_entry: dict) -> dict:
     """One strict pr_trajectory_v0 record plus migration extension fields."""
     category = meta.get("category") or "other"
-    teacher_name = ((meta.get("teacher_model") or {}).get("name")) or cand["teacher"]
+    teacher_name = _teacher_name(meta, cand)
     record = {
         "id": f"oswe-{cand['trajectory_id']}",
         "repo": cand["repo"],
@@ -515,17 +541,7 @@ def _v0_record(cand: dict, meta: dict, patch: str, upstream_entry: dict) -> dict
     # Repo pipeline heuristic over the record's own fields (no raw collection
     # context): merged + issue_context + passing validation → 0.8.
     record["quality_score"] = score_quality(record)
-    # Documented migration extensions (real upstream evidence, never fabricated;
-    # omitted when the upstream field is absent so the migrator quarantines
-    # honestly rather than migrating a null). With no merge timestamp in the
-    # source, outcome=merged records refuse `missing_terminal_timestamp` in v1
-    # migration — fail-closed by design, not silently mislabeled.
-    created_at = _rfc3339_utc(upstream_entry.get("created_at") or "")
-    if created_at:
-        record["created_at"] = created_at
-    base_oid = (upstream_entry.get("base_commit") or "").strip()
-    if base_oid:
-        record["base_oid"] = base_oid
+    _attach_extensions(record, upstream_entry)
     return record
 
 
@@ -558,15 +574,19 @@ def _group_casefolded_repo(records) -> dict[str, list[dict]]:
 
 
 def _round_robin_pick(buckets: dict[str, list[dict]], limit: int) -> list[dict]:
-    """One record per repo per pass over sorted repos until limit is hit."""
-    picked: list[dict] = []
-    repos = sorted(buckets)
-    while len(picked) < limit and repos:
-        for repo in repos:
-            if buckets[repo] and len(picked) < limit:
-                picked.append(buckets[repo].pop(0))
-        repos = [r for r in repos if buckets[r]]
-    return picked
+    """One record per repo per pass over sorted repos until limit is hit.
+
+    Pass k takes element k of each non-exhausted repo in sorted order, which
+    is exactly zip_longest over the per-repo lists with padding filtered out.
+    """
+    columns = [buckets[repo] for repo in sorted(buckets)]
+    interleaved = (
+        record
+        for round_ in zip_longest(*columns)
+        for record in round_
+        if record is not None
+    )
+    return list(islice(interleaved, limit))
 
 
 def stage_curate() -> dict:
@@ -634,6 +654,16 @@ def _swebench_rows(name: str, revision: str):
             yield row
 
 
+def _filtered_instance_ids(records: list[dict], candidates: list[dict]) -> set:
+    """Instance ids of candidates that survived into records."""
+    record_ids = {r["id"] for r in records}
+    return {
+        c["instance_id"]
+        for c in candidates
+        if f"oswe-{c['trajectory_id']}" in record_ids
+    }
+
+
 def _load_swebench_sets() -> dict[str, set]:
     """Case-folded repo set + instance-id set across both SWE-bench eval sets."""
     swe_bench: dict[str, set] = {"repos": set(), "instance_ids": set()}
@@ -656,12 +686,7 @@ def stage_split() -> dict:
     """SWE-bench contamination check + deterministic repo split."""
     records = stage_records()["records"]
     candidates = stage_filter()["candidates"]
-    record_ids = {r["id"] for r in records}
-    filtered_iids = {
-        c["instance_id"]
-        for c in candidates
-        if f"oswe-{c['trajectory_id']}" in record_ids
-    }
+    filtered_iids = _filtered_instance_ids(records, candidates)
     filtered_repos = sorted({r["repo"] for r in records})
 
     swe_bench = _load_swebench_sets()
