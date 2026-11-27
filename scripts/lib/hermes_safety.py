@@ -33,7 +33,7 @@ def _json_credential_string(value: str) -> bool:
         return False
     try:
         parsed = json.loads(text)
-    except json.JSONDecodeError:
+    except (json.JSONDecodeError, ValueError):
         return False
     return _contains_credential_key(parsed)
 
@@ -119,7 +119,7 @@ def _invalid_tool_payload(message: Any) -> bool:
 def _json_well_formed(text: str) -> bool:
     try:
         json.loads(text)
-    except json.JSONDecodeError:
+    except (json.JSONDecodeError, ValueError):
         return False
     return True
 

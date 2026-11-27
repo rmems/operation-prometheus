@@ -733,6 +733,18 @@ def _build_report(
 
 
 def _refusal(*, reasons: list[str], **fields: Any) -> dict[str, Any]:
+    allowed = {
+        "batch_id",
+        "record_id",
+        "rights_envelope_sha256",
+        "session_file",
+        "session_id",
+        "session_sha256",
+        "trajectory_id",
+    }
+    unknown = sorted(set(fields) - allowed)
+    if unknown:
+        raise TypeError(f"unexpected refusal fields: {', '.join(unknown)}")
     session_id = fields.get("session_id")
     return {
         "batch_id": fields.get("batch_id"),

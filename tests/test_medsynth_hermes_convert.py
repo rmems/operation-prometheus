@@ -403,3 +403,17 @@ def test_strict_validator_rechecks_pin_and_trace_consistency(tmp_path: Path):
     errors = validate_file(paths["output"], v0, v1, strict_policy=True)
     assert any("pin entry hash mismatch" in error for error in errors)
     assert any("event_count" in error for error in errors)
+
+
+
+def test_oversized_json_integer_does_not_crash_safety_scan(tmp_path: Path):
+    session = _session()
+    session["messages"][1]["content"] = '{"value": ' + ("9" * 5000) + "}"
+    session_text = _session_text(session)
+    paths = _write_case(
+        tmp_path,
+        manifest=_manifest([_envelope(_sha256_text(session_text))]),
+        session_text=session_text,
+    )
+    report = _run(paths)
+    assert report["accepted_count"] + report["refused_count"] == 1
