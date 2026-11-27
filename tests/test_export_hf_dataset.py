@@ -14,7 +14,9 @@ def test_every_record_gets_source_license():
     records = ex.load_records()
     assert records, "expected committed jsonl records"
     for rec in records:
-        assert rec["source_license"] == ex.REPO_LICENSES[rec["repo"]]
+        expected = ex.REPO_LICENSES.get(rec["repo"]) or rec.get("license")
+        assert expected, f"{rec['repo']} lacks any license evidence"
+        assert rec["source_license"] == expected
 
 
 def test_export_is_deterministic():
@@ -30,7 +32,14 @@ def test_repo_license_map_covers_all_jsonl_repos():
     import export_hf_dataset as ex
 
     records = ex.load_records()
-    assert {r["repo"] for r in records} <= set(ex.REPO_LICENSES)
+    # Repos are covered by the curated map or by a per-record license carried
+    # by external ingests whose rows span many upstream repos.
+    uncovered = {
+        r["repo"]
+        for r in records
+        if r["repo"] not in ex.REPO_LICENSES and not r.get("license")
+    }
+    assert not uncovered
 
 
 def test_renamed_repos_are_canonicalized():
@@ -56,7 +65,7 @@ def test_card_lists_every_repo_and_license():
     card = ex.build_card(records, manifest)
     for repo in manifest["repo_counts"]:
         assert repo in card
-        assert ex.REPO_LICENSES[repo] in card
+        assert manifest["repo_licenses"][repo] in card
     assert "source_license" in card
 
 
