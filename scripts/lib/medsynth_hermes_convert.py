@@ -185,24 +185,7 @@ def _convert_documents(
         raw_validator=_raw_validator(),
         artifact_validator=_artifact_validator(),
     )
-    artifacts: list[dict[str, Any]] = []
-    decisions: list[dict[str, Any]] = []
-    referenced_files: set[str] = set()
-    seen_record_ids: set[str] = set()
-    seen_session_bindings: set[tuple[str, str]] = set()
-    envelopes = manifest.get("rights_envelopes")
-    if isinstance(envelopes, list):
-        for envelope in envelopes:
-            artifact, decision = _convert_envelope(
-                envelope,
-                context=context,
-                referenced_files=referenced_files,
-                seen_record_ids=seen_record_ids,
-                seen_session_bindings=seen_session_bindings,
-            )
-            decisions.append(decision)
-            if artifact is not None:
-                artifacts.append(artifact)
+    artifacts, decisions, referenced_files = _convert_envelope_list(manifest, context)
     decisions.extend(_orphan_refusals(source, context, referenced_files))
     if not decisions:
         decisions.append(
@@ -214,91 +197,132 @@ def _convert_documents(
     return artifacts, decisions
 
 
+
+def _convert_envelope_list(
+    manifest: dict[str, Any], context: _BatchContext
+) -> tuple[list[dict[str, Any]], list[dict[str, Any]], set[str]]:
+    artifacts: list[dict[str, Any]] = []
+    decisions: list[dict[str, Any]] = []
+    referenced_files: set[str] = set()
+    envelopes = manifest.get("rights_envelopes")
+    if not isinstance(envelopes, list):
+        return artifacts, decisions, referenced_files
+    for envelope in envelopes:
+        artifact, decision = _convert_envelope(
+            envelope,
+            context=context,
+            referenced_files=referenced_files,
+        )
+        decisions.append(decision)
+        if artifact is not None:
+            artifacts.append(artifact)
+    return artifacts, decisions, referenced_files
+
 def _manifest_errors(manifest: dict[str, Any]) -> list[str]:
-    reasons: list[str] = []
-    if manifest.get("manifest_version") != 1:
-        reasons.append("invalid_batch_manifest")
-    if not _nonempty_str(manifest.get("batch_id")):
-        reasons.append("invalid_batch_manifest")
-    if not isinstance(manifest.get("rights_envelopes"), list):
-        reasons.append("invalid_batch_manifest")
-    teacher_pin = manifest.get("teacher_pin")
+    return _unique_reasons(
+        [*_manifest_shape_errors(manifest), *_teacher_pin_errors(manifest.get("teacher_pin"))]
+    )
+
+
+def _manifest_shape_errors(manifest: dict[str, Any]) -> list[str]:
+    invalid = any(
+        (
+            manifest.get("manifest_version") != 1,
+            not _nonempty_str(manifest.get("batch_id")),
+            not isinstance(manifest.get("rights_envelopes"), list),
+        )
+    )
+    return ["invalid_batch_manifest"] if invalid else []
+
+
+def _teacher_pin_errors(teacher_pin: Any) -> list[str]:
     if not isinstance(teacher_pin, dict):
+        return ["incomplete_teacher_pin"]
+    missing = [
+        field
+        for field in _TEACHER_PIN_REQUIRED
+        if not _nonempty_str(teacher_pin.get(field))
+    ]
+    reasons = []
+    if missing or not _is_sha256(teacher_pin.get("pin_entry_sha256")):
         reasons.append("incomplete_teacher_pin")
-    else:
-        missing = [
-            field
-            for field in _TEACHER_PIN_REQUIRED
-            if not _nonempty_str(teacher_pin.get(field))
-        ]
-        if missing or not _is_sha256(teacher_pin.get("pin_entry_sha256")):
-            reasons.append("incomplete_teacher_pin")
-        route = str(teacher_pin.get("route") or "")
-        if "hermes" not in route.casefold():
-            reasons.append("teacher_route_not_hermes")
-    return _unique_reasons(reasons)
+    route = str(teacher_pin.get("route") or "")
+    if "hermes" not in route.casefold():
+        reasons.append("teacher_route_not_hermes")
+    return reasons
 
 
 def _manifest_duplicate_errors(manifest: dict[str, Any]) -> list[str]:
     envelopes = manifest.get("rights_envelopes")
     if not isinstance(envelopes, list):
         return []
-    record_ids: set[str] = set()
-    bindings: set[tuple[str, str]] = set()
-    duplicate = False
-    for envelope in envelopes:
-        if not isinstance(envelope, dict):
-            continue
-        record_id = envelope.get("record_id")
-        if _nonempty_str(record_id):
-            duplicate = duplicate or str(record_id) in record_ids
-            record_ids.add(str(record_id))
-        binding = _session_binding(envelope)
-        if binding is not None:
-            duplicate = duplicate or binding in bindings
-            bindings.add(binding)
-    return ["duplicate_rights_envelope_binding"] if duplicate else []
+    keys = [key for envelope in envelopes for key in _envelope_identity_keys(envelope)]
+    return ["duplicate_rights_envelope_binding"] if len(keys) != len(set(keys)) else []
 
+
+def _envelope_identity_keys(envelope: Any) -> list[tuple[str, Any]]:
+    if not isinstance(envelope, dict):
+        return []
+    keys = []
+    record_id = envelope.get("record_id")
+    if _nonempty_str(record_id):
+        keys.append(("record", str(record_id)))
+    binding = _session_binding(envelope)
+    if binding is not None:
+        keys.append(("session", binding))
+    return keys
 
 def _convert_envelope(
     envelope: Any,
     *,
     context: _BatchContext,
     referenced_files: set[str],
-    seen_record_ids: set[str],
-    seen_session_bindings: set[tuple[str, str]],
 ) -> tuple[dict[str, Any] | None, dict[str, Any]]:
     if not isinstance(envelope, dict):
         return None, _refusal(reasons=[*context.base_reasons, "invalid_rights_envelope"])
-    envelope_digest = _canonical_sha256(envelope)
-    record_id = _optional_str(envelope.get("record_id"))
-    session_file = _optional_str(envelope.get("session_file"))
-    reasons = [*_envelope_errors(envelope), *_cross_bind_errors(envelope, context.manifest)]
-    reasons.extend(_duplicate_reasons(envelope, seen_record_ids, seen_session_bindings))
-    if record_id:
-        seen_record_ids.add(record_id)
+    decision_base = _envelope_decision_base(envelope, context)
     binding = _session_binding(envelope)
+    session_file = decision_base["session_file"]
     if session_file is not None and _safe_session_file(session_file):
         referenced_files.add(session_file)
-    if binding is not None:
-        seen_session_bindings.add(binding)
-    decision_base = {
+    reasons = [
+        *context.base_reasons,
+        *_envelope_errors(envelope),
+        *_cross_bind_errors(envelope, context.manifest),
+    ]
+    if reasons:
+        return None, _refusal(reasons=_unique_reasons(reasons), **decision_base)
+    assert binding is not None
+    return _convert_bound_session(
+        binding,
+        envelope=envelope,
+        context=context,
+        decision_base=decision_base,
+    )
+
+
+def _envelope_decision_base(
+    envelope: dict[str, Any], context: _BatchContext
+) -> dict[str, Any]:
+    return {
         "batch_id": context.batch_id or None,
-        "record_id": record_id,
-        "rights_envelope_sha256": envelope_digest,
-        "session_file": session_file,
+        "record_id": _optional_str(envelope.get("record_id")),
+        "rights_envelope_sha256": _canonical_sha256(envelope),
+        "session_file": _optional_str(envelope.get("session_file")),
         "session_id": None,
         "session_sha256": _optional_str(envelope.get("session_sha256")),
         "trajectory_id": None,
     }
-    if context.base_reasons or reasons:
-        return None, _refusal(
-            reasons=_unique_reasons([*context.base_reasons, *reasons]),
-            **decision_base,
-        )
-    assert binding is not None
-    session_path = context.session_root / binding[0]
-    read = _read_session(context.boundary, session_path)
+
+
+def _convert_bound_session(
+    binding: tuple[str, str],
+    *,
+    envelope: dict[str, Any],
+    context: _BatchContext,
+    decision_base: dict[str, Any],
+) -> tuple[dict[str, Any] | None, dict[str, Any]]:
+    read = _read_session(context.boundary, context.session_root / binding[0])
     if read.reasons:
         return None, _refusal(
             reasons=_unique_reasons([*context.base_reasons, *read.reasons]),
@@ -335,16 +359,36 @@ def _convert_session_bytes(
             ),
             **decision_base,
         )
-    reasons = ["invalid_session_json"] if _has_lone_surrogate(parsed) else []
-    reasons.extend(_raw_record_errors(parsed, context.raw_validator))
-    reasons.extend(_tool_payload_reasons(parsed))
-    reasons.extend(_safety_reasons(parsed, allow_hidden=True))
+    reasons = _raw_session_reasons(parsed, context)
     if reasons:
         return None, _refusal(
             reasons=_unique_reasons([*context.base_reasons, *reasons]),
             **decision_base,
         )
     decision_base = {**decision_base, "session_id": parsed.get("session_id")}
+    return _convert_safe_session(
+        parsed,
+        envelope=envelope,
+        context=context,
+        decision_base=decision_base,
+    )
+
+
+def _raw_session_reasons(parsed: dict[str, Any], context: _BatchContext) -> list[str]:
+    reasons = ["invalid_session_json"] if _has_lone_surrogate(parsed) else []
+    reasons.extend(_raw_record_errors(parsed, context.raw_validator))
+    reasons.extend(_tool_payload_reasons(parsed))
+    reasons.extend(_safety_reasons(parsed, allow_hidden=True))
+    return reasons
+
+
+def _convert_safe_session(
+    parsed: dict[str, Any],
+    *,
+    envelope: dict[str, Any],
+    context: _BatchContext,
+    decision_base: dict[str, Any],
+) -> tuple[dict[str, Any] | None, dict[str, Any]]:
     try:
         sanitized = strip_hidden_reasoning(sanitize_query_secrets(parsed))
     except UnsafeUrlError:
@@ -375,7 +419,6 @@ def _convert_session_bytes(
     }
     return artifact, decision
 
-
 def _read_session(boundary: LocalFileBoundary, path: Path) -> _SessionRead:
     try:
         if path.is_symlink():
@@ -388,30 +431,46 @@ def _read_session(boundary: LocalFileBoundary, path: Path) -> _SessionRead:
 
 
 def _envelope_errors(envelope: dict[str, Any]) -> list[str]:
+    return _unique_reasons(
+        [
+            *_envelope_shape_errors(envelope),
+            *_pin_hash_errors(envelope),
+            *_session_file_errors(envelope),
+        ]
+    )
+
+
+def _envelope_shape_errors(envelope: dict[str, Any]) -> list[str]:
     missing = [
         field
         for field in _ENVELOPE_REQUIRED
         if not _nonempty_str(envelope.get(field))
     ]
     reasons = ["incomplete_rights_envelope"] if missing else []
-    if any(not _is_sha256(envelope.get(field)) for field in _ENVELOPE_HASH_FIELDS):
-        reasons.append("invalid_rights_envelope")
+    bad_hash = any(
+        not _is_sha256(envelope.get(field)) for field in _ENVELOPE_HASH_FIELDS
+    )
     served_model = envelope.get("served_model")
-    if served_model is not None and not _nonempty_str(served_model):
+    bad_served_model = served_model is not None and not _nonempty_str(served_model)
+    if bad_hash or bad_served_model:
         reasons.append("invalid_rights_envelope")
+    return reasons
+
+
+def _pin_hash_errors(envelope: dict[str, Any]) -> list[str]:
     pin_entry = envelope.get("pin_entry")
     pin_entry_sha256 = envelope.get("pin_entry_sha256")
-    if (
-        _nonempty_str(pin_entry)
-        and _is_sha256(pin_entry_sha256)
-        and _pin_entry_sha256(str(pin_entry)) != pin_entry_sha256
-    ):
-        reasons.append("pin_entry_hash_mismatch")
-    session_file = envelope.get("session_file")
-    if _nonempty_str(session_file) and not _safe_session_file(str(session_file)):
-        reasons.append("unsafe_session_file")
-    return _unique_reasons(reasons)
+    if not _nonempty_str(pin_entry) or not _is_sha256(pin_entry_sha256):
+        return []
+    mismatch = _pin_entry_sha256(str(pin_entry)) != pin_entry_sha256
+    return ["pin_entry_hash_mismatch"] if mismatch else []
 
+
+def _session_file_errors(envelope: dict[str, Any]) -> list[str]:
+    session_file = envelope.get("session_file")
+    if not _nonempty_str(session_file) or _safe_session_file(str(session_file)):
+        return []
+    return ["unsafe_session_file"]
 
 def _cross_bind_errors(envelope: dict[str, Any], manifest: dict[str, Any]) -> list[str]:
     teacher_pin = manifest.get("teacher_pin")
@@ -431,21 +490,6 @@ def _cross_bind_errors(envelope: dict[str, Any], manifest: dict[str, Any]) -> li
         for envelope_field, pin_field in comparisons
     )
     return ["rights_envelope_mismatch"] if mismatched else []
-
-
-def _duplicate_reasons(
-    envelope: dict[str, Any],
-    seen_record_ids: set[str],
-    seen_session_bindings: set[tuple[str, str]],
-) -> list[str]:
-    reasons: list[str] = []
-    record_id = envelope.get("record_id")
-    if _nonempty_str(record_id) and str(record_id) in seen_record_ids:
-        reasons.append("duplicate_record_id")
-    binding = _session_binding(envelope)
-    if binding is not None and binding in seen_session_bindings:
-        reasons.append("duplicate_session_binding")
-    return reasons
 
 
 def _session_binding(envelope: dict[str, Any]) -> tuple[str, str] | None:
@@ -630,32 +674,32 @@ def _orphan_refusals(
     context: _BatchContext,
     referenced_files: set[str],
 ) -> list[dict[str, Any]]:
-    decisions: list[dict[str, Any]] = []
-    for name in source.session_names:
-        if name in referenced_files:
-            continue
-        read = _read_session(context.boundary, context.session_root / name)
-        session_id = None
-        session_sha256 = None
-        reasons = [*_unique_reasons(context.base_reasons), "missing_rights_envelope"]
-        if read.payload is not None:
-            session_sha256 = sha256_bytes(read.payload)
-            parsed, _parse_reason = _parse_json_object(read.payload)
-            if isinstance(parsed, dict):
-                session_id = parsed.get("session_id")
-        else:
-            reasons.extend(read.reasons)
-        decisions.append(
-            _refusal(
-                reasons=_unique_reasons(reasons),
-                batch_id=context.batch_id or None,
-                session_file=name,
-                session_id=session_id,
-                session_sha256=session_sha256,
-            )
-        )
-    return decisions
+    return [
+        _orphan_refusal(name, context)
+        for name in source.session_names
+        if name not in referenced_files
+    ]
 
+
+def _orphan_refusal(name: str, context: _BatchContext) -> dict[str, Any]:
+    read = _read_session(context.boundary, context.session_root / name)
+    session_sha256 = None
+    session_id = None
+    reasons = [*_unique_reasons(context.base_reasons), "missing_rights_envelope"]
+    if read.payload is not None:
+        session_sha256 = sha256_bytes(read.payload)
+        parsed, _parse_reason = _parse_json_object(read.payload)
+        if isinstance(parsed, dict) and not _safety_reasons(parsed, allow_hidden=True):
+            session_id = parsed.get("session_id")
+    else:
+        reasons.extend(read.reasons)
+    return _refusal(
+        reasons=_unique_reasons(reasons),
+        batch_id=context.batch_id or None,
+        session_file=name,
+        session_id=session_id,
+        session_sha256=session_sha256,
+    )
 
 def _build_report(
     decisions: list[dict[str, Any]], manifest: dict[str, Any] | None, digest: str
