@@ -157,6 +157,7 @@
               "event_id": { "type": "string", "minLength": 1 },
               "ordinal": { "type": "integer", "minimum": 1 },
               "role": { "type": "string", "minLength": 1 },
+              "name": { "type": "string", "minLength": 1 },
               "kind": {
                 "enum": ["prompt", "decision", "tool_event", "output", "other"],
                 "description": "Structural classification from the ordered role sequence. Assistant messages before the final assistant message are decisions; the final assistant message is the output. The raw role is always preserved."

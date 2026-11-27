@@ -116,11 +116,15 @@ def convert_files(**options: Any) -> dict[str, Any]:
         raise TypeError(f"unexpected convert_files arguments: {unexpected}")
     if source is not None and not isinstance(source, LocalFileBoundary):
         raise TypeError("source must be a LocalFileBoundary")
-    _refuse_collisions([batch_manifest_path], output_path, report_path)
     boundary = source or LocalFileBoundary()
+    session_names, session_root_reasons = _session_file_names(session_root)
+    input_paths = [
+        batch_manifest_path,
+        *(session_root / name for name in session_names),
+    ]
+    _refuse_collisions(input_paths, output_path, report_path)
     manifest_bytes = boundary.read_bytes(batch_manifest_path)
     manifest, manifest_reason = _parse_json_object(manifest_bytes)
-    session_names, session_root_reasons = _session_file_names(session_root)
     artifacts, decisions = _convert_documents(
         _ConversionInput(
             manifest_bytes=manifest_bytes,
@@ -166,7 +170,11 @@ def _convert_documents(
         return [], [_refusal(reasons=[reason])]
     manifest = source.manifest
     batch_id = str(manifest.get("batch_id") or "")
-    base_reasons = [*_manifest_errors(manifest), *source.session_root_reasons]
+    base_reasons = [
+        *_manifest_errors(manifest),
+        *_manifest_duplicate_errors(manifest),
+        *source.session_root_reasons,
+    ]
     context = _BatchContext(
         boundary=source.boundary,
         session_root=source.session_root,
@@ -229,6 +237,27 @@ def _manifest_errors(manifest: dict[str, Any]) -> list[str]:
         if "hermes" not in route.casefold():
             reasons.append("teacher_route_not_hermes")
     return _unique_reasons(reasons)
+
+
+def _manifest_duplicate_errors(manifest: dict[str, Any]) -> list[str]:
+    envelopes = manifest.get("rights_envelopes")
+    if not isinstance(envelopes, list):
+        return []
+    record_ids: set[str] = set()
+    bindings: set[tuple[str, str]] = set()
+    duplicate = False
+    for envelope in envelopes:
+        if not isinstance(envelope, dict):
+            continue
+        record_id = envelope.get("record_id")
+        if _nonempty_str(record_id):
+            duplicate = duplicate or str(record_id) in record_ids
+            record_ids.add(str(record_id))
+        binding = _session_binding(envelope)
+        if binding is not None:
+            duplicate = duplicate or binding in bindings
+            bindings.add(binding)
+    return ["duplicate_rights_envelope_binding"] if duplicate else []
 
 
 def _convert_envelope(
@@ -306,8 +335,8 @@ def _convert_session_bytes(
             ),
             **decision_base,
         )
-    decision_base = {**decision_base, "session_id": parsed.get("session_id")}
-    reasons = [*_raw_record_errors(parsed, context.raw_validator)]
+    reasons = ["invalid_session_json"] if _has_lone_surrogate(parsed) else []
+    reasons.extend(_raw_record_errors(parsed, context.raw_validator))
     reasons.extend(_tool_payload_reasons(parsed))
     reasons.extend(_safety_reasons(parsed, allow_hidden=True))
     if reasons:
@@ -315,6 +344,7 @@ def _convert_session_bytes(
             reasons=_unique_reasons([*context.base_reasons, *reasons]),
             **decision_base,
         )
+    decision_base = {**decision_base, "session_id": parsed.get("session_id")}
     try:
         sanitized = strip_hidden_reasoning(sanitize_query_secrets(parsed))
     except UnsafeUrlError:
@@ -348,6 +378,8 @@ def _convert_session_bytes(
 
 def _read_session(boundary: LocalFileBoundary, path: Path) -> _SessionRead:
     try:
+        if path.is_symlink():
+            return _SessionRead(payload=None, reasons=["unsafe_session_file"])
         return _SessionRead(payload=boundary.read_bytes(path), reasons=[])
     except FileNotFoundError:
         return _SessionRead(payload=None, reasons=["missing_session_file"])
@@ -429,7 +461,7 @@ def _session_binding(envelope: dict[str, Any]) -> tuple[str, str] | None:
 def _safe_session_file(value: str) -> bool:
     return (
         value.endswith(".session.json")
-        and not any(part in value for part in ("/", "\\", ":"))
+        and not any(part in value for part in ("/", "\\", ":", "\x00"))
         and value not in {".", ".."}
     )
 
@@ -520,6 +552,9 @@ def _trace_event(message: Any, index: int, final_assistant: int) -> dict[str, An
         "ordinal": index + 1,
         "role": role,
     }
+    name = message.get("name")
+    if isinstance(name, str) and name:
+        event["name"] = name
     timestamp = message.get("timestamp")
     if isinstance(timestamp, str) and timestamp:
         event["timestamp"] = timestamp
@@ -663,6 +698,19 @@ def _refusal(
 
 def _canonical_sha256(value: Any) -> str:
     return sha256_bytes(canonical_dumps(value).encode("utf-8"))
+
+
+def _has_lone_surrogate(value: Any) -> bool:
+    if isinstance(value, str):
+        return any(0xD800 <= ord(char) <= 0xDFFF for char in value)
+    if isinstance(value, list):
+        return any(_has_lone_surrogate(item) for item in value)
+    if isinstance(value, dict):
+        return any(
+            _has_lone_surrogate(key) or _has_lone_surrogate(item)
+            for key, item in value.items()
+        )
+    return False
 
 
 def _pin_entry_sha256(pin_entry: str) -> str:

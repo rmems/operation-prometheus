@@ -8,6 +8,7 @@ import sys
 from pathlib import Path
 
 import jsonschema
+import pytest
 
 ROOT = Path(__file__).resolve().parent.parent
 _SCRIPTS = ROOT / "scripts"
@@ -375,3 +376,31 @@ def test_pin_entry_hash_mismatch_is_refused(tmp_path: Path):
     report = _run(paths)
     assert report["refused_count"] == 1
     assert "pin_entry_hash_mismatch" in report["records"][0]["reason_codes"]
+
+
+
+def test_output_cannot_overwrite_bound_session(tmp_path: Path):
+    paths = _default_case(tmp_path)
+    with pytest.raises(RuntimeError, match="overwrite source"):
+        convert_files(
+            batch_manifest_path=paths["batch_manifest"],
+            session_root=paths["session_root"],
+            output_path=paths["session_root"] / SESSION_NAME,
+            report_path=paths["report"],
+        )
+
+
+def test_strict_validator_rechecks_pin_and_trace_consistency(tmp_path: Path):
+    paths = _default_case(tmp_path)
+    _run(paths)
+    artifact = json.loads(paths["output"].read_text(encoding="utf-8"))
+    artifact["rights"]["pin_entry_sha256"] = "0" * 64
+    artifact["trace"]["event_count"] = 99
+    paths["output"].write_text(
+        json.dumps(artifact, sort_keys=True) + "\n", encoding="utf-8"
+    )
+    v0 = jsonschema.Draft7Validator(load_schema(ROOT / "schemas" / "pr_trajectory.schema.json"))
+    v1 = jsonschema.Draft7Validator(load_schema(ROOT / "schemas" / "trajectory_v1.schema.json"))
+    errors = validate_file(paths["output"], v0, v1, strict_policy=True)
+    assert any("pin entry hash mismatch" in error for error in errors)
+    assert any("event_count" in error for error in errors)

@@ -222,6 +222,10 @@ def _versioned_policy_errors(
             errors.append(
                 f"{location} [policy] - hidden reasoning is not allowed in first-party Hermes artifacts"
             )
+        errors.extend(
+            f"{location} [policy] - {message}"
+            for message in _first_party_hermes_errors(record)
+        )
         return errors
     if schema_version not in _V1_VERSIONS and schema_version not in _V1_1_VERSIONS:
         return errors
@@ -231,6 +235,44 @@ def _versioned_policy_errors(
     errors.extend(_terminal_errors(record, events, location))
     errors.extend(_artifact_errors(record.get("artifacts"), location))
     return errors
+
+
+def _first_party_hermes_errors(record: dict) -> list[str]:
+    errors: list[str] = []
+    rights = record.get("rights")
+    teacher = record.get("teacher")
+    trace = record.get("trace")
+    if isinstance(rights, dict) and isinstance(teacher, dict):
+        pin_entry = rights.get("pin_entry")
+        rights_hash = rights.get("pin_entry_sha256")
+        teacher_hash = teacher.get("pin_entry_sha256")
+        if isinstance(pin_entry, str) and isinstance(rights_hash, str):
+            canonical = pin_entry.replace("\r\n", "\n").replace("\r", "\n").strip()
+            digest = hashlib.sha256(canonical.encode("utf-8")).hexdigest()
+            if digest != rights_hash:
+                errors.append("pin entry hash mismatch")
+        if rights_hash != teacher_hash:
+            errors.append("teacher and rights pin hashes differ")
+        for key, value in rights.items():
+            if key.endswith("_url") and isinstance(value, str):
+                errors.extend(private_reference_errors(value))
+    if isinstance(trace, dict):
+        events = trace.get("events")
+        if isinstance(events, list):
+            seen: set[str] = set()
+            for index, event in enumerate(events, start=1):
+                if not isinstance(event, dict):
+                    continue
+                event_id = event.get("event_id")
+                if event_id in seen:
+                    errors.append("duplicate trace event id")
+                if isinstance(event_id, str):
+                    seen.add(event_id)
+                if event.get("ordinal") != index:
+                    errors.append("trace event ordinals are not sequential")
+            if trace.get("event_count") != len(events):
+                errors.append("trace event_count does not match events")
+    return list(dict.fromkeys(errors))
 
 
 def _event_errors(events: object, location: str) -> list[str]:
