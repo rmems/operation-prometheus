@@ -733,9 +733,14 @@ def _run_stages(stage: str) -> dict[str, dict]:
     for name, func in STAGE_FUNCS.items():
         if stage not in ("all", name):
             continue
-        summaries[name] = func()
         if name in LOGGED_STAGES:
+            # Only the report-consuming summaries are retained; the other
+            # stages' full payloads (thousands of records) would pin memory
+            # that _write_report reloads from disk anyway.
+            summaries[name] = func()
             logger.info("%s: %s", name, summaries[name])
+        else:
+            func()
     return summaries
 
 
