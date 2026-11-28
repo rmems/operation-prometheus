@@ -297,9 +297,10 @@ def _trace_event_identity_errors(events: list) -> list[str]:
         if not isinstance(event, dict):
             continue
         event_id = event.get("event_id")
-        if isinstance(event_id, str):
-            if event_id in seen:
-                errors.append("duplicate trace event id")
+        is_str_id = isinstance(event_id, str)
+        if is_str_id and event_id in seen:
+            errors.append("duplicate trace event id")
+        if is_str_id:
             seen.add(event_id)
         if event.get("ordinal") != index:
             errors.append("trace event ordinals are not sequential")
@@ -747,9 +748,9 @@ def main(argv: list[str] | None = None) -> int:
         )
         all_errors.extend(file_errors)
         if not file_errors:
-            print(f"  âœ“ {filepath.name}")
+            print(f"  Ã¢Å“â€œ {filepath.name}")
         else:
-            print(f"  âœ— {filepath.name} ({len(file_errors)} error(s))")
+            print(f"  Ã¢Å“â€” {filepath.name} ({len(file_errors)} error(s))")
 
     if all_errors:
         print("\nValidation FAILED:")
