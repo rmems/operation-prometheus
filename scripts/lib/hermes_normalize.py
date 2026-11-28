@@ -171,7 +171,8 @@ def _is_remote(raw: str) -> bool:
     if lowered.startswith(("http://", "https://", "ftp://")):
         return True
     parsed = urlsplit(raw)
-    return bool(parsed.scheme) and parsed.scheme not in {"", "file"}
+    windows_drive = len(parsed.scheme) == 1 and len(raw) > 1 and raw[1] == ":"
+    return bool(parsed.scheme) and parsed.scheme not in {"", "file"} and not windows_drive
 
 
 def _same_file(left: Path, right: Path) -> bool:

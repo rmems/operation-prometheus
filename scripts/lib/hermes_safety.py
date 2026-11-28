@@ -27,13 +27,17 @@ def _credential_key(key: Any) -> bool:
     return str(key).casefold().replace("-", "_") in _CREDENTIAL_KEY_NAMES
 
 
+def _json_tolerant_loads(text: str) -> Any:
+    return json.loads(text, parse_int=str)
+
+
 def _json_credential_string(value: str) -> bool:
     text = value.strip()
     if not (text.startswith("{") and text.endswith("}")):
         return False
     try:
-        parsed = json.loads(text)
-    except json.JSONDecodeError:
+        parsed = _json_tolerant_loads(text)
+    except (json.JSONDecodeError, ValueError):
         return False
     return _contains_credential_key(parsed)
 
@@ -118,8 +122,8 @@ def _invalid_tool_payload(message: Any) -> bool:
 
 def _json_well_formed(text: str) -> bool:
     try:
-        json.loads(text)
-    except json.JSONDecodeError:
+        _json_tolerant_loads(text)
+    except (json.JSONDecodeError, ValueError):
         return False
     return True
 

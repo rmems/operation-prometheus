@@ -108,6 +108,8 @@ def load_records() -> list[dict]:
     # stays one row per trajectory.
     by_id: dict[str, dict] = {}
     for path, rec in _iter_records():
+        if rec.get("schema_version") == "first_party_hermes_trajectory_v1":
+            continue
         rec["repo"] = canonical_repo(rec["repo"])
         rec["source_urls"] = [_canonical_url(u) for u in rec.get("source_urls", [])]
         # The curated map is authoritative where defined; external ingests

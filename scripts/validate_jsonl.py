@@ -15,8 +15,9 @@ from __future__ import annotations
 import argparse
 import hashlib
 import math
-from datetime import datetime, timezone
 from dataclasses import dataclass
+from datetime import datetime, timezone
+from functools import lru_cache
 from urllib.parse import urlparse
 import json
 import re
@@ -58,8 +59,14 @@ SCHEMA_V1_PATH = (
 SCHEMA_V1_1_PATH = (
     Path(__file__).resolve().parent.parent / "schemas" / "trajectory_v1_1.schema.json"
 )
+SCHEMA_FIRST_PARTY_HERMES_PATH = (
+    Path(__file__).resolve().parent.parent
+    / "schemas"
+    / "first_party_hermes_trajectory.schema.json"
+)
 _V1_VERSIONS = frozenset({"1", "1.0", "v1"})
 _V1_1_VERSIONS = frozenset({"1.1", "v1.1"})
+_FIRST_PARTY_HERMES_VERSIONS = frozenset({"first_party_hermes_trajectory_v1"})
 _SUCCESS_OUTCOMES = frozenset(
     {"pass", "passed", "success", "successful", "verified", "ok"}
 )
@@ -80,11 +87,7 @@ _TERMINAL_DISPOSITIONS = frozenset(
 @dataclass(frozen=True)
 class _LineValidationContext:
     filename: str
-    validators: tuple[
-        jsonschema.Draft7Validator,
-        jsonschema.Draft7Validator,
-        jsonschema.Draft7Validator | None,
-    ]
+    validators: tuple[jsonschema.Draft7Validator, jsonschema.Draft7Validator]
     strict_policy: bool
     seen_ids: dict[str, int]
 
@@ -210,6 +213,16 @@ def _versioned_policy_errors(
     errors: list[str] = []
     if schema_version in _V1_1_VERSIONS and _contains_hidden_reasoning(record):
         errors.append(f"{location} [policy] - hidden reasoning is not allowed in v1.1")
+    if schema_version in _FIRST_PARTY_HERMES_VERSIONS:
+        if _contains_hidden_reasoning(record):
+            errors.append(
+                f"{location} [policy] - hidden reasoning is not allowed in first-party Hermes artifacts"
+            )
+        errors.extend(
+            f"{location} [policy] - {message}"
+            for message in _first_party_hermes_errors(record)
+        )
+        return errors
     if schema_version not in _V1_VERSIONS and schema_version not in _V1_1_VERSIONS:
         return errors
     events = record.get("events")
@@ -219,6 +232,79 @@ def _versioned_policy_errors(
     errors.extend(_artifact_errors(record.get("artifacts"), location))
     return errors
 
+
+def _first_party_hermes_errors(record: dict) -> list[str]:
+    return list(
+        dict.fromkeys(
+            [
+                *_first_party_pin_errors(record),
+                *_first_party_private_url_errors(record),
+                *_first_party_trace_errors(record),
+            ]
+        )
+    )
+
+
+def _first_party_pin_errors(record: dict) -> list[str]:
+    rights = record.get("rights")
+    teacher = record.get("teacher")
+    if not isinstance(rights, dict) or not isinstance(teacher, dict):
+        return []
+    errors = []
+    pin_entry = rights.get("pin_entry")
+    rights_hash = rights.get("pin_entry_sha256")
+    if isinstance(pin_entry, str) and isinstance(rights_hash, str):
+        canonical = pin_entry.replace(chr(13) + chr(10), chr(10)).replace(chr(13), chr(10)).strip()
+        try:
+            pin_digest = hashlib.sha256(canonical.encode("utf-8")).hexdigest()
+        except UnicodeEncodeError:
+            errors.append("pin entry is not valid Unicode")
+        else:
+            if pin_digest != rights_hash:
+                errors.append("pin entry hash mismatch")
+    if rights_hash != teacher.get("pin_entry_sha256"):
+        errors.append("teacher and rights pin hashes differ")
+    return errors
+
+
+def _first_party_private_url_errors(record: dict) -> list[str]:
+    rights = record.get("rights")
+    if not isinstance(rights, dict):
+        return []
+    return [
+        hit
+        for key, value in rights.items()
+        if key.endswith("_url") and isinstance(value, str)
+        for hit in private_reference_errors(value)
+    ]
+
+
+def _first_party_trace_errors(record: dict) -> list[str]:
+    trace = record.get("trace")
+    if not isinstance(trace, dict) or not isinstance(trace.get("events"), list):
+        return []
+    events = trace["events"]
+    errors = [*_trace_event_identity_errors(events)]
+    if trace.get("event_count") != len(events):
+        errors.append("trace event_count does not match events")
+    return errors
+
+
+def _trace_event_identity_errors(events: list) -> list[str]:
+    seen: set[str] = set()
+    errors: list[str] = []
+    for index, event in enumerate(events, start=1):
+        if not isinstance(event, dict):
+            continue
+        event_id = event.get("event_id")
+        is_str_id = isinstance(event_id, str)
+        if is_str_id and event_id in seen:
+            errors.append("duplicate trace event id")
+        if is_str_id:
+            seen.add(event_id)
+        if event.get("ordinal") != index:
+            errors.append("trace event ordinals are not sequential")
+    return errors
 
 def _event_errors(events: object, location: str) -> list[str]:
     if not isinstance(events, list):
@@ -433,22 +519,26 @@ def _sensitive_data_errors(record: dict, location: str) -> list[str]:
     return errors
 
 
+@lru_cache(maxsize=None)
+def _schema_validator(path: Path) -> jsonschema.Draft7Validator:
+    return jsonschema.Draft7Validator(
+        load_schema(path),
+        format_checker=jsonschema.Draft7Validator.FORMAT_CHECKER,
+    )
+
+
 def _select_validator(
     record: object,
     v0_validator: jsonschema.Draft7Validator,
     v1_validator: jsonschema.Draft7Validator,
-    v1_1_validator: jsonschema.Draft7Validator | None,
 ) -> jsonschema.Draft7Validator:
     if not isinstance(record, dict):
         return v0_validator
     version = record.get("schema_version")
+    if version in _FIRST_PARTY_HERMES_VERSIONS:
+        return _schema_validator(SCHEMA_FIRST_PARTY_HERMES_PATH)
     if version in _V1_1_VERSIONS:
-        if v1_1_validator is None:
-            v1_1_validator = jsonschema.Draft7Validator(
-                load_schema(SCHEMA_V1_1_PATH),
-                format_checker=jsonschema.Draft7Validator.FORMAT_CHECKER,
-            )
-        return v1_1_validator
+        return _schema_validator(SCHEMA_V1_1_PATH)
     if version in _V1_VERSIONS:
         return v1_validator
     return v0_validator
@@ -458,7 +548,6 @@ def validate_file(
     filepath: Path,
     *validators: jsonschema.Draft7Validator,
     strict_policy: bool = False,
-    v1_1_validator: jsonschema.Draft7Validator | None = None,
 ) -> list[str]:
     """Validate a single JSONL file. Returns list of error strings."""
     if len(validators) != 2:
@@ -466,14 +555,14 @@ def validate_file(
     v0_validator, v1_validator = validators
     context = _LineValidationContext(
         filename=filepath.name,
-        validators=(v0_validator, v1_validator, v1_1_validator),
+        validators=(v0_validator, v1_validator),
         strict_policy=strict_policy,
         seen_ids={},
     )
     errors: list[str] = []
     count = 0
     try:
-        with open(filepath) as f:
+        with open(filepath, encoding="utf-8") as f:
             for lineno, line in enumerate(f, start=1):
                 line = line.strip()
                 if not line:
@@ -518,8 +607,8 @@ def _line_errors(
         return [f"  {context.filename}:{lineno} - Invalid JSON: {exc}"]
     if _contains_nonfinite(record):
         return [f"  {context.filename}:{lineno} - Invalid JSON: non-finite number"]
-    v0_validator, v1_validator, v1_1_validator = context.validators
-    validator = _select_validator(record, v0_validator, v1_validator, v1_1_validator)
+    v0_validator, v1_validator = context.validators
+    validator = _select_validator(record, v0_validator, v1_validator)
     errors = _jsonschema_errors(record, validator, lineno, context.filename)
     if context.strict_policy and isinstance(record, dict):
         errors.extend(policy_errors(record, lineno, context.filename))
@@ -554,10 +643,11 @@ def _private_reference_policy_errors(
 
 
 def _contract_policy_messages(record: dict) -> list[str]:
+    first_party = record.get("schema_version") in _FIRST_PARTY_HERMES_VERSIONS
     return [
         *unique_event_errors(record),
         *blank_license_policy_errors(record),
-        *validation_evidence_errors(record),
+        *([] if first_party else validation_evidence_errors(record)),
         *silent_truncation_errors(record),
         *_v1_1_false_success_errors(record),
     ]
@@ -646,13 +736,6 @@ def main(argv: list[str] | None = None) -> int:
     v1_validator = jsonschema.Draft7Validator(
         schema_v1, format_checker=jsonschema.Draft7Validator.FORMAT_CHECKER
     )
-    v1_1_validator = None
-    if SCHEMA_V1_1_PATH.exists():
-        v1_1_validator = jsonschema.Draft7Validator(
-            load_schema(SCHEMA_V1_1_PATH),
-            format_checker=jsonschema.Draft7Validator.FORMAT_CHECKER,
-        )
-
     all_errors: list[str] = []
 
     for arg in args.files:
@@ -662,13 +745,12 @@ def main(argv: list[str] | None = None) -> int:
             v0_validator,
             v1_validator,
             strict_policy=args.strict_policy,
-            v1_1_validator=v1_1_validator,
         )
         all_errors.extend(file_errors)
         if not file_errors:
-            print(f"  ✓ {filepath.name}")
+            print(f"  Ã¢Å“â€œ {filepath.name}")
         else:
-            print(f"  ✗ {filepath.name} ({len(file_errors)} error(s))")
+            print(f"  Ã¢Å“â€” {filepath.name} ({len(file_errors)} error(s))")
 
     if all_errors:
         print("\nValidation FAILED:")

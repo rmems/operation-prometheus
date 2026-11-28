@@ -1,0 +1,173 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "https://github.com/rmems/operation-prometheus/schemas/first_party_hermes_trajectory.schema.json",
+  "title": "First-party Hermes session trajectory artifact",
+  "description": "Canonical trajectory artifact converted from a deliberately recorded first-party Hermes teacher-generation session. This is provenance-preserving session evidence, not a medsynth draft record and not a PR-mined v0/v1 trajectory.",
+  "definitions": {
+    "identity": {
+      "type": "string",
+      "minLength": 1
+    },
+    "sha256": {
+      "type": "string",
+      "pattern": "^[a-f0-9]{64}$"
+    }
+  },
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version",
+    "id",
+    "artifact_kind",
+    "collector_version",
+    "license",
+    "source",
+    "session",
+    "teacher",
+    "rights",
+    "trace"
+  ],
+  "properties": {
+    "schema_version": { "const": "first_party_hermes_trajectory_v1" },
+    "id": { "type": "string", "minLength": 1 },
+    "artifact_kind": { "const": "hermes_session_trajectory" },
+    "collector_version": { "type": "string", "minLength": 1 },
+    "license": { "type": "string", "minLength": 1 },
+    "source": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "type",
+        "producer_repo",
+        "batch_id",
+        "batch_manifest_sha256",
+        "record_id",
+        "rights_envelope_sha256"
+      ],
+      "properties": {
+        "type": { "const": "first_party" },
+        "producer_repo": { "const": "rmems/medsynth" },
+        "batch_id": { "$ref": "#/definitions/identity" },
+        "batch_manifest_sha256": { "$ref": "#/definitions/sha256" },
+        "record_id": { "$ref": "#/definitions/identity" },
+        "rights_envelope_sha256": { "$ref": "#/definitions/sha256" }
+      }
+    },
+    "session": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "run_id",
+        "session_id",
+        "task_id",
+        "raw_trace_id",
+        "session_file",
+        "session_sha256",
+        "completed",
+        "partial"
+      ],
+      "properties": {
+        "run_id": { "$ref": "#/definitions/identity" },
+        "session_id": { "$ref": "#/definitions/identity" },
+        "task_id": { "$ref": "#/definitions/identity" },
+        "raw_trace_id": { "$ref": "#/definitions/identity" },
+        "session_file": { "$ref": "#/definitions/identity" },
+        "session_sha256": { "$ref": "#/definitions/sha256" },
+        "completed": {
+          "type": "boolean",
+          "description": "Hermes producer execution metadata only; it is not evidence that the generated draft is correct or admitted."
+        },
+        "partial": {
+          "type": "boolean",
+          "description": "Hermes producer execution metadata only; it is not evidence that the generated draft is correct or admitted."
+        },
+        "started_at": { "type": "string", "format": "date-time" },
+        "ended_at": { "type": "string", "format": "date-time" }
+      }
+    },
+    "teacher": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "variant",
+        "model_id",
+        "served_model",
+        "route",
+        "serving_vendor",
+        "pin_id",
+        "pin_entry_sha256"
+      ],
+      "properties": {
+        "variant": { "$ref": "#/definitions/identity" },
+        "model_id": { "$ref": "#/definitions/identity" },
+        "served_model": { "type": ["string", "null"] },
+        "route": { "$ref": "#/definitions/identity" },
+        "serving_vendor": { "$ref": "#/definitions/identity" },
+        "pin_id": { "$ref": "#/definitions/identity" },
+        "pin_entry_sha256": { "$ref": "#/definitions/sha256" }
+      }
+    },
+    "rights": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "terms_document",
+        "terms_version",
+        "terms_date",
+        "terms_url",
+        "terms_clause",
+        "snapshot_date",
+        "pin_entry",
+        "pin_entry_sha256"
+      ],
+      "properties": {
+        "terms_document": { "$ref": "#/definitions/identity" },
+        "terms_version": { "$ref": "#/definitions/identity" },
+        "terms_date": { "type": "string", "minLength": 1 },
+        "terms_url": { "type": "string", "format": "uri" },
+        "terms_clause": { "$ref": "#/definitions/identity" },
+        "snapshot_date": { "type": "string", "minLength": 1 },
+        "pin_entry": {
+          "type": "string",
+          "minLength": 1,
+          "description": "Exact medsynth docs/teachers.md pin entry carried by the rights envelope, including route terms when the pin has them."
+        },
+        "pin_entry_sha256": { "$ref": "#/definitions/sha256" },
+        "route_terms_document": { "type": "string", "minLength": 1 },
+        "route_terms_version": { "type": "string", "minLength": 1 },
+        "route_terms_date": { "type": "string", "minLength": 1 },
+        "route_terms_url": { "type": "string", "format": "uri" },
+        "route_terms_clause": { "type": "string", "minLength": 1 }
+      }
+    },
+    "trace": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["event_count", "events"],
+      "properties": {
+        "event_count": { "type": "integer", "minimum": 1 },
+        "events": {
+          "type": "array",
+          "minItems": 1,
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["event_id", "ordinal", "role", "kind", "content"],
+            "properties": {
+              "event_id": { "type": "string", "minLength": 1 },
+              "ordinal": { "type": "integer", "minimum": 1 },
+              "role": { "type": "string", "minLength": 1 },
+              "name": { "type": "string", "minLength": 1 },
+              "kind": {
+                "enum": ["prompt", "decision", "tool_event", "output", "other"],
+                "description": "Structural classification from the ordered role sequence. Assistant messages before the final assistant message are decisions; the final assistant message is the output. The raw role is always preserved."
+              },
+              "timestamp": { "type": "string", "format": "date-time" },
+              "content": { "type": "string" }
+            }
+          }
+        }
+      }
+    }
+  }
+}
