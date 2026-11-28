@@ -24,10 +24,8 @@ _SCRIPTS = Path(__file__).resolve().parent
 if str(_SCRIPTS) not in sys.path:
     sys.path.insert(0, str(_SCRIPTS))
 
-from lib.medsynth_hermes_convert import (  # noqa: E402
-    CONVERTER_VERSION,
-    convert_files,
-)
+from lib.medsynth_hermes_common import CONVERTER_VERSION  # noqa: E402
+from lib.medsynth_hermes_convert import convert_files  # noqa: E402
 
 logging.basicConfig(level=logging.INFO, format="%(levelname)s: %(message)s")
 logger = logging.getLogger("convert_medsynth_hermes_sessions")
@@ -75,7 +73,7 @@ def main(argv: list[str] | None = None) -> int:
         logger.error("%s", exc)
         return 2
     logger.info(
-        "converted with %s: accepted=%s refused=%s → %s (report %s)",
+        "converted with %s: accepted=%s refused=%s â†’ %s (report %s)",
         CONVERTER_VERSION,
         report["accepted_count"],
         report["refused_count"],
