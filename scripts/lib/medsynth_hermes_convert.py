@@ -175,7 +175,7 @@ def _convert_envelope(
     context: _BatchContext,
     referenced_files: set[str],
 ) -> tuple[dict[str, Any] | None, dict[str, Any]]:
-    if not isinstance(envelope, dict):
+    if not isinstance(envelope, dict) or _has_lone_surrogate(envelope):
         return None, _refusal(reasons=[*context.base_reasons, "invalid_rights_envelope"])
     decision_base = _envelope_decision_base(envelope, context)
     binding = _session_binding(envelope)
@@ -313,7 +313,7 @@ def _convert_safe_session(
 
 def _read_session(boundary: LocalFileBoundary, path: Path) -> _SessionRead:
     try:
-        if path.is_symlink():
+        if path.is_symlink() or (path.exists() and not path.is_file()):
             return _SessionRead(payload=None, reasons=["unsafe_session_file"])
         return _SessionRead(payload=boundary.read_bytes(path), reasons=[])
     except FileNotFoundError:

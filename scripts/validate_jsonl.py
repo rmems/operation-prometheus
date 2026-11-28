@@ -255,8 +255,13 @@ def _first_party_pin_errors(record: dict) -> list[str]:
     rights_hash = rights.get("pin_entry_sha256")
     if isinstance(pin_entry, str) and isinstance(rights_hash, str):
         canonical = pin_entry.replace(chr(13) + chr(10), chr(10)).replace(chr(13), chr(10)).strip()
-        if hashlib.sha256(canonical.encode("utf-8")).hexdigest() != rights_hash:
-            errors.append("pin entry hash mismatch")
+        try:
+            pin_digest = hashlib.sha256(canonical.encode("utf-8")).hexdigest()
+        except UnicodeEncodeError:
+            errors.append("pin entry is not valid Unicode")
+        else:
+            if pin_digest != rights_hash:
+                errors.append("pin entry hash mismatch")
     if rights_hash != teacher.get("pin_entry_sha256"):
         errors.append("teacher and rights pin hashes differ")
     return errors
@@ -292,9 +297,9 @@ def _trace_event_identity_errors(events: list) -> list[str]:
         if not isinstance(event, dict):
             continue
         event_id = event.get("event_id")
-        if event_id in seen:
-            errors.append("duplicate trace event id")
         if isinstance(event_id, str):
+            if event_id in seen:
+                errors.append("duplicate trace event id")
             seen.add(event_id)
         if event.get("ordinal") != index:
             errors.append("trace event ordinals are not sequential")
@@ -742,9 +747,9 @@ def main(argv: list[str] | None = None) -> int:
         )
         all_errors.extend(file_errors)
         if not file_errors:
-            print(f"  ✓ {filepath.name}")
+            print(f"  âœ“ {filepath.name}")
         else:
-            print(f"  ✗ {filepath.name} ({len(file_errors)} error(s))")
+            print(f"  âœ— {filepath.name} ({len(file_errors)} error(s))")
 
     if all_errors:
         print("\nValidation FAILED:")

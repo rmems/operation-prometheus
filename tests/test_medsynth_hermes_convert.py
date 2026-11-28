@@ -417,3 +417,80 @@ def test_oversized_json_integer_does_not_crash_safety_scan(tmp_path: Path):
     )
     report = _run(paths)
     assert report["accepted_count"] + report["refused_count"] == 1
+
+
+def test_oversized_integer_json_with_credential_key_is_refused(tmp_path: Path):
+    session = _session()
+    session["messages"][1]["content"] = (
+        '{"api_key": "example-not-a-real-key", "n": ' + ("9" * 5000) + "}"
+    )
+    session_text = _session_text(session)
+    paths = _write_case(
+        tmp_path,
+        manifest=_manifest([_envelope(_sha256_text(session_text))]),
+        session_text=session_text,
+    )
+    report = _run(paths)
+    assert report["refused_count"] == 1
+    assert "secret_leakage" in report["records"][0]["reason_codes"]
+
+
+def test_tool_message_oversized_integer_payload_does_not_abort(tmp_path: Path):
+    session = _session()
+    session["messages"].insert(
+        2,
+        {
+            "role": "tool",
+            "content": '{"result": ' + ("9" * 5000) + "}",
+            "timestamp": "2026-11-27T10:00:02Z",
+        },
+    )
+    session_text = _session_text(session)
+    paths = _write_case(
+        tmp_path,
+        manifest=_manifest([_envelope(_sha256_text(session_text))]),
+        session_text=session_text,
+    )
+    report = _run(paths)
+    assert report["accepted_count"] == 1
+
+
+def test_surrogate_in_envelope_is_refused_without_aborting(tmp_path: Path):
+    session_text = _session_text()
+    envelope = _envelope(_sha256_text(session_text), record_id="draft-" + chr(0xD800))
+    paths = _write_case(
+        tmp_path,
+        manifest=_manifest([envelope]),
+        session_text=session_text,
+    )
+    report = _run(paths)
+    assert report["refused_count"] == 2
+    assert "invalid_rights_envelope" in report["records"][0]["reason_codes"]
+
+
+def test_directory_masquerading_as_session_is_refused(tmp_path: Path):
+    session_text = _session_text()
+    paths = _write_case(
+        tmp_path,
+        manifest=_manifest([_envelope(_sha256_text(session_text))]),
+        session_text=None,
+    )
+    (paths["session_root"] / SESSION_NAME).mkdir()
+    report = _run(paths)
+    assert report["refused_count"] == 1
+    assert "unsafe_session_file" in report["records"][0]["reason_codes"]
+
+
+def test_strict_validator_handles_surrogate_pin_and_nonstring_event_id(tmp_path: Path):
+    paths = _default_case(tmp_path)
+    _run(paths)
+    artifact = json.loads(paths["output"].read_text(encoding="utf-8"))
+    artifact["rights"]["pin_entry"] = chr(0xD800)
+    artifact["trace"]["events"][0]["event_id"] = [1]
+    paths["output"].write_text(
+        json.dumps(artifact, sort_keys=True) + "\n", encoding="utf-8"
+    )
+    v0 = jsonschema.Draft7Validator(load_schema(ROOT / "schemas" / "pr_trajectory.schema.json"))
+    v1 = jsonschema.Draft7Validator(load_schema(ROOT / "schemas" / "trajectory_v1.schema.json"))
+    errors = validate_file(paths["output"], v0, v1, strict_policy=True)
+    assert any("not valid Unicode" in error for error in errors)
