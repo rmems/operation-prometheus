@@ -17,6 +17,7 @@ from .hermes_sanitize import (
 from .medsynth_hermes_artifact import _build_artifact, _artifact_errors
 from .medsynth_hermes_common import (
     _BatchContext,
+    _ConversionInput,
     _SessionRead,
     _has_lone_surrogate,
     _refusal,
@@ -136,3 +137,36 @@ def _convert_safe_session(
         "trajectory_id": artifact["id"],
     }
     return artifact, decision
+
+
+def _orphan_refusals(
+    source: _ConversionInput,
+    context: _BatchContext,
+    referenced_files: set[str],
+) -> list[dict[str, Any]]:
+    return [
+        _orphan_refusal(name, context)
+        for name in source.session_names
+        if name not in referenced_files
+    ]
+
+
+def _orphan_refusal(name: str, context: _BatchContext) -> dict[str, Any]:
+    read = _read_session(context.boundary, context.session_root / name)
+    session_sha256 = None
+    session_id = None
+    reasons = [*_unique_reasons(context.base_reasons), "missing_rights_envelope"]
+    if read.payload is not None:
+        session_sha256 = sha256_bytes(read.payload)
+        parsed, _parse_reason = _parse_json_object(read.payload)
+        if isinstance(parsed, dict) and not _safety_reasons(parsed, allow_hidden=True):
+            session_id = parsed.get("session_id")
+    else:
+        reasons.extend(read.reasons)
+    return _refusal(
+        reasons=_unique_reasons(reasons),
+        batch_id=context.batch_id or None,
+        session_file=name,
+        session_id=session_id,
+        session_sha256=session_sha256,
+    )

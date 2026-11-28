@@ -106,3 +106,18 @@ def _refusal(*, reasons: list[str], **fields: Any) -> dict[str, Any]:
         "status": "refused",
         "trajectory_id": fields.get("trajectory_id"),
     }
+
+
+def _build_report(
+    decisions: list[dict[str, Any]], manifest: dict[str, Any] | None, digest: str
+) -> dict[str, Any]:
+    batch_id = manifest.get("batch_id") if isinstance(manifest, dict) else None
+    return {
+        "accepted_count": sum(1 for row in decisions if row["status"] == "accepted"),
+        "batch_id": batch_id if _nonempty_str(batch_id) else None,
+        "batch_manifest_sha256": digest,
+        "converter_version": CONVERTER_VERSION,
+        "records": decisions,
+        "refused_count": sum(1 for row in decisions if row["status"] == "refused"),
+        "schema_version": REPORT_SCHEMA_VERSION,
+    }
